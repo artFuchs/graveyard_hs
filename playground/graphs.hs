@@ -1,18 +1,22 @@
 import Data.List
 
--- Graph Structs ---------------------------------------------------------------
+data GraphicalInfo = Color String | Position Float Float deriving (Show)
 
--- Node id
-data Node = Node Int deriving (Eq, Ord)
+-- Graph Structs ---------------------------------------------------------------
+data Info = Info String [GraphicalInfo] deriving (Show)
+-- Node id content graphical_information
+data Node = Node Int Info deriving (Show)
+
+-- Node Comparation
+-- Whats matter is the ID
+instance Eq Node where
+  (Node nid1 _) == (Node nid2 _ ) = nid1 == nid2
+
+instance Ord Node where
+  (Node nid1 _) <= (Node nid2 _) = nid1 <= nid2
 
 -- Graph id edges_src edges_dest edges nodes
 data Graph = Graph String (Int->Int) (Int->Int) [Int] [Node]
-
--- Show information
-
--- Show Node
-instance Show Node where
-  show (Node iD) = show iD
 
 -- Show Graph
 instance Show Graph where
@@ -23,7 +27,7 @@ edgeStr :: Int -> (Int->Int) -> (Int->Int) -> String
 edgeStr e src dst = show e ++ ": " ++ ( show (src e) ) ++ " -> " ++ ( show (dst e) )
 
 edgesStr :: [Int] -> (Int->Int) -> (Int->Int) -> String
-edgesStr es src dst = foldl (\acc e -> acc ++ "\n" ++ (edgeStr e src dst)) "" es
+edgesStr es src dst = foldl (\acc e -> acc ++ "\n\t" ++ (edgeStr e src dst)) "" es
 
 graphString :: Graph -> String
 graphString (Graph id src dst e n) = "Graph " ++ (show id) ++ " : \n Nodes: " ++ (show n) ++ ";\n Edges: " ++ (edgesStr e src dst)
@@ -33,8 +37,9 @@ graphString (Graph id src dst e n) = "Graph " ++ (show id) ++ " : \n Nodes: " ++
 emptyGraph :: String -> Graph
 emptyGraph iD = Graph iD (\i -> 0) (\i -> 0) [] []
 
---------------------------------------------------------------------------------
--- ########################################################################## --
+
+
+
 -- operations for graphs -------------------------------------------------------
 
 -- insert a node
@@ -50,15 +55,15 @@ removeNode g n =
   Graph iD src dst es ns'
   -- removeConnections defined bellow ↓↓↓↓↓
   where (Graph iD src dst es ns) = removeConnections g n
-  ns' = filter (\node -> node /= n) ns
+        ns' = filter (\node -> node /= n) ns
 
 -- insert an edge
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 =
   if (n1 `elem` ns) && (n2 `elem` ns)
   then let le = (length es) + 1
-           Node nid1 = n1
-           Node nid2 = n2
+           Node nid1 _ = n1
+           Node nid2 _ = n2
            src' = \e -> if e == le then nid1 else src e
            dst' = \e -> if e == le then nid2 else dst e
        in Graph iD src' dst' (le:es) ns
@@ -74,9 +79,10 @@ removeEdge (Graph iD src dst es ns) e =
         in Graph iD src' dst' es' ns
   else Graph iD src dst es ns
 
+
 -- given a node, get the edges connected to it
 getConnections :: Graph -> Node -> [Int]
-getConnections (Graph iD src dst es ns) (Node nid) =
+getConnections (Graph iD src dst es ns) (Node nid _) =
   filter (\e -> (nid == src e) || (nid == dst e)) es
 
 -- given a node, remove all the edges connected to it
@@ -85,13 +91,13 @@ removeConnections g n =
   let es = getConnections g n
   in foldl (\accG e -> removeEdge accG e) g es
 
+-- given a Node, update it's information
 
 
 
 
 
-
--- ↓↓↓↓↓ Para testes ↓↓↓↓
+-- ↓↓↓↓↓ src / dst functions to test the graph ↓↓↓↓↓ ---------------------------
 
 -- 1 -1-> 2
 -- 1 -2-> 3
