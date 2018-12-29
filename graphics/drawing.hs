@@ -19,7 +19,7 @@ main = do
 
   -- inicializa janela principal
   window <- windowNew
-  set window  [ windowTitle         := "Calculator"
+  set window  [ windowTitle         := "Drawing"
               , windowResizable     := True
               , windowDefaultWidth  := 640
               , windowDefaultHeight := 480]

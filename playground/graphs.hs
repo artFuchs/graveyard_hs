@@ -27,10 +27,10 @@ edgeStr :: Int -> (Int->Int) -> (Int->Int) -> String
 edgeStr e src dst = show e ++ ": " ++ ( show (src e) ) ++ " -> " ++ ( show (dst e) )
 
 edgesStr :: [Int] -> (Int->Int) -> (Int->Int) -> String
-edgesStr es src dst = foldl (\acc e -> acc ++ "\n\t" ++ (edgeStr e src dst)) "" es
+edgesStr es src dst = foldl (\acc e -> acc ++ (edgeStr e src dst) ++ ", ") "" es
 
 graphString :: Graph -> String
-graphString (Graph id src dst e n) = "Graph " ++ (show id) ++ " : \n Nodes: " ++ (show n) ++ ";\n Edges: " ++ (edgesStr e src dst)
+graphString (Graph id src dst e n) = "Graph " ++ (show id) ++ " : \n Nodes: " ++ (show n) ++ ";\n Edges: [" ++ (edgesStr e src dst) ++ "]"
 
 
 -- base constructor for graph
@@ -97,6 +97,16 @@ removeConnections g n =
 
 
 
+nodes1 :: [Node]
+nodes1 =  [(Node 1 $ Info "hello" [])
+          , (Node 2 $ Info "my" [])
+          , (Node 3 $ Info "name" [])
+          , (Node 4 $ Info "is" [])
+          , (Node 5 $ Info "Mr. Fear" [])
+          ]
+
+graph1 :: Graph
+graph1 = Graph "1" src1 dst1 [1,2,3,4,5] nodes1
 -- ↓↓↓↓↓ src / dst functions to test the graph ↓↓↓↓↓ ---------------------------
 
 -- 1 -1-> 2
