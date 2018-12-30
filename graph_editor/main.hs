@@ -4,7 +4,8 @@ import Data.IORef
 import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
-import Data.Text hiding (map)
+import Data.Text hiding (map, find)
+import Data.List
 import Graph
 import GraphicalInfo
 
@@ -29,10 +30,28 @@ main = do
   -- mostra a GUI
   widgetShowAll window
 
+  -- inicializa estado
+  -- (Graph, nodos selecionados)
+  st <- newIORef (graph1, [])
+
   -- TRATAMENTOS DE EVENTOS
   -- tratamento de eventos - canvas
+  -- evento de desenho
   canvas `on` draw $ do
-    drawGraph graph1 canvas
+    (graph, selected) <- liftIO $ readIORef st
+    drawGraph graph selected canvas
+
+  -- clique do mouse
+  canvas `on` buttonPressEvent $ do
+    b <- eventButton
+    (x,y) <- eventCoordinates
+    case b of
+      LeftButton  -> liftIO $ do
+        checkSelect st (x,y) canvas
+        widgetQueueDraw canvas
+      _           -> return ()
+
+    return True
 
   -- tratamento de eventos - janela principal
   window `on` deleteEvent $ do
@@ -42,10 +61,10 @@ main = do
   mainGUI
 
 
-drawGraph :: Graph -> DrawingArea -> Render ()
-drawGraph g canvas = do
+drawGraph :: Graph -> [Node] -> DrawingArea -> Render ()
+drawGraph g nodes canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
-  forM (graphGetNodes g) (\n -> renderNode n context)
+  forM (graphGetNodes g) (\n -> renderNode n nodes context)
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
@@ -57,33 +76,33 @@ drawGraph g canvas = do
 
 
 -- desenha um nodo, com seu texto
-renderNode :: Node -> PangoContext -> Render ()
-renderNode node context = do
-  let (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
-      (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ node
-      (rl,gl,bl) = lineColor . infoGetGraphicalInfo . nodeGetInfo $ node
+renderNode :: Node -> [Node] -> PangoContext -> Render ()
+renderNode node selected_nodes context = do
+  let selected = find (\n -> n == node) selected_nodes  /= Nothing
+      (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
+      (r,g,b) = if selected
+                  then (0,0,1)
+                  else color . infoGetGraphicalInfo . nodeGetInfo $ node
+      (rl,gl,bl) = if selected
+                    then (1,1,1)
+                    else lineColor . infoGetGraphicalInfo . nodeGetInfo $ node
       content = infoGetContent . nodeGetInfo $ node
+      offset = 3
 
   pL <- liftIO $ layoutText context content
   (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
 
   setSourceRGB r g b
-  rectangle (x-(pw/2)) (y-(ph/2)) (pw) (ph)
+  rectangle (x-(offset/2 + pw/2)) (y-(offset/2 + ph/2)) (offset+pw) (offset+ph)
   fill
 
   setSourceRGB rl gl bl
-  rectangle (x-(pw/2)) (y-(ph/2)) (pw) (ph)
+  rectangle (x-(offset/2 + pw/2)) (y-(offset/2 + ph/2)) (offset+pw) (offset+ph)
   stroke
 
-  setSourceRGB 0 0 0
+  setSourceRGB rl gl bl
   moveTo (x-(pw/2)) (y-(ph/2))
   showLayout pL
-
-  -- setSourceRGB 0 0 0
-  -- setLineWidth 1
-  -- moveTo x y
-  -- textPath (pack content)
-  -- stroke
 
 renderEdge :: Node -> Node -> PangoContext -> Render ()
 renderEdge nodeSrc nodeDst context = do
@@ -103,18 +122,45 @@ renderEdge nodeSrc nodeDst context = do
       d = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
       (vx,vy) = ((x2-x1)/d , (y2-y1)/d)
       n1 = 3 + (max pw ph)/2
-      n2 = 3 + (max pw2 ph2)/2
+      n2 = 5 + (max pw2 ph2)/2
       (x1', y1') = (x1 + vx*n1, y1 + vy*n1)
       (x2', y2') = (x2 - vx*n2, y2 - vy*n2)
 
-  -- desenha uma linha representando
+  -- desenha uma linha representando a aresta
   moveTo x1' y1'
   lineTo x2' y2'
   stroke
-
   -- desenha um circulo para indicar qual é o nó de destino
   arc x2' y2' 3 0 (2*pi)
   fill
+
+-- verifica se o usuario selecionou algum nodo
+checkSelect:: IORef (Graph, [Node]) -> (Double,Double) -> DrawingArea -> IO ()
+checkSelect state (x,y) canvas = do
+  (g,s) <- readIORef state
+  context <- widgetGetPangoContext canvas
+  maybeSelectedNodes <- forM (graphGetNodes g) $ (\n -> do
+    inside <- pointInsideNode n (x,y) context
+    if inside
+      then return (Just n)
+      else return Nothing
+    )
+  let maybeSelected = find (\n -> case n of
+                                Nothing -> False
+                                _ -> True) maybeSelectedNodes
+  case maybeSelected of
+    Just (Just a) -> writeIORef state (g,[a])
+    _ -> writeIORef state (g,[])
+  return ()
+
+--verifica se um ponto está dentro da bounding box de um nodo
+--utiliza métodos da biblioteca Pango para isso
+pointInsideNode:: Node -> (Double,Double) -> PangoContext -> IO Bool
+pointInsideNode node (x,y) context = do
+  pL <- layoutText context $ infoGetContent . nodeGetInfo $ node
+  (_, PangoRectangle px py pw ph) <- layoutGetExtents pL
+  let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ node
+  return $ (x >= nx - pw/2) && (x <= nx + pw/2) && (y >= ny - ph/2) && (y <= ny + ph/2)
 
 
 
