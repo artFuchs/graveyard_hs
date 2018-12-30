@@ -1,8 +1,9 @@
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
-import Graphics.UI.Gtk
+import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
+import Graphics.Rendering.Pango.Layout
 import Data.Text hiding (map)
 import Graph
 
@@ -30,7 +31,7 @@ main = do
   -- TRATAMENTOS DE EVENTOS
   -- tratamento de eventos - canvas
   canvas `on` draw $ do
-    drawGraph graph1
+    drawGraph graph1 canvas
 
   -- tratamento de eventos - janela principal
   window `on` deleteEvent $ do
@@ -40,9 +41,8 @@ main = do
   mainGUI
 
 
-drawGraph :: Graph -> Render ()
-drawGraph g = do
-  forM (graphGetNodes g) renderNode
+drawGraph :: Graph -> DrawingArea -> Render ()
+drawGraph g canvas = do
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
@@ -50,25 +50,36 @@ drawGraph g = do
       (Just src, Just dst) -> renderEdge src dst
       (Nothing, _) -> return ()
       (_, Nothing) -> return ())
+  forM (graphGetNodes g) (\n -> renderNode n canvas)
   return ()
 
-renderNode :: Node -> Render ()
-renderNode node = do
+
+-- desenha um nodo, com seu texto
+renderNode :: Node -> DrawingArea -> Render ()
+renderNode node canvas = do
   let (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
       (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ node
       content = infoGetContent . nodeGetInfo $ node
+
+  context <- liftIO $ widgetGetPangoContext canvas
+  pL <- liftIO $ layoutText context content
+  (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+
+
   setSourceRGB r g b
-  moveTo x y
-  lineTo (x+10) (y+10)
-  lineTo (x-10) (y+10)
-  closePath
+  rectangle (x-(pw/2)) (y-(ph/2)) (pw) (ph)
+  fill
   stroke
 
   setSourceRGB 0 0 0
-  setLineWidth 1
-  moveTo x y
-  textPath (pack content)
-  stroke
+  moveTo (x-(pw/2)) (y-(ph/2))
+  showLayout pL
+
+  -- setSourceRGB 0 0 0
+  -- setLineWidth 1
+  -- moveTo x y
+  -- textPath (pack content)
+  -- stroke
 
 renderEdge :: Node -> Node -> Render ()
 renderEdge nodeSrc nodeDst = do

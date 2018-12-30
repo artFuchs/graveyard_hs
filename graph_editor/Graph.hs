@@ -32,16 +32,20 @@ import Data.List
 
 -- Estruturas de conteudo ------------------------------------------------------
 
--- | GraphicalInfo - contém informações para desenhar um objeto
+-- | GraphicalInfo - contém informações para desenhar um nodo
+-- GraphicalInfo {color, position}
+-- color : cor de preenchimento do nodo
+-- position : posição do nodo na tela
 data GraphicalInfo =  GraphicalInfo { color :: (Double,Double,Double)
                       , position :: (Double, Double)
                       } deriving (Show)
 
+-- contrutor padrão do GraphicalInfo
 newGraphicalInfo :: GraphicalInfo
 newGraphicalInfo = GraphicalInfo  { color = (0,0,0)
                                   , position = (0,0)
                                   }
-
+-- métodos para "modificar" um graficalInfo
 giSetPosition :: GraphicalInfo -> (Double, Double) -> GraphicalInfo
 giSetPosition gi pos = GraphicalInfo  { color = color gi
                                       , position = pos
