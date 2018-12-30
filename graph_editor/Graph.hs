@@ -20,41 +20,12 @@ module Graph
 , Info (..)
 , infoGetContent
 , infoGetGraphicalInfo
-, GraphicalInfo (..)
-, newGraphicalInfo
-, giSetPosition
-, giSetColor
 )where
 
 import Data.List
-
-
+import GraphicalInfo
 
 -- Estruturas de conteudo ------------------------------------------------------
-
--- | GraphicalInfo - contém informações para desenhar um nodo
--- GraphicalInfo {color, position}
--- color : cor de preenchimento do nodo
--- position : posição do nodo na tela
-data GraphicalInfo =  GraphicalInfo { color :: (Double,Double,Double)
-                      , position :: (Double, Double)
-                      } deriving (Show)
-
--- contrutor padrão do GraphicalInfo
-newGraphicalInfo :: GraphicalInfo
-newGraphicalInfo = GraphicalInfo  { color = (0,0,0)
-                                  , position = (0,0)
-                                  }
--- métodos para "modificar" um graficalInfo
-giSetPosition :: GraphicalInfo -> (Double, Double) -> GraphicalInfo
-giSetPosition gi pos = GraphicalInfo  { color = color gi
-                                      , position = pos
-                                      }
-
-giSetColor :: GraphicalInfo -> (Double, Double, Double) -> GraphicalInfo
-giSetColor gi col = GraphicalInfo  { color = col
-                                    , position = position gi
-                                    }
 
 -- | Info - conteúdo de um nodo
 type Content = String

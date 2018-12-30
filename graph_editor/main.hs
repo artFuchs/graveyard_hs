@@ -6,6 +6,7 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Data.Text hiding (map)
 import Graph
+import GraphicalInfo
 
 main :: IO()
 main = do
@@ -43,32 +44,35 @@ main = do
 
 drawGraph :: Graph -> DrawingArea -> Render ()
 drawGraph g canvas = do
+  context <- liftIO $ widgetGetPangoContext canvas
+  forM (graphGetNodes g) (\n -> renderNode n context)
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
     case (srcN, dstN) of
-      (Just src, Just dst) -> renderEdge src dst
+      (Just src, Just dst) -> renderEdge src dst context
       (Nothing, _) -> return ()
       (_, Nothing) -> return ())
-  forM (graphGetNodes g) (\n -> renderNode n canvas)
   return ()
 
 
 -- desenha um nodo, com seu texto
-renderNode :: Node -> DrawingArea -> Render ()
-renderNode node canvas = do
+renderNode :: Node -> PangoContext -> Render ()
+renderNode node context = do
   let (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
       (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ node
+      (rl,gl,bl) = lineColor . infoGetGraphicalInfo . nodeGetInfo $ node
       content = infoGetContent . nodeGetInfo $ node
 
-  context <- liftIO $ widgetGetPangoContext canvas
   pL <- liftIO $ layoutText context content
   (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
-
 
   setSourceRGB r g b
   rectangle (x-(pw/2)) (y-(ph/2)) (pw) (ph)
   fill
+
+  setSourceRGB rl gl bl
+  rectangle (x-(pw/2)) (y-(ph/2)) (pw) (ph)
   stroke
 
   setSourceRGB 0 0 0
@@ -81,24 +85,47 @@ renderNode node canvas = do
   -- textPath (pack content)
   -- stroke
 
-renderEdge :: Node -> Node -> Render ()
-renderEdge nodeSrc nodeDst = do
+renderEdge :: Node -> Node -> PangoContext -> Render ()
+renderEdge nodeSrc nodeDst context = do
   setSourceRGB 0 0 0
+
+  -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
+  let content = infoGetContent . nodeGetInfo $ nodeSrc
+      content2 = infoGetContent . nodeGetInfo $ nodeDst
+  pL <- liftIO $ layoutText context content
+  pL2 <- liftIO $ layoutText context content2
+  (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+  (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
+
+  -- calcula os pontos de origem e destino da aresta
   let (x1,y1) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
       (x2,y2) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeDst
-  moveTo x1 (y1+10)
-  lineTo x2 y2
+      d = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
+      (vx,vy) = ((x2-x1)/d , (y2-y1)/d)
+      n1 = 3 + (max pw ph)/2
+      n2 = 3 + (max pw2 ph2)/2
+      (x1', y1') = (x1 + vx*n1, y1 + vy*n1)
+      (x2', y2') = (x2 - vx*n2, y2 - vy*n2)
+
+  -- desenha uma linha representando
+  moveTo x1' y1'
+  lineTo x2' y2'
   stroke
+
+  -- desenha um circulo para indicar qual é o nó de destino
+  arc x2' y2' 3 0 (2*pi)
+  fill
+
 
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
 
 nodes1 :: [Node]
-nodes1 =  [(Node 1 $ Info "hello" $ GraphicalInfo {color = (1,0,0), position = (100.0, 40.0)})
-          , (Node 2 $ Info "my" $ GraphicalInfo {color = (0,1,0), position = (40, 100)})
-          , (Node 3 $ Info "name" $ GraphicalInfo {color = (0,0,1), position = (160, 100)})
-          , (Node 4 $ Info "is" $ GraphicalInfo {color = (1,1,0), position = (40, 160)})
-          , (Node 5 $ Info "Mr. Fear" $ GraphicalInfo {color = (0,1,1), position = (160, 160)})
+nodes1 =  [(Node 1 $ Info "hello" $ giSetPosition newGraphicalInfo (100, 40))
+          , (Node 2 $ Info "my" $ giSetPosition newGraphicalInfo (40, 100))
+          , (Node 3 $ Info "name" $ giSetPosition newGraphicalInfo (160, 100))
+          , (Node 4 $ Info "is" $ giSetPosition newGraphicalInfo (40, 160))
+          , (Node 5 $ Info "Mr. Fear" $ giSetPosition newGraphicalInfo (160, 160))
           ]
 
 graph1 :: Graph
