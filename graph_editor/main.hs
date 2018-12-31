@@ -4,8 +4,8 @@ import Data.IORef
 import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
-import Data.Text hiding (map, find)
-import Data.List
+import Data.Text hiding (map)
+import Data.List as L
 import Graph
 import GraphicalInfo
 
@@ -33,9 +33,10 @@ main = do
   -- inicializa estado
   -- (Graph, nodos selecionados)
   st <- newIORef (graph1, [])
+  oldPoint <- newIORef (0.0,0.0)
 
-  -- TRATAMENTOS DE EVENTOS
-  -- tratamento de eventos - canvas
+  -- TRATAMENTO DE EVENTOS -----------------------------------------------------
+  -- tratamento de eventos - canvas --------------------------------------------
   -- evento de desenho
   canvas `on` draw $ do
     (graph, selected) <- liftIO $ readIORef st
@@ -45,12 +46,28 @@ main = do
   canvas `on` buttonPressEvent $ do
     b <- eventButton
     (x,y) <- eventCoordinates
+    liftIO $ writeIORef oldPoint (x,y)
     case b of
       LeftButton  -> liftIO $ do
         checkSelect st (x,y) canvas
         widgetQueueDraw canvas
       _           -> return ()
 
+    return True
+
+  -- movimento do mouse
+  canvas `on` motionNotifyEvent $ do
+    ms <- eventModifierAll
+    (x,y) <- eventCoordinates
+    (ox,oy) <- liftIO $ readIORef oldPoint
+    liftIO $ writeIORef oldPoint (x,y)
+    let leftButton = Button1 `elem` ms
+    if leftButton
+      then liftIO $ do
+        moveNode st (ox,oy) (x,y)
+        widgetQueueDraw canvas
+        --putStrLn $ show (ox, oy) ++ "-> " ++ show (x,y)
+      else return ()
     return True
 
   -- tratamento de eventos - janela principal
@@ -78,7 +95,7 @@ drawGraph g nodes canvas = do
 -- desenha um nodo, com seu texto
 renderNode :: Node -> [Node] -> PangoContext -> Render ()
 renderNode node selected_nodes context = do
-  let selected = find (\n -> n == node) selected_nodes  /= Nothing
+  let selected = L.find (\n -> n == node) selected_nodes  /= Nothing
       (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
       (r,g,b) = if selected
                   then (0,0,1)
@@ -145,7 +162,7 @@ checkSelect state (x,y) canvas = do
       then return (Just n)
       else return Nothing
     )
-  let maybeSelected = find (\n -> case n of
+  let maybeSelected = L.find (\n -> case n of
                                 Nothing -> False
                                 _ -> True) maybeSelectedNodes
   case maybeSelected of
@@ -161,6 +178,25 @@ pointInsideNode node (x,y) context = do
   (_, PangoRectangle px py pw ph) <- layoutGetExtents pL
   let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ node
   return $ (x >= nx - pw/2) && (x <= nx + pw/2) && (y >= ny - ph/2) && (y <= ny + ph/2)
+
+moveNode:: IORef (Graph, [Node]) -> (Double,Double) -> (Double,Double) -> IO ()
+moveNode state (xold,yold) (xnew,ynew) = do
+  (graph,nodes) <- readIORef state
+  let (deltaX, deltaY) = (xnew-xold, ynew-yold)
+  maybeNodes <- forM (graphGetNodes graph) (\node -> do
+    if node `elem` nodes
+      then let info = nodeGetInfo node
+               gi = infoGetGraphicalInfo info
+               (nox, noy)  = position gi
+               newNodePos  = (nox+deltaX, noy+deltaY)
+           in return $ Just (Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)))
+      else return Nothing)
+  let foo = (\g node -> case node of
+                          Just n -> changeNode g n
+                          Nothing -> g)
+      newGraph = L.foldl foo graph maybeNodes
+  writeIORef state (newGraph, nodes)
+
 
 
 

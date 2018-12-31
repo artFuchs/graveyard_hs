@@ -7,6 +7,7 @@ module Graph
 , graphGetDstFunc
 , graphGetSrcFunc
 , insertNode
+, changeNode
 , removeNode
 , insertEdge
 , removeEdge
@@ -106,8 +107,8 @@ graphGetDstFunc (Graph _ _ dst _ _) = dst
 insertNode :: Graph -> Node -> Graph
 insertNode (Graph iD src dst e ns) n =
   if (n `notElem` ns)
-  then Graph iD src dst e (n:ns)
-  else Graph iD src dst e ns
+    then Graph iD src dst e (n:ns)
+    else Graph iD src dst e ns
 
 -- remove um nodo do grafo
 removeNode :: Graph -> Node -> Graph
@@ -116,6 +117,12 @@ removeNode g n =
   -- removeConnectors defined bellow ↓↓↓↓↓
   where (Graph iD src dst es ns) = removeConnectors g n
         ns' = filter (\node -> node /= n) ns
+
+-- muda um nodo do grafo
+changeNode :: Graph -> Node -> Graph
+changeNode (Graph iD src dst e ns) n =
+  let newNodes = map (\node -> if node == n then n else node) ns
+  in Graph iD src dst e newNodes
 
 -- insere uma aresta no grafo
 insertEdge :: Graph -> Node -> Node -> Graph
