@@ -60,15 +60,28 @@ main = do
     ms <- eventModifierAll
     (x,y) <- eventCoordinates
     (ox,oy) <- liftIO $ readIORef oldPoint
-    liftIO $ writeIORef oldPoint (x,y)
     let leftButton = Button1 `elem` ms
     if leftButton
       then liftIO $ do
         moveNode st (ox,oy) (x,y)
+        writeIORef oldPoint (x,y)
         widgetQueueDraw canvas
-        --putStrLn $ show (ox, oy) ++ "-> " ++ show (x,y)
       else return ()
     return True
+
+  -- teclado
+  canvas `on` keyPressEvent $ do
+    k <- eventKeyName
+    liftIO $ do
+      pos <- readIORef oldPoint
+      case unpack k of
+        "Insert" -> do
+          createNode st pos
+          widgetQueueDraw canvas
+
+    return True
+
+
 
   -- tratamento de eventos - janela principal
   window `on` deleteEvent $ do
@@ -164,7 +177,7 @@ checkSelect state (x,y) canvas = do
     )
   let maybeSelected = L.find (\n -> case n of
                                 Nothing -> False
-                                _ -> True) maybeSelectedNodes
+                                _ -> True) $ L.reverse maybeSelectedNodes
   case maybeSelected of
     Just (Just a) -> writeIORef state (g,[a])
     _ -> writeIORef state (g,[])
@@ -179,6 +192,7 @@ pointInsideNode node (x,y) context = do
   let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ node
   return $ (x >= nx - pw/2) && (x <= nx + pw/2) && (y >= ny - ph/2) && (y <= ny + ph/2)
 
+-- move um nodo do grafo
 moveNode:: IORef (Graph, [Node]) -> (Double,Double) -> (Double,Double) -> IO ()
 moveNode state (xold,yold) (xnew,ynew) = do
   (graph,nodes) <- readIORef state
@@ -197,6 +211,14 @@ moveNode state (xold,yold) (xnew,ynew) = do
       newGraph = L.foldl foo graph maybeNodes
   writeIORef state (newGraph, nodes)
 
+-- cria um novo nodo e insere no grafo
+createNode state pos = do
+  (graph, nodes) <- readIORef state
+  let maxnode = L.maximum (graphGetNodes graph)
+      newID = 1 + nodeGetID maxnode
+      newNode = Node newID $ Info ("node " ++ show newID) $ giSetPosition newGraphicalInfo pos
+      newGraph = insertNode graph newNode
+  writeIORef state (newGraph, [newNode])
 
 
 
