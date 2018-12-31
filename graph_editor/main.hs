@@ -20,12 +20,29 @@ main = do
               , windowDefaultWidth  := 640
               , windowDefaultHeight := 480]
 
+  -- cria um HPane para dividir o canvas e o menu de propriedades
+  hPaneAction <- hPanedNew
+  containerAdd window hPaneAction
+
+  -- cria uma VBox para adicionar o menu de propriedades
+  vBoxProps <- vBoxNew False 8
+  panedPack2 hPaneAction vBoxProps False True
+  -- cria uma HBox para a propriedade nome
+  hBoxName <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxName PackNatural 0
+  labelName <- labelNew $ Just "Nome do Nodo: "
+  boxPackStart hBoxName labelName PackNatural 0
+  entryNodeName <- entryNew
+  boxPackStart hBoxName entryNodeName PackGrow 0
+  widgetSetCanFocus entryNodeName True
+
   -- cria um canvas em branco
   canvas <- drawingAreaNew
+  panedPack1 hPaneAction canvas True True
   widgetSetCanFocus canvas True
   widgetAddEvents canvas [AllEventsMask]
-  containerAdd window canvas
-  widgetModifyBg canvas StateNormal (Color 65535 65535 65535)
+  widgetModifyBg canvas StateNormal (Color 65535 65535 65535) -- parece que não funciona
+  widgetGrabFocus canvas
 
   -- mostra a GUI
   widgetShowAll window
@@ -46,11 +63,15 @@ main = do
   canvas `on` buttonPressEvent $ do
     b <- eventButton
     (x,y) <- eventCoordinates
-    liftIO $ writeIORef oldPoint (x,y)
+    liftIO $ do
+      writeIORef oldPoint (x,y)
+      widgetGrabFocus canvas
     case b of
       LeftButton  -> liftIO $ do
         checkSelect st (x,y) canvas
         widgetQueueDraw canvas
+        (_,selected) <- liftIO $ readIORef st
+        updatePropMenu selected entryNodeName
       _           -> return ()
 
     return True
@@ -85,14 +106,35 @@ main = do
 
     return True
 
+  -- tratamento de eventos -- menu de propriedades -----------------------------
+  entryNodeName `on` keyPressEvent $ do
+    k <- eventKeyName
+    liftIO $ do
+      case unpack k of
+        "Return" -> do
+          name <- entryGetText entryNodeName :: IO String
+          renameNode st name
+          widgetQueueDraw canvas
+        _       -> return ()
+    return False
 
-
-  -- tratamento de eventos - janela principal
+  -- tratamento de eventos - janela principal ---------------------------------
   window `on` deleteEvent $ do
     liftIO mainQuit
     return False
 
   mainGUI
+
+updatePropMenu :: [Node] -> Entry -> IO()
+updatePropMenu selected entryName = do
+  case L.length selected of
+    0 -> do
+      entrySetText entryName ""
+    1 -> do
+      let name = infoGetContent . nodeGetInfo $ (selected!!0)
+      entrySetText entryName name
+    _ -> do
+      entrySetText entryName "----"
 
 
 drawGraph :: Graph -> [Node] -> DrawingArea -> Render ()
@@ -209,11 +251,15 @@ moveNode state (xold,yold) (xnew,ynew) = do
                newNodePos  = (nox+deltaX, noy+deltaY)
            in return $ Just (Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)))
       else return Nothing)
-  let foo = (\g node -> case node of
+  let mvg = (\g node -> case node of
                           Just n -> changeNode g n
                           Nothing -> g)
-      newGraph = L.foldl foo graph maybeNodes
-  writeIORef state (newGraph, nodes)
+      rmMaybe = (\acc node -> case node of
+                                Just n -> n:acc
+                                Nothing -> acc)
+      newGraph = L.foldl mvg graph maybeNodes
+      newNodes = L.foldl rmMaybe [] maybeNodes
+  writeIORef state (newGraph, newNodes)
 
 -- cria um novo nodo e insere no grafo
 createNode:: IORef (Graph, [Node]) -> (Double,Double) -> IO()
@@ -234,7 +280,11 @@ deleteNode state = do
   let newGRaph = L.foldl (\g n -> removeNode g n) graph nodes
   writeIORef state (newGRaph, [])
 
-
+renameNode state name = do
+  (graph, nodes) <- readIORef state
+  let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
+      newGraph = L.foldl (\g n -> changeNode g n) graph renamedNodes
+  writeIORef state (newGraph,renamedNodes)
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
 
