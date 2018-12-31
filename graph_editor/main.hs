@@ -72,6 +72,16 @@ main = do
         widgetQueueDraw canvas
         (_,selected) <- liftIO $ readIORef st
         updatePropMenu selected entryNodeName
+      RightButton -> liftIO $ do
+        (_,selectedNodes) <- liftIO $ readIORef st
+        checkSelect st (x,y) canvas
+        (graph,newSelectedNode) <- liftIO $ readIORef st
+        let newGraph = if L.length newSelectedNode == 1
+                        then L.foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
+                        else graph
+        writeIORef st (newGraph, newSelectedNode)
+        widgetQueueDraw canvas
+        updatePropMenu newSelectedNode entryNodeName
       _           -> return ()
 
     return True
@@ -82,12 +92,13 @@ main = do
     (x,y) <- eventCoordinates
     (ox,oy) <- liftIO $ readIORef oldPoint
     let leftButton = Button1 `elem` ms
+        rightButton = Button2 `elem` ms
     if leftButton
       then liftIO $ do
         moveNode st (ox,oy) (x,y)
         writeIORef oldPoint (x,y)
         widgetQueueDraw canvas
-      else return ()
+        else return ()
     return True
 
   -- teclado
