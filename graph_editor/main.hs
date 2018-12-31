@@ -78,6 +78,10 @@ main = do
         "Insert" -> do
           createNode st pos
           widgetQueueDraw canvas
+        "Delete" -> do
+          deleteNode st
+          widgetQueueDraw canvas
+        _       -> return ()
 
     return True
 
@@ -212,13 +216,23 @@ moveNode state (xold,yold) (xnew,ynew) = do
   writeIORef state (newGraph, nodes)
 
 -- cria um novo nodo e insere no grafo
+createNode:: IORef (Graph, [Node]) -> (Double,Double) -> IO()
 createNode state pos = do
   (graph, nodes) <- readIORef state
-  let maxnode = L.maximum (graphGetNodes graph)
+  let maxnode = if L.length (graphGetNodes graph) > 0
+                  then L.maximum (graphGetNodes graph)
+                  else Node 0 $ Info "" newGraphicalInfo
       newID = 1 + nodeGetID maxnode
       newNode = Node newID $ Info ("node " ++ show newID) $ giSetPosition newGraphicalInfo pos
       newGraph = insertNode graph newNode
   writeIORef state (newGraph, [newNode])
+
+-- deleta os nodos selecionados do grafo
+deleteNode:: IORef (Graph, [Node]) -> IO()
+deleteNode state = do
+  (graph, nodes) <- readIORef state
+  let newGRaph = L.foldl (\g n -> removeNode g n) graph nodes
+  writeIORef state (newGRaph, [])
 
 
 
