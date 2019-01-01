@@ -4,8 +4,8 @@ import Data.IORef
 import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
-import Data.Text hiding (map)
-import Data.List as L
+import qualified Data.Text as T
+import Data.List
 import Graph
 import GraphicalInfo
 
@@ -63,12 +63,21 @@ main = do
   canvas `on` buttonPressEvent $ do
     b <- eventButton
     (x,y) <- eventCoordinates
+    ms <- eventModifierAll
     liftIO $ do
       writeIORef oldPoint (x,y)
       widgetGrabFocus canvas
     case b of
       LeftButton  -> liftIO $ do
+        (_,selectedNodes) <- readIORef st
         checkSelect st (x,y) canvas
+        if Shift `elem` ms
+          then do
+            (graph,selected) <- readIORef st
+            let desselect = filter (\n -> n `elem` selectedNodes) selected
+                newSelected = filter (\n -> n `notElem` desselect) $ selectedNodes ++ selected
+            writeIORef st (graph, (newSelected))
+          else return ()
         widgetQueueDraw canvas
         (_,selected) <- liftIO $ readIORef st
         updatePropMenu selected entryNodeName
@@ -76,10 +85,21 @@ main = do
         (_,selectedNodes) <- liftIO $ readIORef st
         checkSelect st (x,y) canvas
         (graph,newSelectedNode) <- liftIO $ readIORef st
-        let newGraph = if L.length newSelectedNode == 1
-                        then L.foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
-                        else graph
-        writeIORef st (newGraph, newSelectedNode)
+        if Shift `elem` ms
+          then do
+            let nodeConnectors = if length newSelectedNode == 1
+                                    then getConnectors graph (newSelectedNode!!0)
+                                    else []
+                otherConnectors = concat . map (\n -> getConnectors graph n) $ selectedNodes
+                targetConnectors = filter (\e -> e `elem` nodeConnectors) otherConnectors
+                newGraph = foldl (\g e -> removeEdge g e) graph targetConnectors
+            writeIORef st (newGraph, newSelectedNode)
+          else do
+            let newGraph = if length newSelectedNode == 1
+                             then foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
+                             else graph
+            writeIORef st (newGraph, newSelectedNode)
+
         widgetQueueDraw canvas
         updatePropMenu newSelectedNode entryNodeName
       _           -> return ()
@@ -106,7 +126,7 @@ main = do
     k <- eventKeyName
     liftIO $ do
       pos <- readIORef oldPoint
-      case unpack k of
+      case T.unpack k of
         "Insert" -> do
           createNode st pos
           widgetQueueDraw canvas
@@ -121,7 +141,7 @@ main = do
   entryNodeName `on` keyPressEvent $ do
     k <- eventKeyName
     liftIO $ do
-      case unpack k of
+      case T.unpack k of
         "Return" -> do
           name <- entryGetText entryNodeName :: IO String
           renameNode st name
@@ -138,7 +158,7 @@ main = do
 
 updatePropMenu :: [Node] -> Entry -> IO()
 updatePropMenu selected entryName = do
-  case L.length selected of
+  case length selected of
     0 -> do
       entrySetText entryName ""
     1 -> do
@@ -165,7 +185,7 @@ drawGraph g nodes canvas = do
 -- desenha um nodo, com seu texto
 renderNode :: Node -> [Node] -> PangoContext -> Render ()
 renderNode node selected_nodes context = do
-  let selected = L.find (\n -> n == node) selected_nodes  /= Nothing
+  let selected = find (\n -> n == node) selected_nodes  /= Nothing
       (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
       (r,g,b) = if selected
                   then (0,0,1)
@@ -232,9 +252,9 @@ checkSelect state (x,y) canvas = do
       then return (Just n)
       else return Nothing
     )
-  let maybeSelected = L.find (\n -> case n of
+  let maybeSelected = find (\n -> case n of
                                 Nothing -> False
-                                _ -> True) $ L.reverse maybeSelectedNodes
+                                _ -> True) $ reverse maybeSelectedNodes
   case maybeSelected of
     Just (Just a) -> writeIORef state (g,[a])
     _ -> writeIORef state (g,[])
@@ -268,16 +288,16 @@ moveNode state (xold,yold) (xnew,ynew) = do
       rmMaybe = (\acc node -> case node of
                                 Just n -> n:acc
                                 Nothing -> acc)
-      newGraph = L.foldl mvg graph maybeNodes
-      newNodes = L.foldl rmMaybe [] maybeNodes
+      newGraph = foldl mvg graph maybeNodes
+      newNodes = foldl rmMaybe [] maybeNodes
   writeIORef state (newGraph, newNodes)
 
 -- cria um novo nodo e insere no grafo
 createNode:: IORef (Graph, [Node]) -> (Double,Double) -> IO()
 createNode state pos = do
   (graph, nodes) <- readIORef state
-  let maxnode = if L.length (graphGetNodes graph) > 0
-                  then L.maximum (graphGetNodes graph)
+  let maxnode = if length (graphGetNodes graph) > 0
+                  then maximum (graphGetNodes graph)
                   else Node 0 $ Info "" newGraphicalInfo
       newID = 1 + nodeGetID maxnode
       newNode = Node newID $ Info ("node " ++ show newID) $ giSetPosition newGraphicalInfo pos
@@ -288,13 +308,13 @@ createNode state pos = do
 deleteNode:: IORef (Graph, [Node]) -> IO()
 deleteNode state = do
   (graph, nodes) <- readIORef state
-  let newGRaph = L.foldl (\g n -> removeNode g n) graph nodes
+  let newGRaph = foldl (\g n -> removeNode g n) graph nodes
   writeIORef state (newGRaph, [])
 
 renameNode state name = do
   (graph, nodes) <- readIORef state
   let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
-      newGraph = L.foldl (\g n -> changeNode g n) graph renamedNodes
+      newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
   writeIORef state (newGraph,renamedNodes)
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
