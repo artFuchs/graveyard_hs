@@ -47,6 +47,16 @@ main = do
   entryNodeName <- entryNew
   boxPackStart hBoxName entryNodeName PackGrow 0
   widgetSetCanFocus entryNodeName True
+  -- cria uma HBox para a propriedade cor
+  hBoxColor <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxColor PackNatural 0
+  labelColor <- labelNew $ Just "Cor: "
+  boxPackStart hBoxColor labelColor PackNatural 0
+  colorBtn <- colorButtonNew
+  boxPackStart hBoxColor colorBtn PackNatural 0
+  colorButtonSetColor colorBtn $ Color 49151 49151 49151
+
+
 
   -- cria um canvas em branco
   canvas <- drawingAreaNew
@@ -92,7 +102,7 @@ main = do
           else return ()
         widgetQueueDraw canvas
         (_,selected) <- liftIO $ readIORef st
-        updatePropMenu selected entryNodeID entryNodeName
+        updatePropMenu selected entryNodeID entryNodeName colorBtn
       RightButton -> liftIO $ do
         (_,selectedNodes) <- liftIO $ readIORef st
         checkSelect st (x,y) canvas
@@ -113,7 +123,7 @@ main = do
             writeIORef st (newGraph, newSelectedNode)
 
         widgetQueueDraw canvas
-        updatePropMenu newSelectedNode entryNodeID entryNodeName
+        updatePropMenu newSelectedNode entryNodeID entryNodeName colorBtn
       _           -> return ()
 
     return True
@@ -168,17 +178,22 @@ main = do
 
   mainGUI
 
-updatePropMenu :: [Node] -> Entry -> Entry -> IO()
-updatePropMenu selected entryID entryName = do
+updatePropMenu :: [Node] -> Entry -> Entry -> ColorButton-> IO()
+updatePropMenu selected entryID entryName colorBtn = do
   case length selected of
     0 -> do
       entrySetText entryID ""
       entrySetText entryName ""
+      colorButtonSetColor colorBtn $ Color 49151 49151 49151
     1 -> do
       let iD = show . nodeGetID $ (selected!!0)
           name = infoGetContent . nodeGetInfo $ (selected!!0)
+          (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ (selected!!0)
+          nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
       entrySetText entryID iD
       entrySetText entryName name
+      colorButtonSetColor colorBtn nodeColor
+
     _ -> do
       entrySetText entryID "--"
       entrySetText entryName "----"
