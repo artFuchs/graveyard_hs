@@ -127,10 +127,10 @@ changeNode (Graph iD src dst e ns) n =
 -- insere uma aresta no grafo
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 =
-  if (n1 `elem` ns) && (n2 `elem` ns)
-  then let le = (length es) + 1
-           Node nid1 _ = n1
-           Node nid2 _ = n2
+  if all (\e -> src e /= nodeGetID n1 || dst e /= nodeGetID n2) es --(n1 `elem` ns) && (n2 `elem` ns)
+  then let le = (maximum es) + 1
+           nid1 = nodeGetID n1
+           nid2 = nodeGetID n2
            src' = \e -> if e == le then nid1 else src e
            dst' = \e -> if e == le then nid2 else dst e
        in Graph iD src' dst' (le:es) ns
