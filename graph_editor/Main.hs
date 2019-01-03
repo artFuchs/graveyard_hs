@@ -47,6 +47,13 @@ main = do
   entryNodeName <- entryNew
   boxPackStart hBoxName entryNodeName PackGrow 0
   widgetSetCanFocus entryNodeName True
+  -- -- cria uma HBox para a propriedade edges
+  -- hBoxEdges <- hBoxNew False 8
+  -- boxPackStart vBoxProps hBoxEdges PackNatural 0
+  -- labelEdges <- labelNew $ Just "Edges: "
+  -- boxPackStart hBoxEdges labelEdges PackNatural 0
+  -- labelEdges' <- labelNew $ Just " "
+  -- boxPackStart hBoxEdges labelEdges' PackNatural 0
 
   -- cria um canvas em branco
   canvas <- drawingAreaNew
@@ -91,8 +98,9 @@ main = do
             writeIORef st (graph, (newSelected))
           else return ()
         widgetQueueDraw canvas
-        (_,selected) <- liftIO $ readIORef st
+        (graph,selected) <- liftIO $ readIORef st
         updatePropMenu selected entryNodeID entryNodeName
+        --labelSetText labelEdges' $ if (length selected == 1) then foldl (\s e -> s ++ (show e) ++ ", ") "" (getConnectors graph (selected!!0)) else ""
       RightButton -> liftIO $ do
         (_,selectedNodes) <- liftIO $ readIORef st
         checkSelect st (x,y) canvas
