@@ -54,7 +54,14 @@ main = do
   boxPackStart hBoxColor labelColor PackNatural 0
   colorBtn <- colorButtonNew
   boxPackStart hBoxColor colorBtn PackNatural 0
-  colorButtonSetColor colorBtn $ Color 49151 49151 49151
+  -- -- cria uma HBox para a propriedade edges
+  -- hBoxEdges <- hBoxNew False 8
+  -- boxPackStart vBoxProps hBoxEdges PackNatural 0
+  -- labelEdges <- labelNew $ Just "Edges: "
+  -- boxPackStart hBoxEdges labelEdges PackNatural 0
+  -- labelEdges' <- labelNew $ Just " "
+  -- boxPackStart hBoxEdges labelEdges' PackNatural 0
+
 
 
 
@@ -101,8 +108,9 @@ main = do
             writeIORef st (graph, (newSelected))
           else return ()
         widgetQueueDraw canvas
-        (_,selected) <- liftIO $ readIORef st
+        (graph,selected) <- liftIO $ readIORef st
         updatePropMenu selected entryNodeID entryNodeName colorBtn
+        --labelSetText labelEdges' $ if (length selected == 1) then foldl (\s e -> s ++ (show e) ++ ", ") "" (getConnectors graph (selected!!0)) else ""
       RightButton -> liftIO $ do
         (_,selectedNodes) <- liftIO $ readIORef st
         checkSelect st (x,y) canvas
@@ -339,8 +347,8 @@ createNode state pos = do
 deleteNode:: IORef (Graph, [Node]) -> IO()
 deleteNode state = do
   (graph, nodes) <- readIORef state
-  let newGRaph = foldl (\g n -> removeNode g n) graph nodes
-  writeIORef state (newGRaph, [])
+  let newGraph = foldl (\g n -> removeNode g n) graph nodes
+  writeIORef state (newGraph, [])
 
 renameNode state name = do
   (graph, nodes) <- readIORef state
@@ -358,8 +366,16 @@ nodes1 =  [(Node 1 $ Info "hello" $ giSetPosition newGraphicalInfo (100, 40))
           , (Node 5 $ Info "Mr. Fear" $ giSetPosition newGraphicalInfo (160, 160))
           ]
 
+edges1 :: [Edge]
+edges1 =  [(Edge 1 $ Info "" $ newGraphicalInfo)
+          ,(Edge 2 $ Info "" $ newGraphicalInfo)
+          ,(Edge 3 $ Info "" $ newGraphicalInfo)
+          ,(Edge 4 $ Info "" $ newGraphicalInfo)
+          ,(Edge 5 $ Info "" $ newGraphicalInfo)
+          ]
+
 graph1 :: Graph
-graph1 = Graph "1" src1 dst1 [1,2,3,4,5] nodes1
+graph1 = Graph "1" src1 dst1 edges1 nodes1
 
 
 -- ↓↓↓↓↓ src / dst funções para testar o grafo ↓↓↓↓↓ ---------------------------
@@ -369,20 +385,20 @@ graph1 = Graph "1" src1 dst1 [1,2,3,4,5] nodes1
 -- 2 -3-> 4
 -- 3 -4-> 4
 -- 4 -5-> 5
-src1 :: Int -> Int
+src1 :: Edge -> Int
 src1 edge
-    | edge == 1 = 1
-    | edge == 2 = 1
-    | edge == 3 = 2
-    | edge == 4 = 3
-    | edge == 5 = 4
+    | edgeGetID edge == 1 = 1
+    | edgeGetID edge == 2 = 1
+    | edgeGetID edge == 3 = 2
+    | edgeGetID edge == 4 = 3
+    | edgeGetID edge == 5 = 4
     | otherwise = 0
 
-dst1 :: Int -> Int
+dst1 :: Edge -> Int
 dst1 edge
-    | edge == 1 = 2
-    | edge == 2 = 3
-    | edge == 3 = 4
-    | edge == 4 = 4
-    | edge == 5 = 5
+    | edgeGetID edge == 1 = 2
+    | edgeGetID edge == 2 = 3
+    | edgeGetID edge == 3 = 4
+    | edgeGetID edge == 4 = 4
+    | edgeGetID edge == 5 = 5
     | otherwise = 0

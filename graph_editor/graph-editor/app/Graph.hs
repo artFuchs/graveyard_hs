@@ -18,6 +18,9 @@ module Graph
 , Node (..)
 , nodeGetID
 , nodeGetInfo
+, Edge (..)
+, edgeGetID
+, edgeGetInfo
 , Info (..)
 , infoGetContent
 , infoGetGraphicalInfo
@@ -41,38 +44,57 @@ infoGetGraphicalInfo (Info _ graphicalInfo ) = graphicalInfo
 
 -- Estruturas do Grafo ---------------------------------------------------------------
 -- Nodo
--- Node id conteúdo informação_gráfica
+-- Node id informação
 data Node = Node Int Info deriving (Show)
 
--- Node Comparation
--- Whats matter is the ID
+-- Comparação de nodos
+-- O que importa é o ID
 instance Eq Node where
-  (Node nid1 _) == (Node nid2 _ ) = nid1 == nid2
+  (Node nID1 _) == (Node nID2 _ ) = nID1 == nID2
 
 instance Ord Node where
-  (Node nid1 _) <= (Node nid2 _) = nid1 <= nid2
+  (Node nID1 _) <= (Node nID2 _) = nID1 <= nID2
 
+-- Getters
 nodeGetID :: Node -> Int
-nodeGetID (Node iD _) = iD
+nodeGetID (Node nID _) = nID
 
 nodeGetInfo :: Node -> Info
 nodeGetInfo (Node _ info) = info
 
+-- Aresta
+-- Edge id informação
+data Edge = Edge Int Info
+
+-- Comparação de Arestas
+-- O que importa é o ID
+instance Eq Edge where
+  (Edge eID1 _) == (Edge eID2 _ ) = eID1 == eID2
+
+instance Ord Edge where
+  (Edge eID1 _) <= (Edge eID2 _) = eID1 <= eID2
+
+-- Getters
+edgeGetID :: Edge -> Int
+edgeGetID (Edge eID _) = eID
+
+edgeGetInfo :: Edge -> Info
+edgeGetInfo (Edge _ info) = info
 
 -- Grafo
 -- Graph nome edges_src edges_dest edges nodes
 type Name = String
-data Graph = Graph Name (Int->Int) (Int->Int) [Int] [Node]
+data Graph = Graph Name (Edge->Int) (Edge->Int) [Edge] [Node]
 
 -- printar grafo
 instance Show Graph where
   show = graphString
 
 -- funções auxiliares para função 'show'
-edgeStr :: Int -> (Int->Int) -> (Int->Int) -> String
-edgeStr e src dst = show e ++ ": " ++ ( show (src e) ) ++ " -> " ++ ( show (dst e) )
+edgeStr :: Edge -> (Edge->Int) -> (Edge->Int) -> String
+edgeStr e src dst = show (edgeGetID e) ++ ": " ++ ( show (src e) ) ++ " -> " ++ ( show (dst e) )
 
-edgesStr :: [Int] -> (Int->Int) -> (Int->Int) -> String
+edgesStr :: [Edge] -> (Edge->Int) -> (Edge->Int) -> String
 edgesStr es src dst = foldl (\acc e -> acc ++ (edgeStr e src dst) ++ ", ") "" es
 
 graphString :: Graph -> String
@@ -87,16 +109,16 @@ emptyGraph iD = Graph iD (\i -> 0) (\i -> 0) [] []
 graphGetNodes :: Graph -> [Node]
 graphGetNodes (Graph _ _ _ _ ns) = ns
 
-graphGetEdges :: Graph -> [Int]
+graphGetEdges :: Graph -> [Edge]
 graphGetEdges (Graph _ _ _ es _) = es
 
 graphGetID :: Graph -> String
 graphGetID (Graph iD _ _ _ _) = iD
 
-graphGetSrcFunc :: Graph -> (Int->Int)
+graphGetSrcFunc :: Graph -> (Edge->Int)
 graphGetSrcFunc (Graph _ src _ _ _) = src
 
-graphGetDstFunc :: Graph -> (Int->Int)
+graphGetDstFunc :: Graph -> (Edge->Int)
 graphGetDstFunc (Graph _ _ dst _ _) = dst
 
 
@@ -127,17 +149,18 @@ changeNode (Graph iD src dst e ns) n =
 -- insere uma aresta no grafo
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 =
-  if (n1 `elem` ns) && (n2 `elem` ns)
-  then let le = (length es) + 1
-           Node nid1 _ = n1
-           Node nid2 _ = n2
-           src' = \e -> if e == le then nid1 else src e
-           dst' = \e -> if e == le then nid2 else dst e
-       in Graph iD src' dst' (le:es) ns
+  if all (\e -> src e /= nodeGetID n1 || dst e /= nodeGetID n2) es --(n1 `elem` ns) && (n2 `elem` ns)
+  then let neID = (maximum (map edgeGetID es)) + 1
+           ne = Edge neID (Info "" newGraphicalInfo)
+           nID1 = nodeGetID n1
+           nID2 = nodeGetID n2
+           src' = \e -> if e == ne then nID1 else src e
+           dst' = \e -> if e == ne then nID2 else dst e
+       in Graph iD src' dst' (ne:es) ns
   else Graph iD src dst es ns
 
 -- remove uma aresta do grafo
-removeEdge :: Graph -> Int -> Graph
+removeEdge :: Graph -> Edge -> Graph
 removeEdge (Graph iD src dst es ns) e =
   if (e `elem` es)
   then let es' = filter (/=e) es
@@ -148,9 +171,9 @@ removeEdge (Graph iD src dst es ns) e =
 
 
 -- dado um nodo, pegar as arestas conectadas a ele
-getConnectors :: Graph -> Node -> [Int]
-getConnectors (Graph iD src dst es ns) (Node nid _) =
-  filter (\e -> (nid == src e) || (nid == dst e)) es
+getConnectors :: Graph -> Node -> [Edge]
+getConnectors (Graph iD src dst es ns) (Node nID _) =
+  filter (\e -> (nID == src e) || (nID == dst e)) es
 
 -- dado um nodo, remover as arestas conectadas a ele
 removeConnectors :: Graph -> Node -> Graph
@@ -159,18 +182,18 @@ removeConnectors g n =
   in foldl (\accG e -> removeEdge accG e) g es
 
 -- dada uma aresta, procurar o nó source
-getSrcNode :: Graph -> Int -> Maybe Node
+getSrcNode :: Graph -> Edge -> Maybe Node
 getSrcNode g e = find (\n -> nodeGetID n == src e ) ns
   where src = graphGetSrcFunc g
         ns = graphGetNodes g
 
 -- dada uma aresta, procurar o nó destino
-getDstNode :: Graph -> Int -> Maybe Node
+getDstNode :: Graph -> Edge -> Maybe Node
 getDstNode g e = find (\n -> nodeGetID n == dst e ) ns
   where dst = graphGetDstFunc g
         ns = graphGetNodes g
 
 -- dado um id, procurar o nó correspondente
 getNodeByID :: Graph -> Int -> Maybe Node
-getNodeByID g nid = find (\n -> nodeGetID n == nid) ns
+getNodeByID g nID = find (\n -> nodeGetID n == nID) ns
   where ns = graphGetNodes g
