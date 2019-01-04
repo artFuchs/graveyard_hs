@@ -215,7 +215,7 @@ drawGraph g nodes canvas = do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
     case (srcN, dstN) of
-      (Just src, Just dst) -> renderEdge src dst context
+      (Just src, Just dst) -> renderEdge e src dst context
       (Nothing, _) -> return ()
       (_, Nothing) -> return ())
   return ()
@@ -250,8 +250,8 @@ renderNode node selected_nodes context = do
   moveTo (x-(pw/2)) (y-(ph/2))
   showLayout pL
 
-renderEdge :: Node -> Node -> PangoContext -> Render ()
-renderEdge nodeSrc nodeDst context = do
+renderEdge :: Edge -> Node -> Node -> PangoContext -> Render ()
+renderEdge edge nodeSrc nodeDst context = do
   setSourceRGB 0 0 0
 
   -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
@@ -265,19 +265,24 @@ renderEdge nodeSrc nodeDst context = do
   -- calcula os pontos de origem e destino da aresta
   let (x1,y1) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
       (x2,y2) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeDst
+      (xe, ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
       d = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
-      (vx,vy) = ((x2-x1)/d , (y2-y1)/d)
+      (vx1,vy1) = ((xe-x1)/d , (ye-y1)/d)
+      (vx2,vy2) = ((x2-xe)/d , (y2-ye)/d)
       n1 = 3 + (max pw ph)/2
       n2 = 5 + (max pw2 ph2)/2
-      (x1', y1') = (x1 + vx*n1, y1 + vy*n1)
-      (x2', y2') = (x2 - vx*n2, y2 - vy*n2)
+      (x1', y1') = (x1 + vx1*n1, y1 + vy1*n1)
+      (x2', y2') = (x2 - vx2*n2, y2 - vy2*n2)
 
   -- desenha uma linha representando a aresta
   moveTo x1' y1'
+  lineTo xe  ye
   lineTo x2' y2'
   stroke
   -- desenha um circulo para indicar qual é o nó de destino
   arc x2' y2' 3 0 (2*pi)
+  -- desenha um circulo para mostar o ponto de controle
+  arc xe  ye 2 0 (2*pi)
   fill
 
 -- verifica se o usuario selecionou algum nodo
@@ -367,11 +372,11 @@ nodes1 =  [(Node 1 $ Info "hello" $ giSetPosition newGraphicalInfo (100, 40))
           ]
 
 edges1 :: [Edge]
-edges1 =  [(Edge 1 $ Info "" $ newGraphicalInfo)
-          ,(Edge 2 $ Info "" $ newGraphicalInfo)
-          ,(Edge 3 $ Info "" $ newGraphicalInfo)
-          ,(Edge 4 $ Info "" $ newGraphicalInfo)
-          ,(Edge 5 $ Info "" $ newGraphicalInfo)
+edges1 =  [(Edge 1 $ Info "" $ giSetPosition newGraphicalInfo (70,70))
+          ,(Edge 2 $ Info "" $ giSetPosition newGraphicalInfo (130,70))
+          ,(Edge 3 $ Info "" $ giSetPosition newGraphicalInfo (40,130))
+          ,(Edge 4 $ Info "" $ giSetPosition newGraphicalInfo (100,130))
+          ,(Edge 5 $ Info "" $ giSetPosition newGraphicalInfo (100,160))
           ]
 
 graph1 :: Graph
