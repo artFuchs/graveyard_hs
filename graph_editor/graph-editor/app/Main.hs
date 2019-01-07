@@ -73,12 +73,12 @@ main = do
   colorBtn <- colorButtonNew
   boxPackStart hBoxColor colorBtn PackNatural 0
   -- -- cria uma HBox para a propriedade edges
-  -- hBoxEdges <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxEdges PackNatural 0
-  -- labelEdges <- labelNew $ Just "Edges: "
-  -- boxPackStart hBoxEdges labelEdges PackNatural 0
-  -- labelEdges' <- labelNew $ Just " "
-  -- boxPackStart hBoxEdges labelEdges' PackNatural 0
+  hBoxEdges <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxEdges PackNatural 0
+  labelEdges <- labelNew $ Just "Edges: "
+  boxPackStart hBoxEdges labelEdges PackNatural 0
+  labelEdges' <- labelNew $ Just " "
+  boxPackStart hBoxEdges labelEdges' PackNatural 0
 
 
 
@@ -119,6 +119,7 @@ main = do
       LeftButton  -> liftIO $ do
         es <- readIORef st
         let (oldSN,oldSE) = editorGetSelected es
+            graph = editorGetGraph es
         sNode <- liftIO $ checkSelectNodes st (x,y) canvas
         sEdge <- liftIO $ checkSelectEdges st (x,y) canvas
         -- Shift: seleção de multiplos elementos
@@ -130,15 +131,13 @@ main = do
         writeIORef st (editorGetGraph es, sNodes, sEdges)
         widgetQueueDraw canvas
         updatePropMenu sNodes entryNodeID entryNodeName colorBtn
-        --labelSetText labelEdges' $ if (length selected == 1) then foldl (\s e -> s ++ (show e) ++ ", ") "" (getConnectors graph (selected!!0)) else ""
+        labelSetText labelEdges' $ if (length sNodes == 1) then foldl (\s e -> s ++ (show (edgeGetID e)) ++ ", ") "" (getConnectors graph (sNodes!!0)) else ""
       -- clique com o botão direito: insere edges entre nodos
       RightButton -> liftIO $ do
         es <- liftIO $ readIORef st
-        checkSelectNodes st (x,y) canvas
-        es' <- liftIO $ readIORef st
+        newSelectedNode <- liftIO $ checkSelectNodes st (x,y) canvas
         let selectedNodes = editorGetSelectedNodes es
-            graph = editorGetGraph es'
-            newSelectedNode = editorGetSelectedNodes es'
+            graph = editorGetGraph es
         if Shift `elem` ms
           then do
             let nodeConnectors = if length newSelectedNode == 1
@@ -290,19 +289,53 @@ checkSelectEdges state (x,y) canvas = do
             _ -> []
   return es
 
+--verifica se um ponto está dentro da bounding box de um nodo
+--utiliza métodos da biblioteca Pango para isso
+pointInsideNode:: Node -> (Double,Double) -> PangoContext -> IO Bool
+pointInsideNode node (x,y) context = do
+  pL <- layoutText context $ infoGetContent . nodeGetInfo $ node
+  (_, PangoRectangle px py pw ph) <- layoutGetExtents pL
+  let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ node
+  return $ pointInsideRectangle (x,y) (nx,ny,pw,ph)
+
 -- move os nodos selecionados
 moveNode:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
 moveNode state (xold,yold) (xnew,ynew) = do
-  (graph,nodes, edges) <- readIORef state
+  (graph,sNodes, sEdges) <- readIORef state
   let (deltaX, deltaY) = (xnew-xold, ynew-yold)
-  movedNodes <- forM (nodes) (\node -> let  info = nodeGetInfo node
+  -- move nodes
+  movedNodes <- forM (sNodes) (\node -> let info = nodeGetInfo node
                                             gi = infoGetGraphicalInfo info
                                             (nox, noy)  = position gi
                                             newNodePos  = (nox+deltaX, noy+deltaY)
-                                       in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)))
-  let mvg = (\g node -> changeNode g node)
-      newGraph = foldl mvg graph movedNodes
-  writeIORef state (newGraph, movedNodes, edges)
+                                        in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)) )
+  -- move as arestas que estão no ponto entre os nodos
+  movedEdges <- forM (graphGetEdges graph) (\edge -> let src = getSrcNode graph edge
+                                                         dst = getDstNode graph edge
+                                                         getMovedNode = (\node -> case find (\n -> n == node) movedNodes of
+                                                                                  Just n -> n
+                                                                                  Nothing -> node)
+                                                      in case (src,dst) of
+                                                         (Just a, Just b) -> let aPos = position. infoGetGraphicalInfo . nodeGetInfo $ a
+                                                                                 bPos = position. infoGetGraphicalInfo . nodeGetInfo $ b
+                                                                                 newAPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode a
+                                                                                 newBPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode b
+                                                                                 edgePos = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+                                                                                 info = edgeGetInfo edge
+                                                                                 gi = infoGetGraphicalInfo info
+                                                                              in if edgePos == midPoint aPos bPos
+                                                                                 then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition gi $ midPoint newAPos newBPos)
+                                                                                 else return edge
+                                                         _ -> return edge
+                                                        )
+  let mvng = (\g n -> changeNode g n)
+      mveg = (\g e -> changeEdge g e)
+      newSEdges = map (\edge -> case find (\e -> edgeGetID e == edgeGetID edge) movedEdges of
+                                Just a -> a
+                                Nothing -> edge) sEdges
+      newGraph = foldl mvng graph movedNodes
+      newGraph' = foldl mveg newGraph movedEdges
+  writeIORef state (newGraph', movedNodes, sEdges)
 
 -- move as arestas selecionadas
 moveEdge:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()

@@ -12,8 +12,10 @@ data GraphicalInfo =  GraphicalInfo { position :: (Double, Double)
                                       , lineColor :: (Double,Double,Double)
                                       } deriving (Show)
 -- GraphicalInfo {color, position}
--- color : cor de preenchimento do nodo
--- position : posição do nodo na tela
+-- position : posição na tela
+-- color : para nodos: cor de preenchimento
+-- lineColor : cor da linha
+
 
 -- contrutor padrão do GraphicalInfo
 newGraphicalInfo :: GraphicalInfo

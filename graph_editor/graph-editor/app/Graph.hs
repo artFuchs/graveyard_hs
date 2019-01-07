@@ -11,6 +11,7 @@ module Graph
 , removeNode
 , insertEdge
 , removeEdge
+, changeEdge
 , getConnectors
 , getNodeByID
 , getDstNode
@@ -28,6 +29,7 @@ module Graph
 
 import Data.List
 import GraphicalInfo
+import Helper
 
 -- Estruturas de conteudo ------------------------------------------------------
 
@@ -142,16 +144,19 @@ removeNode g n =
 
 -- muda um nodo do grafo
 changeNode :: Graph -> Node -> Graph
-changeNode (Graph iD src dst e ns) n =
+changeNode (Graph iD src dst es ns) n =
   let newNodes = map (\node -> if node == n then n else node) ns
-  in Graph iD src dst e newNodes
+  in Graph iD src dst es newNodes
 
 -- insere uma aresta no grafo
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 =
   if all (\e -> src e /= nodeGetID n1 || dst e /= nodeGetID n2) es --(n1 `elem` ns) && (n2 `elem` ns)
   then let neID = (maximum (map edgeGetID es)) + 1
-           ne = Edge neID (Info "" newGraphicalInfo)
+           pos1 = position . infoGetGraphicalInfo . nodeGetInfo $ n1
+           pos2 = position . infoGetGraphicalInfo . nodeGetInfo $ n2
+           gi = giSetPosition newGraphicalInfo (midPoint pos1 pos2)
+           ne = Edge neID (Info "" gi)
            nID1 = nodeGetID n1
            nID2 = nodeGetID n2
            src' = \e -> if e == ne then nID1 else src e
@@ -168,6 +173,12 @@ removeEdge (Graph iD src dst es ns) e =
            dst' = \a -> if a == e then 0 else dst a
         in Graph iD src' dst' es' ns
   else Graph iD src dst es ns
+
+-- muda as informações de uma aresta no grafo
+changeEdge :: Graph -> Edge -> Graph
+changeEdge (Graph iD src dst es ns) e =
+  let newEdges = map (\edge -> if edgeGetID edge == edgeGetID e then e else edge) es
+  in Graph iD src dst newEdges ns
 
 
 -- dado um nodo, pegar as arestas conectadas a ele
