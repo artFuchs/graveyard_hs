@@ -152,7 +152,7 @@ changeNode (Graph iD src dst es ns) n =
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 =
   if all (\e -> src e /= nodeGetID n1 || dst e /= nodeGetID n2) es --(n1 `elem` ns) && (n2 `elem` ns)
-  then let neID = (maximum (map edgeGetID es)) + 1
+  then let neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
            pos1 = position . infoGetGraphicalInfo . nodeGetInfo $ n1
            pos2 = position . infoGetGraphicalInfo . nodeGetInfo $ n2
            gi = giSetPosition newGraphicalInfo (midPoint pos1 pos2)

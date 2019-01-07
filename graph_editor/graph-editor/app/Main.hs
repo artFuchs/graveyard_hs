@@ -136,12 +136,14 @@ main = do
       RightButton -> liftIO $ do
         es <- liftIO $ readIORef st
         newSelectedNode <- liftIO $ checkSelectNodes st (x,y) canvas
-        let selectedNodes = editorGetSelectedNodes es
-            graph = editorGetGraph es
-            newGraph = if length newSelectedNode == 1
-                             then foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
-                             else graph
-        writeIORef st (newGraph, newSelectedNode, [])
+        if length newSelectedNode == 0
+        then createNode st (x,y)    
+        else let  selectedNodes = editorGetSelectedNodes es
+                  graph = editorGetGraph es
+                  newGraph = if length newSelectedNode == 1
+                               then foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
+                               else graph
+             in writeIORef st (newGraph, newSelectedNode, [])
         widgetQueueDraw canvas
         updatePropMenu newSelectedNode entryNodeID entryNodeName colorBtn
       _           -> return ()

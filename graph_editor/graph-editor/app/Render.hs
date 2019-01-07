@@ -20,7 +20,7 @@ renderNode node selected context = do
                   then (0,0,1)
                   else color . infoGetGraphicalInfo . nodeGetInfo $ node
       (rl,gl,bl) = if selected
-                    then (1,1,1)
+                    then (0,1,0)
                     else lineColor . infoGetGraphicalInfo . nodeGetInfo $ node
       content = infoGetContent . nodeGetInfo $ node
       offset = 3
@@ -66,7 +66,7 @@ renderEdge edge selected nodeSrc nodeDst context = do
       (x1', y1') = (x1 + vx1*n1, y1 + vy1*n1)
       (x2', y2') = (x2 - vx2*n2, y2 - vy2*n2)
       -- configurações de cor
-      (r,g,b) = if selected then (1,1,1) else lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+      (r,g,b) = if selected then (0,1,0) else lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
 
   -- desenha uma linha representando a aresta
   setSourceRGB r g b
