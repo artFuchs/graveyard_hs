@@ -138,21 +138,10 @@ main = do
         newSelectedNode <- liftIO $ checkSelectNodes st (x,y) canvas
         let selectedNodes = editorGetSelectedNodes es
             graph = editorGetGraph es
-        if Shift `elem` ms
-          then do
-            let nodeConnectors = if length newSelectedNode == 1
-                                    then getConnectors graph (newSelectedNode!!0)
-                                    else []
-                otherConnectors = concat . map (\n -> getConnectors graph n) $ selectedNodes
-                targetConnectors = filter (\e -> e `elem` nodeConnectors) otherConnectors
-                newGraph = foldl (\g e -> removeEdge g e) graph targetConnectors
-            writeIORef st (newGraph, newSelectedNode, [])
-          else do
-            let newGraph = if length newSelectedNode == 1
+            newGraph = if length newSelectedNode == 1
                              then foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
                              else graph
-            writeIORef st (newGraph, newSelectedNode, [])
-
+        writeIORef st (newGraph, newSelectedNode, [])
         widgetQueueDraw canvas
         updatePropMenu newSelectedNode entryNodeID entryNodeName colorBtn
       _           -> return ()
@@ -184,7 +173,7 @@ main = do
           createNode st pos
           widgetQueueDraw canvas
         "Delete" -> do
-          deleteNode st
+          deleteSelected st
           widgetQueueDraw canvas
         _       -> return ()
 
@@ -366,11 +355,12 @@ createNode state pos = do
       newGraph = insertNode graph newNode
   writeIORef state (newGraph, [newNode], [])
 
--- deleta os nodos selecionados no grafo
-deleteNode:: IORef EditorState -> IO()
-deleteNode state = do
-  (graph, nodes, _) <- readIORef state
-  let newGraph = foldl (\g n -> removeNode g n) graph nodes
+-- deleta os nodos e arestas selecionados no grafo
+deleteSelected:: IORef EditorState -> IO()
+deleteSelected state = do
+  (graph, nodes, edges) <- readIORef state
+  let graph' = foldl (\g n -> removeNode g n) graph nodes
+  let newGraph = foldl (\g e -> removeEdge g e) graph' edges
   writeIORef state (newGraph, [], [])
 
 -- renomeia os nodos selecionados
