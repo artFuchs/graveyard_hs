@@ -27,9 +27,6 @@ editorGetSelectedEdges :: EditorState -> [Edge]
 editorGetSelectedEdges (_,_,e) = e
 
 
-
-
-
 main :: IO()
 main = do
   -- inicializa a biblioteca GTK
@@ -118,31 +115,26 @@ main = do
       writeIORef oldPoint (x,y)
       widgetGrabFocus canvas
     case b of
-      -- clique com o botão esquerdo: seleciona nodos
+      -- clique com o botão esquerdo: seleciona nodos e edges
       LeftButton  -> liftIO $ do
         es <- readIORef st
-        let oldSN = editorGetSelectedNodes es
-        checkSelect st (x,y) canvas
+        let (oldSN,oldSE) = editorGetSelected es
+        sNode <- liftIO $ checkSelectNodes st (x,y) canvas
+        sEdge <- liftIO $ checkSelectEdges st (x,y) canvas
         -- Shift: seleção de multiplos elementos
-        if Shift `elem` ms
-          then do
-            es <- readIORef st
-            let graph = editorGetGraph es
-                sN = editorGetSelectedNodes es
-                desselect = filter (\n -> n `elem` oldSN) sN
-                jointSN = filter (\n -> n `notElem` desselect) $ oldSN ++ sN
-            writeIORef st (graph, jointSN, [])
-          else return ()
+        let (sNodes,sEdges) = if Shift `elem` ms
+                                then let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] (oldSN ++ sNode)
+                                         jointSE = foldl (\es e -> if e `notElem` es then e:es else es) [] (oldSE ++ sEdge)
+                                     in (jointSN, jointSE)
+                                else (sNode, sEdge)
+        writeIORef st (editorGetGraph es, sNodes, sEdges)
         widgetQueueDraw canvas
-        es' <- liftIO $ readIORef st
-        let graph = editorGetGraph es'
-            sN = editorGetSelectedNodes es'
-        updatePropMenu sN entryNodeID entryNodeName colorBtn
+        updatePropMenu sNodes entryNodeID entryNodeName colorBtn
         --labelSetText labelEdges' $ if (length selected == 1) then foldl (\s e -> s ++ (show e) ++ ", ") "" (getConnectors graph (selected!!0)) else ""
       -- clique com o botão direito: insere edges entre nodos
       RightButton -> liftIO $ do
         es <- liftIO $ readIORef st
-        checkSelect st (x,y) canvas
+        checkSelectNodes st (x,y) canvas
         es' <- liftIO $ readIORef st
         let selectedNodes = editorGetSelectedNodes es
             graph = editorGetGraph es'
@@ -165,7 +157,6 @@ main = do
         widgetQueueDraw canvas
         updatePropMenu newSelectedNode entryNodeID entryNodeName colorBtn
       _           -> return ()
-
     return True
 
   -- movimento do mouse
@@ -245,21 +236,23 @@ updatePropMenu selected entryID entryName colorBtn = do
 -- atualização do desenho do grafo --------------------------------------------
 drawGraph :: EditorState -> DrawingArea -> Render ()
 drawGraph state canvas = do
-  let (g, sNodes, _) = state
+  let (g, sNodes, sEdges) = state
   context <- liftIO $ widgetGetPangoContext canvas
   forM (graphGetNodes g) (\n -> renderNode n (n `elem`sNodes) context)
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
+        selected = e `elem` sEdges
     case (srcN, dstN) of
-      (Just src, Just dst) -> renderEdge e False src dst context
+      (Just src, Just dst) -> renderEdge e selected src dst context
       (Nothing, _) -> return ()
       (_, Nothing) -> return ())
   return ()
 
--- verifica se o usuario selecionou algum nodo ---------------------------------
-checkSelect:: IORef EditorState -> (Double,Double) -> DrawingArea -> IO ()
-checkSelect state (x,y) canvas = do
+-- operações de interação ------------------------------------------------------
+-- verifica se o usuario selecionou algum nodo
+checkSelectNodes:: IORef EditorState -> (Double,Double) -> DrawingArea -> IO [Node]
+checkSelectNodes state (x,y) canvas = do
   es <- readIORef state
   let g = editorGetGraph es
   context <- widgetGetPangoContext canvas
@@ -272,33 +265,48 @@ checkSelect state (x,y) canvas = do
   let maybeSelected = find (\n -> case n of
                                 Nothing -> False
                                 _ -> True) $ reverse maybeSelectedNodes
-  case maybeSelected of
-    Just (Just a) -> writeIORef state (g,[a],[])
-    _ -> writeIORef state (g,[],[])
-  return ()
 
--- move um nodo do grafo -------------------------------------------------------
+  let ns = case maybeSelected of
+            Just (Just a) -> [a]
+            _ -> []
+  return ns
+
+-- verifica se o usuario selecionou alguma aresta
+checkSelectEdges:: IORef EditorState -> (Double,Double) -> DrawingArea -> IO [Edge]
+checkSelectEdges state (x,y) canvas = do
+  es <- readIORef state
+  let g = editorGetGraph es
+  maybeSelectedEdges <- forM (graphGetEdges g) $ (\e ->
+    let inside = pointDistance (x,y) (position . infoGetGraphicalInfo . edgeGetInfo $ e) < 5
+    in if inside
+        then return (Just e)
+        else return Nothing
+    )
+  let maybeSelected = find (\e -> case e of
+                                Nothing -> False
+                                _ -> True) $ reverse maybeSelectedEdges
+  let es = case maybeSelected of
+            Just (Just a) -> [a]
+            _ -> []
+  return es
+
+-- move os nodos selecionados
 moveNode:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
 moveNode state (xold,yold) (xnew,ynew) = do
   (graph,nodes, edges) <- readIORef state
   let (deltaX, deltaY) = (xnew-xold, ynew-yold)
-  maybeNodes <- forM (graphGetNodes graph) (\node -> do
-    if node `elem` nodes
-      then let info = nodeGetInfo node
-               gi = infoGetGraphicalInfo info
-               (nox, noy)  = position gi
-               newNodePos  = (nox+deltaX, noy+deltaY)
-           in return $ Just (Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)))
-      else return Nothing)
-  let mvg = (\g node -> case node of
-                          Just n -> changeNode g n
-                          Nothing -> g)
-      rmMaybe = (\acc node -> case node of
-                                Just n -> n:acc
-                                Nothing -> acc)
-      newGraph = foldl mvg graph maybeNodes
-      newNodes = foldl rmMaybe [] maybeNodes
-  writeIORef state (newGraph, newNodes, edges)
+  movedNodes <- forM (nodes) (\node -> let  info = nodeGetInfo node
+                                            gi = infoGetGraphicalInfo info
+                                            (nox, noy)  = position gi
+                                            newNodePos  = (nox+deltaX, noy+deltaY)
+                                       in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)))
+  let mvg = (\g node -> changeNode g node)
+      newGraph = foldl mvg graph movedNodes
+  writeIORef state (newGraph, movedNodes, edges)
+
+-- move as arestas selecionadas
+moveEdge:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
+moveEdge state (xold,yold) (xnew,ynew) = return ()
 
 -- operações básicas sobre o grafo ---------------------------------------------
 -- cria um novo nodo e insere no grafo
