@@ -168,6 +168,7 @@ main = do
     if leftButton
       then liftIO $ do
         moveNode st (ox,oy) (x,y)
+        moveEdge st (ox,oy) (x,y)
         writeIORef oldPoint (x,y)
         widgetQueueDraw canvas
         else return ()
@@ -307,8 +308,8 @@ moveNode state (xold,yold) (xnew,ynew) = do
   movedNodes <- forM (sNodes) (\node -> let info = nodeGetInfo node
                                             gi = infoGetGraphicalInfo info
                                             (nox, noy)  = position gi
-                                            newNodePos  = (nox+deltaX, noy+deltaY)
-                                        in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newNodePos)) )
+                                            newPos  = (nox+deltaX, noy+deltaY)
+                                        in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newPos)) )
   -- move as arestas que estão no ponto entre os nodos
   movedEdges <- forM (graphGetEdges graph) (\edge -> let src = getSrcNode graph edge
                                                          dst = getDstNode graph edge
@@ -323,11 +324,12 @@ moveNode state (xold,yold) (xnew,ynew) = do
                                                                                  edgePos = position . infoGetGraphicalInfo . edgeGetInfo $ edge
                                                                                  info = edgeGetInfo edge
                                                                                  gi = infoGetGraphicalInfo info
-                                                                              in if edgePos == midPoint aPos bPos
+                                                                              in if pointDistance edgePos (midPoint aPos bPos) < 10
                                                                                  then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition gi $ midPoint newAPos newBPos)
                                                                                  else return edge
                                                          _ -> return edge
                                                         )
+  -- atualiza o grafo
   let mvng = (\g n -> changeNode g n)
       mveg = (\g e -> changeEdge g e)
       newSEdges = map (\edge -> case find (\e -> edgeGetID e == edgeGetID edge) movedEdges of
@@ -339,7 +341,17 @@ moveNode state (xold,yold) (xnew,ynew) = do
 
 -- move as arestas selecionadas
 moveEdge:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
-moveEdge state (xold,yold) (xnew,ynew) = return ()
+moveEdge state (xold,yold) (xnew,ynew) = do
+  (graph,sNodes,sEdges) <- readIORef state
+  let (deltaX, deltaY) = (xnew-xold,ynew-yold)
+  movedEdges <- forM (sEdges) (\edge-> let info = edgeGetInfo edge
+                                           gi = infoGetGraphicalInfo info
+                                           (eox, eoy) = position gi
+                                           newPos = (eox+deltaX, eoy+deltaY)
+                                        in return $ Edge (edgeGetID edge) (Info (infoGetContent info) (giSetPosition gi newPos)) )
+  let mvg = (\g e -> changeEdge g e)
+      newGraph = foldl mvg graph movedEdges
+  writeIORef state (newGraph, sNodes, movedEdges)
 
 -- operações básicas sobre o grafo ---------------------------------------------
 -- cria um novo nodo e insere no grafo
