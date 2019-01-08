@@ -23,7 +23,7 @@ renderNode node selected context = do
                     then (0,1,0)
                     else lineColor . infoGetGraphicalInfo . nodeGetInfo $ node
       content = infoGetContent . nodeGetInfo $ node
-      offset = 3
+      offset = 4
 
   pL <- liftIO $ layoutText context content
   (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
@@ -44,7 +44,7 @@ renderNode node selected context = do
 renderEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
 renderEdge edge selected nodeSrc nodeDst context = do
   if nodeSrc == nodeDst
-    then renderCicleEdge edge selected nodeSrc context
+    then renderLoop edge selected nodeSrc context
     else renderNormalEdge edge selected nodeSrc nodeDst context
 
 renderNormalEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
@@ -60,8 +60,8 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
   (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
 
   -- calculo dos pontos de origem e destino da aresta
-  let (x1,y1) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
-      (x2,y2) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeDst
+  let (x1, y1) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
+      (x2, y2) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeDst
       (xe, ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
       d1 = pointDistance (x1,y1) (xe,ye)
       d2 = pointDistance (xe,ye) (x2,y2)
@@ -86,5 +86,25 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
   arc xe  ye 2 0 (2*pi)
   fill
 
-renderCicleEdge :: Edge -> Bool -> Node -> PangoContext -> Render ()
-renderCicleEdge edge selected node context = return ()
+renderLoop:: Edge -> Bool -> Node -> PangoContext -> Render ()
+renderLoop edge selected node context = do
+  let (xe, ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+      (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
+      a = angle (x,y) (xe, ye)
+      d = pointDistance (x,y) (xe,ye)
+      (f,g) = pointAt a d (x,y)
+      p1 = pointAt (a+pi/8) (d/8) (x,y)
+      p2 = pointAt (a+pi/2) (d/1.5) (f,g)
+      p1' = pointAt (a-pi/8) (d/8) (x,y)
+      p2' = pointAt (a-pi/2) (d/1.5) (f,g)
+      (rl,gl,bl) = if selected then (0,1,0) else lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+  -- desenha uma curva levando ao próprio nodo
+  moveTo x y
+  curveTo (fst p1) (snd p1) (fst p2) (snd p2) xe ye
+  moveTo x y
+  curveTo (fst p1') (snd p1') (fst p2') (snd p2') xe ye
+  setSourceRGB rl gl bl
+  stroke
+  -- desenha um arco para mostrar o ponto de controle
+  arc f g 2 0 (2*pi)
+  fill

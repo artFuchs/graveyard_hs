@@ -155,7 +155,9 @@ insertEdge (Graph iD src dst es ns) n1 n2 =
   then let neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
            pos1 = position . infoGetGraphicalInfo . nodeGetInfo $ n1
            pos2 = position . infoGetGraphicalInfo . nodeGetInfo $ n2
-           gi = giSetPosition (midPoint pos1 pos2) newGraphicalInfo 
+           gi = if n1 == n2
+             then giSetPosition (fst pos1 + 30, snd pos1 + 30) newGraphicalInfo
+             else giSetPosition (midPoint pos1 pos2) newGraphicalInfo
            ne = Edge neID (Info "" gi)
            nID1 = nodeGetID n1
            nID2 = nodeGetID n2
