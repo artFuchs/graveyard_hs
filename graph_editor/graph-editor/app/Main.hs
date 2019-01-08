@@ -12,6 +12,7 @@ import Render
 import Helper
 
 -- | estado do editor de grafos
+--   (grafo, nodos selecionados, arestas selecionadas)
 type EditorState = (Graph, [Node], [Edge])
 
 editorGetGraph :: EditorState -> Graph
@@ -26,12 +27,12 @@ editorGetSelectedNodes (_,n,_) = n
 editorGetSelectedEdges :: EditorState -> [Edge]
 editorGetSelectedEdges (_,_,e) = e
 
-
 main :: IO()
 main = do
   -- inicializa a biblioteca GTK
   initGUI
 
+  -- definição da UI -----------------------------------------------------------
   -- cria a janela principal
   window <- windowNew
   set window  [ windowTitle         := "Graph Editor"
@@ -72,14 +73,6 @@ main = do
   boxPackStart hBoxColor labelColor PackNatural 0
   colorBtn <- colorButtonNew
   boxPackStart hBoxColor colorBtn PackNatural 0
-  -- -- cria uma HBox para a propriedade edges
-  hBoxEdges <- hBoxNew False 8
-  boxPackStart vBoxProps hBoxEdges PackNatural 0
-  labelEdges <- labelNew $ Just "Edges: "
-  boxPackStart hBoxEdges labelEdges PackNatural 0
-  labelEdges' <- labelNew $ Just " "
-  boxPackStart hBoxEdges labelEdges' PackNatural 0
-
 
 
 
@@ -88,16 +81,15 @@ main = do
   panedPack1 hPaneAction canvas True True
   widgetSetCanFocus canvas True
   widgetAddEvents canvas [AllEventsMask]
-  widgetModifyBg canvas StateNormal (Color 65535 65535 65535) -- parece que não funciona
+  --widgetModifyBg canvas StateNormal (Color 65535 65535 65535) -- parece que não funciona
   widgetGrabFocus canvas
 
   -- mostra a GUI
   widgetShowAll window
 
   -- inicializa estado
-  -- (Graph, nodos selecionados, arestas selecionadas)
-  st <- newIORef (graph1, [], [])
-  oldPoint <- newIORef (0.0,0.0)
+  st <- newIORef (graph1, [], []) -- estado do editor
+  oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o mouse esteve com algum botão pressionado
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
@@ -120,8 +112,8 @@ main = do
         es <- readIORef st
         let (oldSN,oldSE) = editorGetSelected es
             graph = editorGetGraph es
-        sNode <- liftIO $ checkSelectNodes st (x,y) canvas
-        sEdge <- liftIO $ checkSelectEdges st (x,y) canvas
+            sNode = checkSelectNode graph (x,y)
+            sEdge = checkSelectEdge graph (x,y)
         -- Shift: seleção de multiplos elementos
         let (sNodes,sEdges) = if Shift `elem` ms
                                 then let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] (oldSN ++ sNode)
@@ -131,13 +123,14 @@ main = do
         writeIORef st (editorGetGraph es, sNodes, sEdges)
         widgetQueueDraw canvas
         updatePropMenu sNodes entryNodeID entryNodeName colorBtn
-        labelSetText labelEdges' $ if (length sNodes == 1) then foldl (\s e -> s ++ (show (edgeGetID e)) ++ ", ") "" (getConnectors graph (sNodes!!0)) else ""
       -- clique com o botão direito: insere edges entre nodos
       RightButton -> liftIO $ do
         es <- liftIO $ readIORef st
-        newSelectedNode <- liftIO $ checkSelectNodes st (x,y) canvas
+        let g = editorGetGraph es
+            newSelectedNode = checkSelectNode g (x,y)
+        context <- liftIO $ widgetGetPangoContext canvas
         if length newSelectedNode == 0
-        then createNode st (x,y)    
+        then createNode st (x,y) context
         else let  selectedNodes = editorGetSelectedNodes es
                   graph = editorGetGraph es
                   newGraph = if length newSelectedNode == 1
@@ -170,9 +163,10 @@ main = do
     k <- eventKeyName
     liftIO $ do
       pos <- readIORef oldPoint
+      context <- widgetGetPangoContext canvas
       case T.unpack k of
         "Insert" -> do
-          createNode st pos
+          createNode st pos context
           widgetQueueDraw canvas
         "Delete" -> do
           deleteSelected st
@@ -188,7 +182,8 @@ main = do
       case T.unpack k of
         "Return" -> do
           name <- entryGetText entryNodeName :: IO String
-          renameNode st name
+          context <- widgetGetPangoContext canvas
+          renameNode st name context
           widgetQueueDraw canvas
         _       -> return ()
     return False
@@ -242,47 +237,19 @@ drawGraph state canvas = do
 
 -- operações de interação ------------------------------------------------------
 -- verifica se o usuario selecionou algum nodo
-checkSelectNodes:: IORef EditorState -> (Double,Double) -> DrawingArea -> IO [Node]
-checkSelectNodes state (x,y) canvas = do
-  es <- readIORef state
-  let g = editorGetGraph es
-  context <- widgetGetPangoContext canvas
-  maybeSelectedNodes <- forM (graphGetNodes g) $ (\n -> do
-    inside <- pointInsideNode n (x,y) context
-    if inside
-      then return (Just n)
-      else return Nothing
-    )
-  let maybeSelected = find (\n -> case n of
-                                Nothing -> False
-                                _ -> True) $ reverse maybeSelectedNodes
-
-  let ns = case maybeSelected of
-            Just (Just a) -> [a]
-            _ -> []
-  return ns
+checkSelectNode:: Graph -> (Double,Double) -> [Node]
+checkSelectNode g (x,y) = filter (isSelected) $ graphGetNodes g
+  where isSelected = (\n -> let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ n
+                                (w,h) = dims . infoGetGraphicalInfo . nodeGetInfo $ n
+                            in pointInsideRectangle (x,y) (nx,ny,w,h) )
 
 -- verifica se o usuario selecionou alguma aresta
-checkSelectEdges:: IORef EditorState -> (Double,Double) -> DrawingArea -> IO [Edge]
-checkSelectEdges state (x,y) canvas = do
-  es <- readIORef state
-  let g = editorGetGraph es
-  maybeSelectedEdges <- forM (graphGetEdges g) $ (\e ->
-    let inside = pointDistance (x,y) (position . infoGetGraphicalInfo . edgeGetInfo $ e) < 5
-    in if inside
-        then return (Just e)
-        else return Nothing
-    )
-  let maybeSelected = find (\e -> case e of
-                                Nothing -> False
-                                _ -> True) $ reverse maybeSelectedEdges
-  let es = case maybeSelected of
-            Just (Just a) -> [a]
-            _ -> []
-  return es
+checkSelectEdge:: Graph -> (Double,Double) -> [Edge]
+checkSelectEdge g (x,y) = filter (isSelected) $ graphGetEdges g
+  where isSelected = (\e -> pointDistance (x,y) (position . infoGetGraphicalInfo . edgeGetInfo $ e) < 5)
 
 --verifica se um ponto está dentro da bounding box de um nodo
---utiliza métodos da biblioteca Pango para isso
+--utiliza a biblioteca Pango para isso
 pointInsideNode:: Node -> (Double,Double) -> PangoContext -> IO Bool
 pointInsideNode node (x,y) context = do
   pL <- layoutText context $ infoGetContent . nodeGetInfo $ node
@@ -300,7 +267,7 @@ moveNode state (xold,yold) (xnew,ynew) = do
                                             gi = infoGetGraphicalInfo info
                                             (nox, noy)  = position gi
                                             newPos  = (nox+deltaX, noy+deltaY)
-                                        in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition gi newPos)) )
+                                        in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition newPos gi)) )
   -- move as arestas que estão no ponto entre os nodos
   movedEdges <- forM (graphGetEdges graph) (\edge -> let src = getSrcNode graph edge
                                                          dst = getDstNode graph edge
@@ -316,7 +283,7 @@ moveNode state (xold,yold) (xnew,ynew) = do
                                                                                  info = edgeGetInfo edge
                                                                                  gi = infoGetGraphicalInfo info
                                                                               in if pointDistance edgePos (midPoint aPos bPos) < 10
-                                                                                 then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition gi $ midPoint newAPos newBPos)
+                                                                                 then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (midPoint newAPos newBPos) gi)
                                                                                  else return edge
                                                          _ -> return edge
                                                         )
@@ -339,21 +306,23 @@ moveEdge state (xold,yold) (xnew,ynew) = do
                                            gi = infoGetGraphicalInfo info
                                            (eox, eoy) = position gi
                                            newPos = (eox+deltaX, eoy+deltaY)
-                                        in return $ Edge (edgeGetID edge) (Info (infoGetContent info) (giSetPosition gi newPos)) )
+                                        in return $ Edge (edgeGetID edge) (Info (infoGetContent info) (giSetPosition newPos gi)) )
   let mvg = (\g e -> changeEdge g e)
       newGraph = foldl mvg graph movedEdges
   writeIORef state (newGraph, sNodes, movedEdges)
 
 -- operações básicas sobre o grafo ---------------------------------------------
 -- cria um novo nodo e insere no grafo
-createNode:: IORef EditorState -> (Double,Double) -> IO()
-createNode state pos = do
-  (graph, nodes, _) <- readIORef state
+createNode:: IORef EditorState -> (Double,Double) -> PangoContext -> IO ()
+createNode state pos context = do
+  (graph, nodes, edges) <- readIORef state
   let maxnode = if length (graphGetNodes graph) > 0
                   then maximum (graphGetNodes graph)
                   else Node 0 $ Info "" newGraphicalInfo
-      newID = 1 + nodeGetID maxnode
-      newNode = Node newID $ Info ("node " ++ show newID) $ giSetPosition newGraphicalInfo pos
+      nID = 1 + nodeGetID maxnode
+      content = ("node " ++ show nID)
+  dim <- getStringDims content context
+  let newNode = Node nID $ Info content ( giSetDims dim . giSetPosition pos $ newGraphicalInfo )
       newGraph = insertNode graph newNode
   writeIORef state (newGraph, [newNode], [])
 
@@ -366,12 +335,20 @@ deleteSelected state = do
   writeIORef state (newGraph, [], [])
 
 -- renomeia os nodos selecionados
-renameNode:: IORef EditorState -> String -> IO()
-renameNode state name = do
+renameNode:: IORef EditorState -> String -> PangoContext -> IO()
+renameNode state name context = do
   (graph, nodes, _) <- readIORef state
-  let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
+  dim <- getStringDims name context
+  let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (giSetDims dim . infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
   writeIORef state (newGraph,renamedNodes, [])
+
+getStringDims :: String -> PangoContext -> IO (Double, Double)
+getStringDims str context = do
+  pL <- layoutText context str
+  (_, PangoRectangle _ _ w h) <- layoutGetExtents pL
+  return (w+4, h+4)
+
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
 
@@ -379,21 +356,20 @@ graph1 :: Graph
 graph1 = Graph "1" src1 dst1 edges1 nodes1
 
 nodes1 :: [Node]
-nodes1 =  [(Node 1 $ Info "hello" $ giSetPosition newGraphicalInfo (100, 40))
-          , (Node 2 $ Info "my" $ giSetPosition newGraphicalInfo (40, 100))
-          , (Node 3 $ Info "name" $ giSetPosition newGraphicalInfo (160, 100))
-          , (Node 4 $ Info "is" $ giSetPosition newGraphicalInfo (40, 160))
-          , (Node 5 $ Info "Mr. Fear" $ giSetPosition newGraphicalInfo (160, 160))
+nodes1 =  [(Node 1 $ Info "hello" $ giSetPosition (100, 40) newGraphicalInfo)
+          , (Node 2 $ Info "my" $ giSetPosition (40, 100) newGraphicalInfo)
+          , (Node 3 $ Info "name" $ giSetPosition (160, 100) newGraphicalInfo)
+          , (Node 4 $ Info "is" $ giSetPosition (40, 160) newGraphicalInfo)
+          , (Node 5 $ Info "Mr. Fear" $ giSetPosition (160, 160) newGraphicalInfo)
           ]
 
 edges1 :: [Edge]
-edges1 =  [(Edge 1 $ Info "" $ giSetPosition newGraphicalInfo ( 70, 70))
-          ,(Edge 2 $ Info "" $ giSetPosition newGraphicalInfo (130, 70))
-          ,(Edge 3 $ Info "" $ giSetPosition newGraphicalInfo ( 40,130))
-          ,(Edge 4 $ Info "" $ giSetPosition newGraphicalInfo (100,130))
-          ,(Edge 5 $ Info "" $ giSetPosition newGraphicalInfo (100,160))
+edges1 =  [(Edge 1 $ Info "" $ giSetPosition ( 70, 70) newGraphicalInfo)
+          ,(Edge 2 $ Info "" $ giSetPosition (130, 70) newGraphicalInfo)
+          ,(Edge 3 $ Info "" $ giSetPosition ( 40,130) newGraphicalInfo)
+          ,(Edge 4 $ Info "" $ giSetPosition (100,130) newGraphicalInfo)
+          ,(Edge 5 $ Info "" $ giSetPosition (100,160) newGraphicalInfo)
           ]
-
 -- 1 -1-> 2
 -- 1 -2-> 3
 -- 2 -3-> 4

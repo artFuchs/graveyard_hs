@@ -4,41 +4,54 @@ module GraphicalInfo
 , giSetPosition
 , giSetColor
 , giSetLineColor
+, giSetDims
 )where
 
 -- estrutura de dados para desenhar um nodo
 data GraphicalInfo =  GraphicalInfo { position :: (Double, Double)
-                                      ,color :: (Double,Double,Double)
-                                      , lineColor :: (Double,Double,Double)
-                                      } deriving (Show)
+                                        , color :: (Double,Double,Double)
+                                        , lineColor :: (Double,Double,Double)
+                                        , dims :: (Double,Double)
+                                        } deriving (Show)
 -- GraphicalInfo {color, position}
 -- position : posição na tela
 -- color : para nodos: cor de preenchimento
 -- lineColor : cor da linha
-
+-- dims : dimensões do nodo / caixa de texto da label da aresta
 
 -- contrutor padrão do GraphicalInfo
 newGraphicalInfo :: GraphicalInfo
 newGraphicalInfo = GraphicalInfo  { position = (0,0)
                                   , color = (1,1,1)
                                   , lineColor = (0,0,0)
+                                  , dims = (20,20)
                                   }
 
 -- métodos para "modificar" um graficalInfo
-giSetPosition :: GraphicalInfo -> (Double, Double) -> GraphicalInfo
-giSetPosition gi pos = GraphicalInfo  { position = pos
+giSetPosition :: (Double, Double) -> GraphicalInfo -> GraphicalInfo
+giSetPosition pos gi = GraphicalInfo  { position = pos
                                       , color = color gi
                                       , lineColor = lineColor gi
+                                      , dims = dims gi
                                       }
 
-giSetColor :: GraphicalInfo -> (Double, Double, Double) -> GraphicalInfo
-giSetColor gi col = GraphicalInfo  { color = col
+giSetColor :: (Double, Double, Double) -> GraphicalInfo -> GraphicalInfo
+giSetColor col gi = GraphicalInfo   { color = col
                                     , position = position gi
                                     , lineColor = lineColor gi
+                                    , dims = dims gi
                                     }
 
-giSetLineColor :: GraphicalInfo -> (Double, Double, Double) -> GraphicalInfo
-giSetLineColor gi col = GraphicalInfo  { lineColor = col
+giSetLineColor :: (Double, Double, Double) -> GraphicalInfo -> GraphicalInfo
+giSetLineColor col gi = GraphicalInfo  { lineColor = col
                                     , position = position gi
                                     , color = color gi
+                                    , dims = dims gi
                                     }
+
+giSetDims :: (Double,Double) -> GraphicalInfo -> GraphicalInfo
+giSetDims d gi = GraphicalInfo  { dims = d
+                                , position = position gi
+                                , color = color gi
+                                , lineColor = lineColor gi
+                                }
