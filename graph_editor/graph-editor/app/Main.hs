@@ -127,18 +127,14 @@ main = do
       RightButton -> liftIO $ do
         es <- liftIO $ readIORef st
         let g = editorGetGraph es
-            newSelectedNode = checkSelectNode g (x,y)
+            dstNode = checkSelectNode g (x,y)
         context <- liftIO $ widgetGetPangoContext canvas
-        if length newSelectedNode == 0
-        then createNode st (x,y) context
-        else let  selectedNodes = editorGetSelectedNodes es
-                  graph = editorGetGraph es
-                  newGraph = if length newSelectedNode == 1
-                               then foldl (\g n -> insertEdge g n (newSelectedNode!!0)) graph selectedNodes
-                               else graph
-             in writeIORef st (newGraph, newSelectedNode, [])
+        if length dstNode == 0
+          then createNode st (x,y) context
+          else createEdges st dstNode
+
         widgetQueueDraw canvas
-        updatePropMenu newSelectedNode entryNodeID entryNodeName colorBtn
+        updatePropMenu dstNode entryNodeID entryNodeName colorBtn
       _           -> return ()
     return True
 
@@ -183,7 +179,7 @@ main = do
         "Return" -> do
           name <- entryGetText entryNodeName :: IO String
           context <- widgetGetPangoContext canvas
-          renameNode st name context
+          renameSelectedNodes st name context
           widgetQueueDraw canvas
         _       -> return ()
     return False
@@ -247,15 +243,6 @@ checkSelectNode g (x,y) = filter (isSelected) $ graphGetNodes g
 checkSelectEdge:: Graph -> (Double,Double) -> [Edge]
 checkSelectEdge g (x,y) = filter (isSelected) $ graphGetEdges g
   where isSelected = (\e -> pointDistance (x,y) (position . infoGetGraphicalInfo . edgeGetInfo $ e) < 5)
-
---verifica se um ponto está dentro da bounding box de um nodo
---utiliza a biblioteca Pango para isso
-pointInsideNode:: Node -> (Double,Double) -> PangoContext -> IO Bool
-pointInsideNode node (x,y) context = do
-  pL <- layoutText context $ infoGetContent . nodeGetInfo $ node
-  (_, PangoRectangle px py pw ph) <- layoutGetExtents pL
-  let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ node
-  return $ pointInsideRectangle (x,y) (nx,ny,pw,ph)
 
 -- move os nodos selecionados
 moveNode:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
@@ -326,6 +313,16 @@ createNode state pos context = do
       newGraph = insertNode graph newNode
   writeIORef state (newGraph, [newNode], [])
 
+createEdges:: IORef EditorState -> [Node] -> IO ()
+createEdges state dstNodes = do
+  es <- readIORef state
+  let selectedNodes = editorGetSelectedNodes es
+      graph = editorGetGraph es
+      newGraph = if length dstNodes == 1
+                   then foldl (\g n -> insertEdge g n (dstNodes!!0)) graph selectedNodes
+                   else graph
+  writeIORef state (newGraph, dstNodes, [])
+
 -- deleta os nodos e arestas selecionados no grafo
 deleteSelected:: IORef EditorState -> IO()
 deleteSelected state = do
@@ -335,8 +332,8 @@ deleteSelected state = do
   writeIORef state (newGraph, [], [])
 
 -- renomeia os nodos selecionados
-renameNode:: IORef EditorState -> String -> PangoContext -> IO()
-renameNode state name context = do
+renameSelectedNodes:: IORef EditorState -> String -> PangoContext -> IO()
+renameSelectedNodes state name context = do
   (graph, nodes, _) <- readIORef state
   dim <- getStringDims name context
   let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (giSetDims dim . infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
