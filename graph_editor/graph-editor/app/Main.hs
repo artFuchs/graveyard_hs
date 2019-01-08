@@ -91,6 +91,7 @@ main = do
   st <- newIORef (graph1, [], []) -- estado do editor
   oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o mouse esteve com algum botão pressionado
 
+
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
   -- evento de desenho
@@ -298,7 +299,7 @@ moveEdge state (xold,yold) (xnew,ynew) = do
       newGraph = foldl mvg graph movedEdges
   writeIORef state (newGraph, sNodes, movedEdges)
 
--- operações básicas sobre o grafo ---------------------------------------------
+-- operações básicas sobre o grafo no estado -----------------------------------
 -- cria um novo nodo e insere no grafo
 createNode:: IORef EditorState -> (Double,Double) -> PangoContext -> IO ()
 createNode state pos context = do
@@ -313,6 +314,7 @@ createNode state pos context = do
       newGraph = insertNode graph newNode
   writeIORef state (newGraph, [newNode], [])
 
+-- cria e insere uma nova edge no grafo
 createEdges:: IORef EditorState -> [Node] -> IO ()
 createEdges state dstNodes = do
   es <- readIORef state
@@ -340,11 +342,8 @@ renameSelectedNodes state name context = do
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
   writeIORef state (newGraph,renamedNodes, [])
 
-getStringDims :: String -> PangoContext -> IO (Double, Double)
-getStringDims str context = do
-  pL <- layoutText context str
-  (_, PangoRectangle _ _ w h) <- layoutGetExtents pL
-  return (w+4, h+4)
+
+
 
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
