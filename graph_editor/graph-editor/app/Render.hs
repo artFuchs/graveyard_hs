@@ -43,6 +43,12 @@ renderNode node selected context = do
 -- desenha uma aresta
 renderEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
 renderEdge edge selected nodeSrc nodeDst context = do
+  if nodeSrc == nodeDst
+    then renderCicleEdge edge selected nodeSrc context
+    else renderNormalEdge edge selected nodeSrc nodeDst context
+
+renderNormalEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
+renderNormalEdge edge selected nodeSrc nodeDst context = do
   setSourceRGB 0 0 0
 
   -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
@@ -79,3 +85,6 @@ renderEdge edge selected nodeSrc nodeDst context = do
   -- desenha um circulo para mostar o ponto de controle
   arc xe  ye 2 0 (2*pi)
   fill
+
+renderCicleEdge :: Edge -> Bool -> Node -> PangoContext -> Render ()
+renderCicleEdge edge selected node context = return ()
