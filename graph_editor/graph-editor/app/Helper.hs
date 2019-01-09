@@ -1,5 +1,6 @@
 module Helper
 ( pointDistance
+, pointLineDistance
 , midPoint
 , pointInsideRectangle
 , getStringDims
@@ -15,6 +16,11 @@ import Graphics.Rendering.Pango.Layout
 -- | calcula a distancia entre dois pontos
 pointDistance :: (Double,Double) -> (Double,Double) -> Double
 pointDistance (x1,y1) (x2,y2) = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
+
+-- | calcula a distancia de um ponto para uma reta
+pointLineDistance :: (Double,Double) -> (Double,Double) -> (Double,Double) -> Double
+pointLineDistance (x0,y0) (x1,y1) (x2,y2) = ( abs $ (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 - y2*x1 ) / (pointDistance (x1,y1) (x2,y2))
+
 
 -- | calcula o ponto médio entre dois pontos
 midPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)

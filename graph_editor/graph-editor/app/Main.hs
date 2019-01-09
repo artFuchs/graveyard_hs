@@ -6,6 +6,7 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import qualified Data.Text as T
 import Data.List
+import Data.Maybe
 import Graph
 import GraphicalInfo
 import Render
@@ -261,33 +262,28 @@ moveNode state (xold,yold) (xnew,ynew) = do
                                             newPos  = (nox+deltaX, noy+deltaY)
                                         in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition newPos gi)) )
   -- move as arestas que estão no ponto entre os nodos
-  movedEdges <- forM (graphGetEdges graph) (\edge -> let src = getSrcNode graph edge
-                                                         dst = getDstNode graph edge
-                                                         getMovedNode = (\node -> case find (\n -> n == node) movedNodes of
-                                                                                  Just n -> n
-                                                                                  Nothing -> node)
-                                                      in case (src,dst) of
-                                                         (Just a, Just b) -> let aPos = position. infoGetGraphicalInfo . nodeGetInfo $ a
-                                                                                 bPos = position. infoGetGraphicalInfo . nodeGetInfo $ b
-                                                                                 newAPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode a
-                                                                                 newBPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode b
-                                                                                 (xe,ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
-                                                                                 (xe',ye') = (xe+deltaX, ye+deltaY)
-                                                                                 info = edgeGetInfo edge
-                                                                                 gi = infoGetGraphicalInfo info
-                                                                              in if a == b && a `elem` sNodes
-                                                                                  then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (xe',ye') gi)
-                                                                                  else if pointDistance (xe,ye) (midPoint aPos bPos) < 10
-                                                                                    then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (midPoint newAPos newBPos) gi)
-                                                                                    else return edge
-                                                         _ -> return edge
+  movedEdges <- forM (graphGetEdges graph) (\edge -> let nullNode = Node 0 (Info "" newGraphicalInfo)
+                                                         a = fromMaybe nullNode $ getSrcNode graph edge
+                                                         b = fromMaybe nullNode $ getDstNode graph edge
+                                                         getMovedNode = (\node -> fromMaybe node $ find (\n -> n == node) movedNodes)
+                                                         aPos = position. infoGetGraphicalInfo . nodeGetInfo $ a
+                                                         bPos = position. infoGetGraphicalInfo . nodeGetInfo $ b
+                                                         newAPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode a
+                                                         newBPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode b
+                                                         (xe,ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+                                                         (xe',ye') = (xe+deltaX, ye+deltaY)
+                                                         info = edgeGetInfo edge
+                                                         gi = infoGetGraphicalInfo info
+                                                      in if a == b && a `elem` sNodes
+                                                          then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (xe',ye') gi)
+                                                          else if centered gi
+                                                            then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (midPoint newAPos newBPos) gi)
+                                                            else return edge
                                                         )
   -- atualiza o grafo
   let mvng = (\g n -> changeNode g n)
       mveg = (\g e -> changeEdge g e)
-      newSEdges = map (\edge -> case find (\e -> edgeGetID e == edgeGetID edge) movedEdges of
-                                Just a -> a
-                                Nothing -> edge) sEdges
+      newSEdges = map (\edge -> fromMaybe edge $ find (==edge) movedEdges ) sEdges
       newGraph = foldl mvng graph movedNodes
       newGraph' = foldl mveg newGraph movedEdges
   writeIORef state (newGraph', movedNodes, sEdges)
@@ -299,9 +295,13 @@ moveEdge state (xold,yold) (xnew,ynew) = do
   let (deltaX, deltaY) = (xnew-xold,ynew-yold)
   movedEdges <- forM (sEdges) (\edge-> let info = edgeGetInfo edge
                                            gi = infoGetGraphicalInfo info
-                                           (eox, eoy) = position gi
-                                           newPos = (eox+deltaX, eoy+deltaY)
-                                        in return $ Edge (edgeGetID edge) (Info (infoGetContent info) (giSetPosition newPos gi)) )
+                                           (xe, ye) = position gi
+                                           newPos = (xe+deltaX, ye+deltaY)
+                                           nullNode = Node 0 (Info "" newGraphicalInfo)
+                                           srcPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getSrcNode graph edge
+                                           dstPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getDstNode graph edge
+                                           mustCenter = pointLineDistance newPos srcPos dstPos < 10
+                                        in return $ Edge (edgeGetID edge) (Info (infoGetContent info) (giSetCentered mustCenter . giSetPosition newPos $ gi)) )
   let mvg = (\g e -> changeEdge g e)
       newGraph = foldl mvg graph movedEdges
   writeIORef state (newGraph, sNodes, movedEdges)
@@ -395,3 +395,12 @@ dst1 edge
     | edgeGetID edge == 4 = 4
     | edgeGetID edge == 5 = 5
     | otherwise = 0
+
+
+-- To Do List ------------------------------------------------------------------
+
+-- *fazer as edges se tornarem uma reta unica apenas caso o usuario mova o ponto
+--  da edge de forma que a edge se torne uma linha
+-- *Label para as Edges
+-- *Nodos com formas diferentes
+-- *Estilos diferentes para as Edges
