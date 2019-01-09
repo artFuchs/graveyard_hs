@@ -90,7 +90,8 @@ main = do
 
   -- inicializa estado
   st <- newIORef (graph1, [], []) -- estado do editor
-  oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o mouse esteve com algum botão pressionado
+  oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
+  squareSelection <- newIORef Nothing
 
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
@@ -98,7 +99,8 @@ main = do
   -- evento de desenho
   canvas `on` draw $ do
     es <- liftIO $ readIORef st
-    drawGraph es canvas
+    sq <- liftIO $ readIORef squareSelection
+    drawGraph es sq canvas
 
   -- clique do mouse
   canvas `on` buttonPressEvent $ do
@@ -117,14 +119,20 @@ main = do
             sNode = checkSelectNode graph (x,y)
             sEdge = checkSelectEdge graph (x,y)
         -- Shift: seleção de multiplos elementos
-        let (sNodes,sEdges) = if Shift `elem` ms
-                                then let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
-                                         jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
-                                     in (jointSN, jointSE)
-                                else (sNode, sEdge)
-        writeIORef st (editorGetGraph es, sNodes, sEdges)
+        case (sNode, sEdge, Shift `elem` ms) of
+          -- clico no espaço em branco, Shift não pressionado
+          ([],[], False) -> do
+            writeIORef st (graph, [], [])
+            writeIORef squareSelection $ Just (x,y,0,0)
+          (n,e,False) -> do
+            writeIORef st (editorGetGraph es, sNode, sEdge)
+            updatePropMenu sNode entryNodeID entryNodeName colorBtn
+          (n,e,True) -> do
+            let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
+                jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
+            writeIORef st (graph, jointSN, jointSE)
+            updatePropMenu jointSN entryNodeID entryNodeName colorBtn
         widgetQueueDraw canvas
-        updatePropMenu sNodes entryNodeID entryNodeName colorBtn
       -- clique com o botão direito: insere edges entre nodos
       RightButton -> liftIO $ do
         es <- liftIO $ readIORef st
@@ -145,15 +153,43 @@ main = do
     ms <- eventModifierAll
     (x,y) <- eventCoordinates
     (ox,oy) <- liftIO $ readIORef oldPoint
+    es <- liftIO $ readIORef st
     let leftButton = Button1 `elem` ms
-        rightButton = Button2 `elem` ms
-    if leftButton
-      then liftIO $ do
+        (sNodes, sEdges) = editorGetSelected es
+    case (leftButton, sNodes, sEdges) of
+      (True, [], []) -> liftIO $ do
+        modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x-a,y-b))
+        sq <- readIORef squareSelection
+        widgetQueueDraw canvas
+        --print $ "squareSelection: " ++ show sq
+      (True, n, e) -> liftIO $ do
         moveNode st (ox,oy) (x,y)
         moveEdge st (ox,oy) (x,y)
         writeIORef oldPoint (x,y)
         widgetQueueDraw canvas
-        else return ()
+      (_,_,_) -> return ()
+    return True
+
+  -- soltar botão do mouse
+  canvas `on` buttonReleaseEvent $ do
+    b <- eventButton
+    case b of
+      LeftButton -> liftIO $ do
+        es <- readIORef st
+        sq <- readIORef squareSelection
+        case sq of
+          Just (x,y,w,h) -> do
+            let graph = editorGetGraph es
+                sNodes = filter (\n -> let pos = position . infoGetGraphicalInfo . nodeGetInfo $ n
+                                   in pointInsideRectangle pos (x + (w/2), y + (h/2) , abs w, abs h)) $ graphGetNodes graph
+                sEdges = filter (\e -> let pos = position . infoGetGraphicalInfo . edgeGetInfo $ e
+                                   in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
+            writeIORef st (graph, sNodes, sEdges)
+          Nothing -> return ()
+    liftIO $ do
+      writeIORef squareSelection Nothing
+      widgetQueueDraw canvas
+
     return True
 
   -- teclado
@@ -218,8 +254,8 @@ updatePropMenu selected entryID entryName colorBtn = do
       entrySetText entryName "----"
 
 -- atualização do desenho do grafo --------------------------------------------
-drawGraph :: EditorState -> DrawingArea -> Render ()
-drawGraph state canvas = do
+drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
+drawGraph state sq canvas = do
   let (g, sNodes, sEdges) = state
   context <- liftIO $ widgetGetPangoContext canvas
   forM (graphGetEdges g) (\e -> do
@@ -228,9 +264,17 @@ drawGraph state canvas = do
         selected = e `elem` sEdges
     case (srcN, dstN) of
       (Just src, Just dst) -> renderEdge e selected src dst context
-      (Nothing, _) -> return ()
-      (_, Nothing) -> return ())
+      (_, _) -> return ())
   forM (graphGetNodes g) (\n -> renderNode n (n `elem`sNodes) context)
+  -- desenha a selectionBox
+  case sq of
+    Just (x,y,w,h) -> do rectangle x y w h
+                         setSourceRGBA 0 0 1 0.5
+                         fill
+                         rectangle x y w h
+                         setSourceRGBA 0 0 1 1
+                         stroke
+    Nothing -> return ()
   return ()
 
 -- operações de interação ------------------------------------------------------
@@ -399,8 +443,10 @@ dst1 edge
 
 -- To Do List ------------------------------------------------------------------
 
--- *fazer as edges se tornarem uma reta unica apenas caso o usuario mova o ponto
---  da edge de forma que a edge se torne uma linha
+-- *Seleção por caixa
 -- *Label para as Edges
--- *Nodos com formas diferentes
+-- *Definir a intersecção da linha da edge com o retangulo do nodo
+-- *Definir formas diferentes para os nodos
 -- *Estilos diferentes para as Edges
+-- *Salvar / carregar grafo
+-- *Undo / Redo
