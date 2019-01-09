@@ -80,8 +80,17 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
   lineTo xe  ye
   lineTo x2' y2'
   stroke
-  -- desenha um circulo para indicar qual é o nó de destino
-  arc x2' y2' 3 0 (2*pi)
+  -- desenha uma seta para indicar qual é o nó de destino
+  let a = (angle (xe,ye) (x2,y2))
+      d = pointDistance (xe,ye) (x2,y2)
+      (xa1,ya1) = (x2',y2')
+      (xa2,ya2) = pointAt (a+7*pi/8) 10 (x2',y2')
+      (xa3,ya3) = pointAt (a-7*pi/8) 10 (x2',y2')
+  moveTo xa1 ya1
+  lineTo xa2 ya2
+  lineTo xa3 ya3
+  lineTo xa1 ya1
+  --arc x2' y2' 3 0 (2*pi)
   -- desenha um circulo para mostar o ponto de controle
   arc xe  ye 2 0 (2*pi)
   fill

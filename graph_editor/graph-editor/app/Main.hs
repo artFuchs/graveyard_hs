@@ -221,7 +221,6 @@ drawGraph :: EditorState -> DrawingArea -> Render ()
 drawGraph state canvas = do
   let (g, sNodes, sEdges) = state
   context <- liftIO $ widgetGetPangoContext canvas
-  forM (graphGetNodes g) (\n -> renderNode n (n `elem`sNodes) context)
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
@@ -230,6 +229,7 @@ drawGraph state canvas = do
       (Just src, Just dst) -> renderEdge e selected src dst context
       (Nothing, _) -> return ()
       (_, Nothing) -> return ())
+  forM (graphGetNodes g) (\n -> renderNode n (n `elem`sNodes) context)
   return ()
 
 -- operações de interação ------------------------------------------------------
