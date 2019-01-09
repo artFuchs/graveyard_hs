@@ -150,21 +150,18 @@ changeNode (Graph iD src dst es ns) n =
 
 -- insere uma aresta no grafo
 insertEdge :: Graph -> Node -> Node -> Graph
-insertEdge (Graph iD src dst es ns) n1 n2 =
-  if all (\e -> src e /= nodeGetID n1 || dst e /= nodeGetID n2) es --(n1 `elem` ns) && (n2 `elem` ns)
-  then let neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
-           pos1 = position . infoGetGraphicalInfo . nodeGetInfo $ n1
-           pos2 = position . infoGetGraphicalInfo . nodeGetInfo $ n2
-           gi = if n1 == n2
-             then giSetPosition (fst pos1 + 30, snd pos1 + 30) newGraphicalInfo
-             else giSetPosition (midPoint pos1 pos2) newGraphicalInfo
-           ne = Edge neID (Info "" gi)
-           nID1 = nodeGetID n1
-           nID2 = nodeGetID n2
-           src' = \e -> if e == ne then nID1 else src e
-           dst' = \e -> if e == ne then nID2 else dst e
-       in Graph iD src' dst' (ne:es) ns
-  else Graph iD src dst es ns
+insertEdge (Graph iD src dst es ns) n1 n2 = Graph iD src' dst' (ne:es) ns
+  where neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
+        pos1 = position . infoGetGraphicalInfo . nodeGetInfo $ n1
+        pos2 = position . infoGetGraphicalInfo . nodeGetInfo $ n2
+        gi = if n1 == n2
+         then giSetPosition (fst pos1 + 30, snd pos1 + 30) newGraphicalInfo
+         else giSetPosition (midPoint pos1 pos2) newGraphicalInfo
+        ne = Edge neID (Info "" gi)
+        nID1 = nodeGetID n1
+        nID2 = nodeGetID n2
+        src' = \e -> if e == ne then nID1 else src e
+        dst' = \e -> if e == ne then nID2 else dst e
 
 -- remove uma aresta do grafo
 removeEdge :: Graph -> Edge -> Graph
