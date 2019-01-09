@@ -117,8 +117,8 @@ main = do
             sEdge = checkSelectEdge graph (x,y)
         -- Shift: seleção de multiplos elementos
         let (sNodes,sEdges) = if Shift `elem` ms
-                                then let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] (oldSN ++ sNode)
-                                         jointSE = foldl (\es e -> if e `notElem` es then e:es else es) [] (oldSE ++ sEdge)
+                                then let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
+                                         jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
                                      in (jointSN, jointSE)
                                 else (sNode, sEdge)
         writeIORef st (editorGetGraph es, sNodes, sEdges)
@@ -235,14 +235,18 @@ drawGraph state canvas = do
 -- operações de interação ------------------------------------------------------
 -- verifica se o usuario selecionou algum nodo
 checkSelectNode:: Graph -> (Double,Double) -> [Node]
-checkSelectNode g (x,y) = filter (isSelected) $ graphGetNodes g
+checkSelectNode g (x,y) = case find (\n -> isSelected n) $ graphGetNodes g of
+                            Just a -> [a]
+                            Nothing -> []
   where isSelected = (\n -> let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ n
                                 (w,h) = dims . infoGetGraphicalInfo . nodeGetInfo $ n
                             in pointInsideRectangle (x,y) (nx,ny,w,h) )
 
 -- verifica se o usuario selecionou alguma aresta
 checkSelectEdge:: Graph -> (Double,Double) -> [Edge]
-checkSelectEdge g (x,y) = filter (isSelected) $ graphGetEdges g
+checkSelectEdge g (x,y) = case find (\e -> isSelected e) $ graphGetEdges g of
+                            Just a -> [a]
+                            Nothing -> []
   where isSelected = (\e -> pointDistance (x,y) (position . infoGetGraphicalInfo . edgeGetInfo $ e) < 5)
 
 -- move os nodos selecionados
