@@ -271,12 +271,15 @@ moveNode state (xold,yold) (xnew,ynew) = do
                                                                                  bPos = position. infoGetGraphicalInfo . nodeGetInfo $ b
                                                                                  newAPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode a
                                                                                  newBPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode b
-                                                                                 edgePos = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+                                                                                 (xe,ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+                                                                                 (xe',ye') = (xe+deltaX, ye+deltaY)
                                                                                  info = edgeGetInfo edge
                                                                                  gi = infoGetGraphicalInfo info
-                                                                              in if pointDistance edgePos (midPoint aPos bPos) < 10
-                                                                                 then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (midPoint newAPos newBPos) gi)
-                                                                                 else return edge
+                                                                              in if a == b && a `elem` sNodes
+                                                                                  then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (xe',ye') gi)
+                                                                                  else if pointDistance (xe,ye) (midPoint aPos bPos) < 10
+                                                                                    then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (midPoint newAPos newBPos) gi)
+                                                                                    else return edge
                                                          _ -> return edge
                                                         )
   -- atualiza o grafo
