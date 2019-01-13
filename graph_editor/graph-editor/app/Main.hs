@@ -177,15 +177,16 @@ main = do
       LeftButton -> liftIO $ do
         es <- readIORef st
         sq <- readIORef squareSelection
-        case sq of
-          Just (x,y,w,h) -> do
+        case (es,sq) of
+          ((_,[],[]), Just (x,y,w,h)) -> do
             let graph = editorGetGraph es
                 sNodes = filter (\n -> let pos = position . infoGetGraphicalInfo . nodeGetInfo $ n
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2) , abs w, abs h)) $ graphGetNodes graph
                 sEdges = filter (\e -> let pos = position . infoGetGraphicalInfo . edgeGetInfo $ e
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
             writeIORef st (graph, sNodes, sEdges)
-          Nothing -> return ()
+          ((_,n,e), Nothing) -> adjustEdges st
+          (_,_) -> return ()
     liftIO $ do
       writeIORef squareSelection Nothing
       widgetQueueDraw canvas
@@ -349,6 +350,24 @@ moveEdge state (xold,yold) (xnew,ynew) = do
   let mvg = (\g e -> changeEdge g e)
       newGraph = foldl mvg graph movedEdges
   writeIORef state (newGraph, sNodes, movedEdges)
+
+-- ajusta a posição das edges selecionadas caso a propriedade centered seja True
+adjustEdges:: IORef EditorState -> IO ()
+adjustEdges state = do
+  (graph,sNodes,sEdges) <- readIORef state
+  let adjust = (\e -> let nullNode = Node 0 (Info "" newGraphicalInfo)
+                          srcPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getSrcNode graph e
+                          dstPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getDstNode graph e
+                          info = edgeGetInfo e
+                          gi = infoGetGraphicalInfo info
+                      in if centered gi
+                        then Edge (edgeGetID e) (Info (infoGetContent info) (giSetCentered True . giSetPosition (midPoint srcPos dstPos) $ gi))
+                        else e)
+      newEdges = map adjust sEdges
+      newGraph = foldl (\g e -> changeEdge g e) graph newEdges
+  writeIORef state (newGraph, sNodes, sEdges)
+
+
 
 -- operações básicas sobre o grafo no estado -----------------------------------
 -- cria um novo nodo e insere no grafo
