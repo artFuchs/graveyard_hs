@@ -338,7 +338,10 @@ checkSelectNode g (x,y) = case find (\n -> isSelected n) $ graphGetNodes g of
                             Nothing -> []
   where isSelected = (\n -> let (nx,ny) = position . nodeGetGI $ n
                                 (w,h) = dims . nodeGetGI $ n
-                            in pointInsideRectangle (x,y) (nx,ny,w,h) )
+                            in case shape . nodeGetGI $ n of
+                              NCircle -> pointDistance (x,y) (nx,ny) < (w/2)
+                              NRect -> pointInsideRectangle (x,y) (nx,ny,w,h)
+                              NQuad -> pointInsideRectangle (x,y) (nx,ny,w,w) )
 
 -- verifica se o usuario selecionou alguma aresta
 checkSelectEdge:: Graph -> (Double,Double) -> [Edge]
@@ -481,6 +484,7 @@ edges1 =  [ (Edge 1 "" $ edgeGiSetPosition ( 70, 70) newEdgeGI)
           , (Edge 4 "" $ edgeGiSetPosition (100,130) newEdgeGI)
           , (Edge 5 "" $ edgeGiSetPosition (100,160) newEdgeGI)
           ]
+
 -- 1 -1-> 2
 -- 1 -2-> 3
 -- 2 -3-> 4
@@ -506,10 +510,10 @@ dst1 edge
 
 
 -- To Do List ------------------------------------------------------------------
--- *Separar as caracteristicas graficas das edges das caracteristicas dos nodos
--- *Separar a estrutura do grafo das estruturas gráficas
--- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Definir formas diferentes para os nodos
 -- *Estilos diferentes para as Edges
+-- *Refatorar código
+-- *Separar a estrutura do grafo das estruturas gráficas
+-- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Salvar / carregar grafo
 -- *Undo / Redo

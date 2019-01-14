@@ -29,16 +29,33 @@ renderNode node selected context = do
   (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
 
   setSourceRGB r g b
-  rectangle (x-(offset/2 + pw/2)) (y-(offset/2 + ph/2)) (offset+pw) (offset+ph)
-  fill
-
-  setSourceRGB rl gl bl
-  rectangle (x-(offset/2 + pw/2)) (y-(offset/2 + ph/2)) (offset+pw) (offset+ph)
-  stroke
+  case shape . nodeGetGI $ node of
+    NCircle -> let radius = (max pw ph)/2 + offset/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl)
+    NRect -> renderRectangle (x, y, pw+offset, ph+offset) (r,g,b) (rl,gl,bl)
+    NQuad -> renderRectangle (x,y, pw+offset, pw+offset) (r,g,b) (rl,gl,bl)
 
   setSourceRGB rl gl bl
   moveTo (x-(pw/2)) (y-(ph/2))
   showLayout pL
+
+renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,Double,Double) ->  Render ()
+renderCircle (x,y) radius (r,g,b) (lr,lg,lb) = do
+  setSourceRGB r g b
+  arc x y radius 0 (2*pi)
+  fill
+  setSourceRGB lr lg lb
+  arc x y radius 0 (2*pi)
+  stroke
+
+renderRectangle :: (Double,Double,Double,Double) -> (Double,Double,Double) -> (Double,Double,Double) -> Render ()
+renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) = do
+  setSourceRGB r g b
+  rectangle (x-(w/2)) (y-(h/2)) w h
+  fill
+  setSourceRGB lr lg lb
+  rectangle (x-(w/2)) (y-(h/2)) w h
+  stroke
+
 
 -- desenha uma aresta
 renderEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
