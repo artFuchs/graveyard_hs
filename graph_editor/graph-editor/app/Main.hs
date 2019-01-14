@@ -227,7 +227,7 @@ main = do
         "Return" -> do
           name <- entryGetText entryNodeName :: IO String
           context <- widgetGetPangoContext canvas
-          renameSelectedNodes st name context
+          renameSelected st name context
           widgetQueueDraw canvas
         _       -> return ()
     return False
@@ -312,7 +312,7 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn = do
       colorButtonSetColor colorBtn $ Color 49151 49151 49151
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
 
--- atualização do desenho do grafo --------------------------------------------
+-- atualização do desenho do grafo --------------------------------------------renameSelected
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
 drawGraph state sq canvas = do
   let (g, sNodes, sEdges) = state
@@ -461,16 +461,16 @@ deleteSelected state = do
   let newGraph = foldl (\g e -> removeEdge g e) graph' edges
   writeIORef state (newGraph, [], [])
 
--- renomeia os nodos selecionados
-renameSelectedNodes:: IORef EditorState -> String -> PangoContext -> IO()
-renameSelectedNodes state name context = do
-  (graph, nodes, _) <- readIORef state
+-- renomeia os selecionados
+renameSelected:: IORef EditorState -> String -> PangoContext -> IO()
+renameSelected state name context = do
+  (graph, nodes, edges) <- readIORef state
   dim <- getStringDims name context
   let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (giSetDims dim . infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
+      renamedEdges = map (\e -> Edge (edgeGetID e) $ Info name (giSetDims dim . infoGetGraphicalInfo . edgeGetInfo $ e)) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
-  writeIORef state (newGraph,renamedNodes, [])
-
-
+      newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
+  writeIORef state (newGraph',renamedNodes, renamedEdges)
 
 
 
@@ -520,7 +520,6 @@ dst1 edge
 
 -- To Do List ------------------------------------------------------------------
 
--- *alterar cor dos nodos e das arestas
 -- *Label para as Edges
 -- *Definir a intersecção da linha da edge com o retangulo do nodo
 -- *Definir formas diferentes para os nodos

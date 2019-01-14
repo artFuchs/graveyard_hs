@@ -46,6 +46,18 @@ renderEdge edge selected nodeSrc nodeDst context = do
   if nodeSrc == nodeDst
     then renderLoop edge selected nodeSrc context
     else renderNormalEdge edge selected nodeSrc nodeDst context
+  -- draw Label
+  let content = infoGetContent . edgeGetInfo $ edge
+      (lx,ly) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+      (r,g,b) = lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+  pL <- liftIO $ layoutText context content
+  (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+
+  setSourceRGB r g b
+  moveTo (lx - pw/2) (ly - ph)
+  showLayout pL
+
+
 
 renderNormalEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
 renderNormalEdge edge selected nodeSrc nodeDst context = do
