@@ -81,7 +81,17 @@ main = do
   boxPackStart hBoxLineColor labelLineColor PackNatural 0
   lineColorBtn <- colorButtonNew
   boxPackStart hBoxLineColor lineColorBtn PackNatural 0
-
+  -- cria um frame contendo uma VBox para a propriedade forma do nodo
+  frameShape <- frameNew
+  boxPackStart vBoxProps frameShape PackNatural 0
+  vBoxShape <- vBoxNew False 8
+  containerAdd frameShape vBoxShape
+  radioCircle <- radioButtonNewWithLabel "Circulo"
+  boxPackStart vBoxShape radioCircle PackGrow 0
+  radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Retangulo"
+  boxPackStart vBoxShape radioRect PackGrow 0
+  radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quadrado"
+  boxPackStart vBoxShape radioQuad PackGrow 0
 
 
   -- cria um canvas em branco
@@ -259,6 +269,18 @@ main = do
     let newGraph = foldl (\g n -> changeNode g n) graph newNodes
     let newGraph' = foldl (\g e -> changeEdge g e) newGraph newEdges
     writeIORef st (newGraph', newNodes, edges)
+    widgetQueueDraw canvas
+
+  radioCircle `on` toggled $ do
+    changeNodeShape st NCircle
+    widgetQueueDraw canvas
+
+  radioRect `on` toggled $ do
+    changeNodeShape st NRect
+    widgetQueueDraw canvas
+
+  radioQuad `on` toggled $ do
+    changeNodeShape st NQuad
     widgetQueueDraw canvas
 
 
@@ -463,6 +485,15 @@ renameSelected state name context = do
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
   writeIORef state (newGraph',renamedNodes, renamedEdges)
+
+-- muda a forma de um nodo
+changeNodeShape :: IORef EditorState -> NodeShape -> IO ()
+changeNodeShape state s = do
+  es <- readIORef state
+  let nodes = editorGetSelectedNodes es
+      newNodes = map (\n -> Node (nodeGetID n) (nodeGetInfo n) (nodeGiSetShape s $ nodeGetGI n)) nodes
+      newGraph = foldl (\g n -> changeNode g n) (editorGetGraph es) newNodes
+  writeIORef state (newGraph, newNodes, editorGetSelectedEdges es)
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
 

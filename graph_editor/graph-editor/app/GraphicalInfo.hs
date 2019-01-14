@@ -8,6 +8,7 @@ module GraphicalInfo
 , nodeGiSetColor
 , nodeGiSetLineColor
 , nodeGiSetDims
+, nodeGiSetShape
 , edgeGiSetPosition
 , edgeGiSetColor
 , edgeGiSetCentered
