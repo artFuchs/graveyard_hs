@@ -15,14 +15,14 @@ import Helper
 -- desenha um nodo, com seu texto
 renderNode :: Node -> Bool -> PangoContext -> Render ()
 renderNode node selected context = do
-  let (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
+  let (x,y) = position . nodeGetGI $ node
       (r,g,b) = if selected
                   then (0,0,1)
-                  else color . infoGetGraphicalInfo . nodeGetInfo $ node
+                  else fillColor . nodeGetGI $ node
       (rl,gl,bl) = if selected
                     then (0,1,0)
-                    else lineColor . infoGetGraphicalInfo . nodeGetInfo $ node
-      content = infoGetContent . nodeGetInfo $ node
+                    else lineColor . nodeGetGI $ node
+      content = nodeGetInfo $ node
       offset = 4
 
   pL <- liftIO $ layoutText context content
@@ -47,18 +47,18 @@ renderEdge edge selected nodeSrc nodeDst context = do
     then renderLoop edge selected nodeSrc context
     else renderNormalEdge edge selected nodeSrc nodeDst context
   -- draw Label
-  let content = infoGetContent . edgeGetInfo $ edge
+  let content = edgeGetInfo $ edge
   if null content
     then  return ()
     else  do
       pL <- liftIO $ layoutText context content
       (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
-      let (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
-          (u,v) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+      let (x,y) = position . nodeGetGI $ nodeSrc
+          (u,v) = cPosition . edgeGetGI $ edge
           a = angle (x,y) (u,v)
           minD = max pw ph
           labelPos = pointAt (a - pi/2) ( minD+2 ) (u, v)
-          (r,g,b) = lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+          (r,g,b) = color . edgeGetGI $ edge
       setSourceRGB r g b
       moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
       showLayout pL
@@ -68,15 +68,15 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
   setSourceRGB 0 0 0
 
   -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
-  pL <- liftIO $ layoutText context . infoGetContent . nodeGetInfo $ nodeSrc
-  pL2 <- liftIO $ layoutText context . infoGetContent . nodeGetInfo $ nodeDst
+  pL <- liftIO $ layoutText context . nodeGetInfo $ nodeSrc
+  pL2 <- liftIO $ layoutText context . nodeGetInfo $ nodeDst
   (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
   (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
 
   -- calculo dos pontos de origem e destino da aresta
-  let (x1, y1) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
-      (x2, y2) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeDst
-      (xe, ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+  let (x1, y1) = position . nodeGetGI $ nodeSrc
+      (x2, y2) = position . nodeGetGI $ nodeDst
+      (xe, ye) = cPosition . edgeGetGI $ edge
       d1 = pointDistance (x1,y1) (xe,ye)
       d2 = pointDistance (xe,ye) (x2,y2)
       (vx1,vy1) = ((xe-x1)/d1 , (ye-y1)/d1)
@@ -86,7 +86,7 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
       (x1', y1') = (x1 + vx1*n1, y1 + vy1*n1)
       (x2', y2') = (x2 - vx2*n2, y2 - vy2*n2)
       -- configurações de cor
-      (r,g,b) = if selected then (0,1,0) else lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+      (r,g,b) = if selected then (0,1,0) else color . edgeGetGI $ edge
 
   -- desenha uma linha representando a aresta
   setSourceRGB r g b
@@ -111,8 +111,8 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
 
 renderLoop:: Edge -> Bool -> Node -> PangoContext -> Render ()
 renderLoop edge selected node context = do
-  let (xe, ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
-      (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ node
+  let (xe, ye) = cPosition . edgeGetGI $ edge
+      (x,y) = position . nodeGetGI $ node
       a = angle (x,y) (xe, ye)
       d = pointDistance (x,y) (xe,ye)
       (f,g) = pointAt a d (x,y)
@@ -120,7 +120,7 @@ renderLoop edge selected node context = do
       p2 = pointAt (a+pi/2) (d/1.5) (f,g)
       p1' = pointAt (a-pi/8) (d/8) (x,y)
       p2' = pointAt (a-pi/2) (d/1.5) (f,g)
-      (rl,gl,bl) = if selected then (0,1,0) else lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+      (rl,gl,bl) = if selected then (0,1,0) else color . edgeGetGI $ edge
   -- desenha uma curva levando ao próprio nodo
   moveTo x y
   curveTo (fst p1) (snd p1) (fst p2) (snd p2) xe ye

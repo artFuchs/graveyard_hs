@@ -188,9 +188,9 @@ main = do
         case (es,sq) of
           ((_,[],[]), Just (x,y,w,h)) -> do
             let graph = editorGetGraph es
-                sNodes = filter (\n -> let pos = position . infoGetGraphicalInfo . nodeGetInfo $ n
+                sNodes = filter (\n -> let pos = position . nodeGetGI $ n
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2) , abs w, abs h)) $ graphGetNodes graph
-                sEdges = filter (\e -> let pos = position . infoGetGraphicalInfo . edgeGetInfo $ e
+                sEdges = filter (\e -> let pos = cPosition . edgeGetGI $ e
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
             writeIORef st (graph, sNodes, sEdges)
           ((_,n,e), Nothing) -> adjustEdges st
@@ -234,14 +234,12 @@ main = do
 
   onColorSet colorBtn $ do
     Color r g b <- colorButtonGetColor colorBtn
-    let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
+    let col = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
     (graph, nodes, edges) <- readIORef st
     newNodes <- forM (nodes) (\n -> let nid = nodeGetID n
-                                        info = nodeGetInfo n
-                                        c = infoGetContent info
-                                        gi = infoGetGraphicalInfo info
-                                        gi' = giSetColor color gi
-                                    in return $ Node nid (Info c gi') )
+                                        c = nodeGetInfo n
+                                        gi = nodeGiSetColor col $ nodeGetGI n
+                                    in return $ Node nid c gi)
     let newGraph = foldl (\g n -> changeNode g n) graph newNodes
     writeIORef st (newGraph, newNodes, edges)
     widgetQueueDraw canvas
@@ -251,17 +249,13 @@ main = do
     let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
     (graph, nodes, edges) <- readIORef st
     newNodes <- forM (nodes) (\n -> let nid = nodeGetID n
-                                        info = nodeGetInfo n
-                                        c = infoGetContent info
-                                        gi = infoGetGraphicalInfo info
-                                        gi' = giSetLineColor color gi
-                                    in return $ Node nid (Info c gi') )
+                                        c = nodeGetInfo n
+                                        gi = nodeGiSetLineColor color $ nodeGetGI n
+                                    in return $ Node nid c gi )
     newEdges <- forM (edges) (\e -> let eid = edgeGetID e
-                                        info = edgeGetInfo e
-                                        c = infoGetContent info
-                                        gi = infoGetGraphicalInfo info
-                                        gi' = giSetLineColor color gi
-                                    in return $ Edge eid (Info c gi') )
+                                        c = edgeGetInfo e
+                                        gi = edgeGiSetColor color $ edgeGetGI e
+                                    in return $ Edge eid c gi )
     let newGraph = foldl (\g n -> changeNode g n) graph newNodes
     let newGraph' = foldl (\g e -> changeEdge g e) newGraph newEdges
     writeIORef st (newGraph', newNodes, edges)
@@ -289,9 +283,9 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn = do
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
     (1, 0) -> do
       let iD = show . nodeGetID $ (nodes!!0)
-          name = infoGetContent . nodeGetInfo $ (nodes!!0)
-          (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ (nodes!!0)
-          (r',g',b') = lineColor . infoGetGraphicalInfo . nodeGetInfo $ (nodes!!0)
+          name = nodeGetInfo $ (nodes!!0)
+          (r,g,b) = fillColor . nodeGetGI $ (nodes!!0)
+          (r',g',b') = lineColor . nodeGetGI $ (nodes!!0)
           nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
       entrySetText entryID iD
@@ -300,8 +294,8 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn = do
       colorButtonSetColor lcolorBtn nodeLineC
     (0, 1) -> do
       let iD = show . edgeGetID $ (edges!!0)
-          name = infoGetContent . edgeGetInfo $ (edges!!0)
-          (r,g,b) = lineColor . infoGetGraphicalInfo . edgeGetInfo $ (edges!!0)
+          name = edgeGetInfo $ (edges!!0)
+          (r,g,b) = color . edgeGetGI $ (edges!!0)
           edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
       entrySetText entryID iD
       entrySetText entryName name
@@ -342,8 +336,8 @@ checkSelectNode:: Graph -> (Double,Double) -> [Node]
 checkSelectNode g (x,y) = case find (\n -> isSelected n) $ graphGetNodes g of
                             Just a -> [a]
                             Nothing -> []
-  where isSelected = (\n -> let (nx,ny) = position . infoGetGraphicalInfo . nodeGetInfo $ n
-                                (w,h) = dims . infoGetGraphicalInfo . nodeGetInfo $ n
+  where isSelected = (\n -> let (nx,ny) = position . nodeGetGI $ n
+                                (w,h) = dims . nodeGetGI $ n
                             in pointInsideRectangle (x,y) (nx,ny,w,h) )
 
 -- verifica se o usuario selecionou alguma aresta
@@ -351,7 +345,7 @@ checkSelectEdge:: Graph -> (Double,Double) -> [Edge]
 checkSelectEdge g (x,y) = case find (\e -> isSelected e) $ graphGetEdges g of
                             Just a -> [a]
                             Nothing -> []
-  where isSelected = (\e -> pointDistance (x,y) (position . infoGetGraphicalInfo . edgeGetInfo $ e) < 5)
+  where isSelected = (\e -> pointDistance (x,y) (cPosition . edgeGetGI $ e) < 5)
 
 -- move os nodos selecionados
 moveNode:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
@@ -359,28 +353,26 @@ moveNode state (xold,yold) (xnew,ynew) = do
   (graph,sNodes, sEdges) <- readIORef state
   let (deltaX, deltaY) = (xnew-xold, ynew-yold)
   -- move nodes
-  movedNodes <- forM (sNodes) (\node -> let info = nodeGetInfo node
-                                            gi = infoGetGraphicalInfo info
+  movedNodes <- forM (sNodes) (\node -> let gi = nodeGetGI node
                                             (nox, noy)  = position gi
                                             newPos  = (nox+deltaX, noy+deltaY)
-                                        in return $ Node (nodeGetID node) (Info (infoGetContent info) (giSetPosition newPos gi)) )
+                                        in return $ Node (nodeGetID node) (nodeGetInfo node) (nodeGiSetPosition newPos gi) )
   -- move as arestas que estão no ponto entre os nodos
-  movedEdges <- forM (graphGetEdges graph) (\edge -> let nullNode = Node 0 (Info "" newGraphicalInfo)
+  movedEdges <- forM (graphGetEdges graph) (\edge -> let nullNode = Node 0 "" newNodeGI
                                                          a = fromMaybe nullNode $ getSrcNode graph edge
                                                          b = fromMaybe nullNode $ getDstNode graph edge
                                                          getMovedNode = (\node -> fromMaybe node $ find (\n -> n == node) movedNodes)
-                                                         aPos = position. infoGetGraphicalInfo . nodeGetInfo $ a
-                                                         bPos = position. infoGetGraphicalInfo . nodeGetInfo $ b
-                                                         newAPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode a
-                                                         newBPos = position. infoGetGraphicalInfo . nodeGetInfo $ getMovedNode b
-                                                         (xe,ye) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+                                                         aPos = position. nodeGetGI $ a
+                                                         bPos = position. nodeGetGI $ b
+                                                         newAPos = position. nodeGetGI $ getMovedNode a
+                                                         newBPos = position. nodeGetGI $ getMovedNode b
+                                                         (xe,ye) = cPosition . edgeGetGI $ edge
                                                          (xe',ye') = (xe+deltaX, ye+deltaY)
-                                                         info = edgeGetInfo edge
-                                                         gi = infoGetGraphicalInfo info
+                                                         gi = edgeGetGI edge
                                                       in if a == b && a `elem` sNodes
-                                                          then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (xe',ye') gi)
+                                                          then return $ Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (xe',ye') gi
                                                           else if centered gi
-                                                            then return $ Edge (edgeGetID edge) $ Info (infoGetContent info) (giSetPosition (midPoint newAPos newBPos) gi)
+                                                            then return $ Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (midPoint newAPos newBPos) gi
                                                             else return edge
                                                         )
   -- atualiza o grafo
@@ -396,15 +388,14 @@ moveEdge:: IORef EditorState -> (Double,Double) -> (Double,Double) -> IO ()
 moveEdge state (xold,yold) (xnew,ynew) = do
   (graph,sNodes,sEdges) <- readIORef state
   let (deltaX, deltaY) = (xnew-xold,ynew-yold)
-  movedEdges <- forM (sEdges) (\edge-> let info = edgeGetInfo edge
-                                           gi = infoGetGraphicalInfo info
-                                           (xe, ye) = position gi
+  movedEdges <- forM (sEdges) (\edge-> let gi = edgeGetGI edge
+                                           (xe, ye) = cPosition gi
                                            newPos = (xe+deltaX, ye+deltaY)
-                                           nullNode = Node 0 (Info "" newGraphicalInfo)
-                                           srcPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getSrcNode graph edge
-                                           dstPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getDstNode graph edge
+                                           nullNode = Node 0 "" newNodeGI
+                                           srcPos = position . nodeGetGI . fromMaybe nullNode $ getSrcNode graph edge
+                                           dstPos = position . nodeGetGI . fromMaybe nullNode $ getDstNode graph edge
                                            mustCenter = pointLineDistance newPos srcPos dstPos < 10
-                                        in return $ Edge (edgeGetID edge) (Info (infoGetContent info) (giSetCentered mustCenter . giSetPosition newPos $ gi)) )
+                                        in return $ Edge (edgeGetID edge) (edgeGetInfo edge) (edgeGiSetCentered mustCenter . edgeGiSetPosition newPos $ gi))
   let mvg = (\g e -> changeEdge g e)
       newGraph = foldl mvg graph movedEdges
   writeIORef state (newGraph, sNodes, movedEdges)
@@ -413,13 +404,11 @@ moveEdge state (xold,yold) (xnew,ynew) = do
 adjustEdges:: IORef EditorState -> IO ()
 adjustEdges state = do
   (graph,sNodes,sEdges) <- readIORef state
-  let adjust = (\e -> let nullNode = Node 0 (Info "" newGraphicalInfo)
-                          srcPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getSrcNode graph e
-                          dstPos = position . infoGetGraphicalInfo . nodeGetInfo . fromMaybe nullNode $ getDstNode graph e
-                          info = edgeGetInfo e
-                          gi = infoGetGraphicalInfo info
-                      in if centered gi
-                        then Edge (edgeGetID e) (Info (infoGetContent info) (giSetCentered True . giSetPosition (midPoint srcPos dstPos) $ gi))
+  let adjust = (\e -> let nullNode = Node 0 "" newNodeGI
+                          srcPos = position . nodeGetGI . fromMaybe nullNode $ getSrcNode graph e
+                          dstPos = position . nodeGetGI . fromMaybe nullNode $ getDstNode graph e
+                      in if centered (edgeGetGI e)
+                        then Edge (edgeGetID e) (edgeGetInfo e) (edgeGiSetCentered True . edgeGiSetPosition (midPoint srcPos dstPos) $ edgeGetGI e)
                         else e)
       newEdges = map adjust sEdges
       newGraph = foldl (\g e -> changeEdge g e) graph newEdges
@@ -434,11 +423,11 @@ createNode state pos context = do
   (graph, nodes, edges) <- readIORef state
   let maxnode = if length (graphGetNodes graph) > 0
                   then maximum (graphGetNodes graph)
-                  else Node 0 $ Info "" newGraphicalInfo
+                  else Node 0 "" newNodeGI
       nID = 1 + nodeGetID maxnode
       content = ("node " ++ show nID)
   dim <- getStringDims content context
-  let newNode = Node nID $ Info content ( giSetDims dim . giSetPosition pos $ newGraphicalInfo )
+  let newNode = Node nID content $ nodeGiSetDims dim . nodeGiSetPosition pos $ newNodeGI
       newGraph = insertNode graph newNode
   writeIORef state (newGraph, [newNode], [])
 
@@ -466,13 +455,11 @@ renameSelected:: IORef EditorState -> String -> PangoContext -> IO()
 renameSelected state name context = do
   (graph, nodes, edges) <- readIORef state
   dim <- getStringDims name context
-  let renamedNodes = map (\n -> Node (nodeGetID n) $ Info name (giSetDims dim . infoGetGraphicalInfo . nodeGetInfo $ n)) nodes
-      renamedEdges = map (\e -> Edge (edgeGetID e) $ Info name (giSetDims dim . infoGetGraphicalInfo . edgeGetInfo $ e)) edges
+  let renamedNodes = map (\n -> Node (nodeGetID n) name (nodeGiSetDims dim . nodeGetGI $ n)) nodes
+      renamedEdges = map (\e -> Edge (edgeGetID e) name $ edgeGetGI e) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
   writeIORef state (newGraph',renamedNodes, renamedEdges)
-
-
 
 -- ↓↓↓↓↓ estruturas para teste ↓↓↓↓↓ -------------------------------------------
 
@@ -480,19 +467,19 @@ graph1 :: Graph
 graph1 = Graph "1" src1 dst1 edges1 nodes1
 
 nodes1 :: [Node]
-nodes1 =  [(Node 1 $ Info "hello" $ giSetPosition (100, 40) newGraphicalInfo)
-          , (Node 2 $ Info "my" $ giSetPosition (40, 100) newGraphicalInfo)
-          , (Node 3 $ Info "name" $ giSetPosition (160, 100) newGraphicalInfo)
-          , (Node 4 $ Info "is" $ giSetPosition (40, 160) newGraphicalInfo)
-          , (Node 5 $ Info "Mr. Fear" $ giSetPosition (160, 160) newGraphicalInfo)
+nodes1 =  [ (Node 1 "hello" $ nodeGiSetPosition (100, 40) newNodeGI)
+          , (Node 2 "my" $ nodeGiSetPosition (40, 100) newNodeGI)
+          , (Node 3 "name" $ nodeGiSetPosition (160, 100) newNodeGI)
+          , (Node 4 "is" $ nodeGiSetPosition (40, 160) newNodeGI)
+          , (Node 5 "Mr. Fear" $ nodeGiSetPosition (160, 160) newNodeGI)
           ]
 
 edges1 :: [Edge]
-edges1 =  [(Edge 1 $ Info "" $ giSetPosition ( 70, 70) newGraphicalInfo)
-          ,(Edge 2 $ Info "" $ giSetPosition (130, 70) newGraphicalInfo)
-          ,(Edge 3 $ Info "" $ giSetPosition ( 40,130) newGraphicalInfo)
-          ,(Edge 4 $ Info "" $ giSetPosition (100,130) newGraphicalInfo)
-          ,(Edge 5 $ Info "" $ giSetPosition (100,160) newGraphicalInfo)
+edges1 =  [ (Edge 1 "" $ edgeGiSetPosition ( 70, 70) newEdgeGI)
+          , (Edge 2 "" $ edgeGiSetPosition (130, 70) newEdgeGI)
+          , (Edge 3 "" $ edgeGiSetPosition ( 40,130) newEdgeGI)
+          , (Edge 4 "" $ edgeGiSetPosition (100,130) newEdgeGI)
+          , (Edge 5 "" $ edgeGiSetPosition (100,160) newEdgeGI)
           ]
 -- 1 -1-> 2
 -- 1 -2-> 3
@@ -519,6 +506,8 @@ dst1 edge
 
 
 -- To Do List ------------------------------------------------------------------
+-- *Separar as caracteristicas graficas das edges das caracteristicas dos nodos
+-- *Separar a estrutura do grafo das estruturas gráficas
 -- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Definir formas diferentes para os nodos
 -- *Estilos diferentes para as Edges

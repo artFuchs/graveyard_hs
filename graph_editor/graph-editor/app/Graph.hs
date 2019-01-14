@@ -19,12 +19,11 @@ module Graph
 , Node (..)
 , nodeGetID
 , nodeGetInfo
+, nodeGetGI
 , Edge (..)
 , edgeGetID
 , edgeGetInfo
-, Info (..)
-, infoGetContent
-, infoGetGraphicalInfo
+, edgeGetGI
 )where
 
 import Data.List
@@ -34,54 +33,53 @@ import Helper
 -- Estruturas de conteudo ------------------------------------------------------
 
 -- | Info - conteúdo de um nodo
-type Content = String
-data Info = Info Content GraphicalInfo deriving (Show)
-
-infoGetContent :: Info -> Content
-infoGetContent (Info content _) = content
-
-infoGetGraphicalInfo :: Info -> GraphicalInfo
-infoGetGraphicalInfo (Info _ graphicalInfo ) = graphicalInfo
+type Info = String
 
 
 -- Estruturas do Grafo ---------------------------------------------------------------
 -- Nodo
 -- Node id informação
-data Node = Node Int Info deriving (Show)
+data Node = Node Int Info NodeGI deriving (Show)
 
 -- Comparação de nodos
 -- O que importa é o ID
 instance Eq Node where
-  (Node nID1 _) == (Node nID2 _ ) = nID1 == nID2
+  (Node nID1 _ _) == (Node nID2 _ _) = nID1 == nID2
 
 instance Ord Node where
-  (Node nID1 _) <= (Node nID2 _) = nID1 <= nID2
+  (Node nID1 _ _) <= (Node nID2 _ _) = nID1 <= nID2
 
 -- Getters
 nodeGetID :: Node -> Int
-nodeGetID (Node nID _) = nID
+nodeGetID (Node nID _ _) = nID
 
 nodeGetInfo :: Node -> Info
-nodeGetInfo (Node _ info) = info
+nodeGetInfo (Node _ info _) = info
+
+nodeGetGI :: Node -> NodeGI
+nodeGetGI (Node _ _ gi) = gi
 
 -- Aresta
 -- Edge id informação
-data Edge = Edge Int Info
+data Edge = Edge Int Info EdgeGI
 
 -- Comparação de Arestas
 -- O que importa é o ID
 instance Eq Edge where
-  (Edge eID1 _) == (Edge eID2 _ ) = eID1 == eID2
+  (Edge eID1 _ _) == (Edge eID2 _ _) = eID1 == eID2
 
 instance Ord Edge where
-  (Edge eID1 _) <= (Edge eID2 _) = eID1 <= eID2
+  (Edge eID1 _ _) <= (Edge eID2 _ _) = eID1 <= eID2
 
 -- Getters
 edgeGetID :: Edge -> Int
-edgeGetID (Edge eID _) = eID
+edgeGetID (Edge eID _ _) = eID
 
 edgeGetInfo :: Edge -> Info
-edgeGetInfo (Edge _ info) = info
+edgeGetInfo (Edge _ info _) = info
+
+edgeGetGI :: Edge -> EdgeGI
+edgeGetGI (Edge _ _ gi) = gi
 
 -- Grafo
 -- Graph nome edges_src edges_dest edges nodes
@@ -152,12 +150,12 @@ changeNode (Graph iD src dst es ns) n =
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 = Graph iD src' dst' (ne:es) ns
   where neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
-        pos1 = position . infoGetGraphicalInfo . nodeGetInfo $ n1
-        pos2 = position . infoGetGraphicalInfo . nodeGetInfo $ n2
+        pos1 = position . nodeGetGI $ n1
+        pos2 = position . nodeGetGI $ n2
         gi = if n1 == n2
-         then giSetPosition (fst pos1 + 30, snd pos1 + 30) newGraphicalInfo
-         else giSetPosition (midPoint pos1 pos2) newGraphicalInfo
-        ne = Edge neID (Info "" gi)
+         then edgeGiSetPosition (fst pos1 + 30, snd pos1 + 30) newEdgeGI
+         else edgeGiSetPosition (midPoint pos1 pos2) newEdgeGI
+        ne = Edge neID "" gi
         nID1 = nodeGetID n1
         nID2 = nodeGetID n2
         src' = \e -> if e == ne then nID1 else src e
@@ -182,8 +180,8 @@ changeEdge (Graph iD src dst es ns) e =
 
 -- dado um nodo, pegar as arestas conectadas a ele
 getConnectors :: Graph -> Node -> [Edge]
-getConnectors (Graph iD src dst es ns) (Node nID _) =
-  filter (\e -> (nID == src e) || (nID == dst e)) es
+getConnectors (Graph iD src dst es ns) n =
+  filter (\e -> (nodeGetID n == src e) || (nodeGetID n == dst e)) es
 
 -- dado um nodo, remover as arestas conectadas a ele
 removeConnectors :: Graph -> Node -> Graph
