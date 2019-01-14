@@ -519,9 +519,7 @@ dst1 edge
 
 
 -- To Do List ------------------------------------------------------------------
-
--- *Label para as Edges
--- *Definir a intersecção da linha da edge com o retangulo do nodo
+-- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Definir formas diferentes para os nodos
 -- *Estilos diferentes para as Edges
 -- *Salvar / carregar grafo

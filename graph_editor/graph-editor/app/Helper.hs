@@ -1,15 +1,18 @@
 module Helper
 ( pointDistance
 , pointLineDistance
+, multPoint
 , midPoint
 , pointInsideRectangle
 , getStringDims
 , pointAt
 , angle
+, quadrant
 )where
 
 import Graphics.UI.Gtk
 import Graphics.Rendering.Pango.Layout
+import Data.Fixed
 
 -- | Módulo contendo funções auxiliares para uso na seleção
 
@@ -21,6 +24,9 @@ pointDistance (x1,y1) (x2,y2) = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
 pointLineDistance :: (Double,Double) -> (Double,Double) -> (Double,Double) -> Double
 pointLineDistance (x0,y0) (x1,y1) (x2,y2) = ( abs $ (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 - y2*x1 ) / (pointDistance (x1,y1) (x2,y2))
 
+-- | multiplicação de dois pontos
+multPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)
+multPoint (a,b) (c,d) = (a*c,b*d)
 
 -- | calcula o ponto médio entre dois pontos
 midPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)
@@ -58,3 +64,11 @@ angle (a,b) (c,d) =
        (GT,GT) -> atan(dy/dx)
    where  dy = d-b
           dx = c-a
+
+-- | quadrante do angulo
+quadrant :: Double -> (Double,Double)
+quadrant ang = (c,d)
+  where a = ang `mod'` pi
+        b = if a < 0 then a + 2*pi else a
+        c = if (abs a) <= pi/2 then 1 else -1
+        d = if b < pi then 1 else -1

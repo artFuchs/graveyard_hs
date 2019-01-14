@@ -48,26 +48,28 @@ renderEdge edge selected nodeSrc nodeDst context = do
     else renderNormalEdge edge selected nodeSrc nodeDst context
   -- draw Label
   let content = infoGetContent . edgeGetInfo $ edge
-      (lx,ly) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
-      (r,g,b) = lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
-  pL <- liftIO $ layoutText context content
-  (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
-
-  setSourceRGB r g b
-  moveTo (lx - pw/2) (ly - ph)
-  showLayout pL
-
-
+  if null content
+    then  return ()
+    else  do
+      pL <- liftIO $ layoutText context content
+      (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+      let (x,y) = position . infoGetGraphicalInfo . nodeGetInfo $ nodeSrc
+          (u,v) = position . infoGetGraphicalInfo . edgeGetInfo $ edge
+          a = angle (x,y) (u,v)
+          minD = max pw ph
+          labelPos = pointAt (a - pi/2) ( minD+2 ) (u, v)
+          (r,g,b) = lineColor . infoGetGraphicalInfo . edgeGetInfo $ edge
+      setSourceRGB r g b
+      moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
+      showLayout pL
 
 renderNormalEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
 renderNormalEdge edge selected nodeSrc nodeDst context = do
   setSourceRGB 0 0 0
 
   -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
-  let content = infoGetContent . nodeGetInfo $ nodeSrc
-      content2 = infoGetContent . nodeGetInfo $ nodeDst
-  pL <- liftIO $ layoutText context content
-  pL2 <- liftIO $ layoutText context content2
+  pL <- liftIO $ layoutText context . infoGetContent . nodeGetInfo $ nodeSrc
+  pL2 <- liftIO $ layoutText context . infoGetContent . nodeGetInfo $ nodeDst
   (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
   (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
 
