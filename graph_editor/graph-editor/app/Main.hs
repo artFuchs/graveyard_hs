@@ -74,6 +74,13 @@ main = do
   boxPackStart hBoxColor labelColor PackNatural 0
   colorBtn <- colorButtonNew
   boxPackStart hBoxColor colorBtn PackNatural 0
+  -- cria uma HBox para a propriedade cor da linha
+  hBoxLineColor <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxLineColor PackNatural 0
+  labelLineColor <- labelNew $ Just "Cor da linha: "
+  boxPackStart hBoxLineColor labelLineColor PackNatural 0
+  lineColorBtn <- colorButtonNew
+  boxPackStart hBoxLineColor lineColorBtn PackNatural 0
 
 
 
@@ -124,14 +131,15 @@ main = do
           ([],[], False) -> do
             writeIORef st (graph, [], [])
             writeIORef squareSelection $ Just (x,y,0,0)
+            updatePropMenu ([],[]) entryNodeID entryNodeName colorBtn lineColorBtn
           (n,e,False) -> do
             writeIORef st (editorGetGraph es, sNode, sEdge)
-            updatePropMenu sNode entryNodeID entryNodeName colorBtn
+            updatePropMenu (sNode,sEdge) entryNodeID entryNodeName colorBtn lineColorBtn
           (n,e,True) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
             writeIORef st (graph, jointSN, jointSE)
-            updatePropMenu jointSN entryNodeID entryNodeName colorBtn
+            updatePropMenu (jointSN, jointSE) entryNodeID entryNodeName colorBtn lineColorBtn
         widgetQueueDraw canvas
       -- clique com o botão direito: insere edges entre nodos
       RightButton -> liftIO $ do
@@ -144,7 +152,7 @@ main = do
           else createEdges st dstNode
 
         widgetQueueDraw canvas
-        updatePropMenu dstNode entryNodeID entryNodeName colorBtn
+        updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn
       _           -> return ()
     return True
 
@@ -187,6 +195,7 @@ main = do
             writeIORef st (graph, sNodes, sEdges)
           ((_,n,e), Nothing) -> adjustEdges st
           (_,_) -> return ()
+      _ -> return ()
     liftIO $ do
       writeIORef squareSelection Nothing
       widgetQueueDraw canvas
@@ -223,6 +232,42 @@ main = do
         _       -> return ()
     return False
 
+  onColorSet colorBtn $ do
+    Color r g b <- colorButtonGetColor colorBtn
+    let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
+    (graph, nodes, edges) <- readIORef st
+    newNodes <- forM (nodes) (\n -> let nid = nodeGetID n
+                                        info = nodeGetInfo n
+                                        c = infoGetContent info
+                                        gi = infoGetGraphicalInfo info
+                                        gi' = giSetColor color gi
+                                    in return $ Node nid (Info c gi') )
+    let newGraph = foldl (\g n -> changeNode g n) graph newNodes
+    writeIORef st (newGraph, newNodes, edges)
+    widgetQueueDraw canvas
+
+  onColorSet lineColorBtn $ do
+    Color r g b <- colorButtonGetColor lineColorBtn
+    let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
+    (graph, nodes, edges) <- readIORef st
+    newNodes <- forM (nodes) (\n -> let nid = nodeGetID n
+                                        info = nodeGetInfo n
+                                        c = infoGetContent info
+                                        gi = infoGetGraphicalInfo info
+                                        gi' = giSetLineColor color gi
+                                    in return $ Node nid (Info c gi') )
+    newEdges <- forM (edges) (\e -> let eid = edgeGetID e
+                                        info = edgeGetInfo e
+                                        c = infoGetContent info
+                                        gi = infoGetGraphicalInfo info
+                                        gi' = giSetLineColor color gi
+                                    in return $ Edge eid (Info c gi') )
+    let newGraph = foldl (\g n -> changeNode g n) graph newNodes
+    let newGraph' = foldl (\g e -> changeEdge g e) newGraph newEdges
+    writeIORef st (newGraph', newNodes, edges)
+    widgetQueueDraw canvas
+
+
   -- tratamento de eventos - janela principal ---------------------------------
   window `on` deleteEvent $ do
     liftIO mainQuit
@@ -234,25 +279,38 @@ main = do
 
 -- Callbacks -------------------------------------------------------------------
 -- atualização do menu de propriedades -----------------------------------------
-updatePropMenu :: [Node] -> Entry -> Entry -> ColorButton-> IO()
-updatePropMenu selected entryID entryName colorBtn = do
-  case length selected of
-    0 -> do
+updatePropMenu :: ([Node],[Edge]) -> Entry -> Entry -> ColorButton -> ColorButton -> IO()
+updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn = do
+  case (length nodes, length edges) of
+    (0, 0) -> do
       entrySetText entryID ""
       entrySetText entryName ""
       colorButtonSetColor colorBtn $ Color 49151 49151 49151
-    1 -> do
-      let iD = show . nodeGetID $ (selected!!0)
-          name = infoGetContent . nodeGetInfo $ (selected!!0)
-          (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ (selected!!0)
+      colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
+    (1, 0) -> do
+      let iD = show . nodeGetID $ (nodes!!0)
+          name = infoGetContent . nodeGetInfo $ (nodes!!0)
+          (r,g,b) = color . infoGetGraphicalInfo . nodeGetInfo $ (nodes!!0)
+          (r',g',b') = lineColor . infoGetGraphicalInfo . nodeGetInfo $ (nodes!!0)
           nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
+          nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
       entrySetText entryID iD
       entrySetText entryName name
       colorButtonSetColor colorBtn nodeColor
-
+      colorButtonSetColor lcolorBtn nodeLineC
+    (0, 1) -> do
+      let iD = show . edgeGetID $ (edges!!0)
+          name = infoGetContent . edgeGetInfo $ (edges!!0)
+          (r,g,b) = lineColor . infoGetGraphicalInfo . edgeGetInfo $ (edges!!0)
+          edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
+      entrySetText entryID iD
+      entrySetText entryName name
+      colorButtonSetColor lcolorBtn edgeColor
     _ -> do
       entrySetText entryID "--"
       entrySetText entryName "----"
+      colorButtonSetColor colorBtn $ Color 49151 49151 49151
+      colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
 
 -- atualização do desenho do grafo --------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
@@ -462,7 +520,7 @@ dst1 edge
 
 -- To Do List ------------------------------------------------------------------
 
--- *Seleção por caixa
+-- *alterar cor dos nodos e das arestas
 -- *Label para as Edges
 -- *Definir a intersecção da linha da edge com o retangulo do nodo
 -- *Definir formas diferentes para os nodos
