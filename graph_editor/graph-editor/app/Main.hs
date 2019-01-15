@@ -4,9 +4,11 @@ import Data.IORef
 import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
-import qualified Data.Text as T
 import Data.List
 import Data.Maybe
+import qualified Data.Text as T
+import qualified Control.Exception as E
+import qualified Data.ByteString as BS
 import Graph
 import GraphicalInfo
 import Render
@@ -225,6 +227,18 @@ main = do
         "Delete" -> do
           deleteSelected st
           widgetQueueDraw canvas
+        "s" -> do
+          es <- readIORef st
+          let g = editorGetGraph es
+          saveGraph g window
+        "o" -> do
+          mg <- loadGraph window
+          case mg of
+            Just g -> do
+              print g
+              writeIORef st (g,[],[])
+              widgetQueueDraw canvas
+            _      -> return ()
         _       -> return ()
 
     return True
@@ -334,7 +348,64 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn radioShapes = 
       colorButtonSetColor colorBtn $ Color 49151 49151 49151
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
 
--- atualização do desenho do grafo --------------------------------------------renameSelected
+-- salvar grafo ----------------------------------------------------------------
+saveGraph :: Graph -> Window -> IO ()
+saveGraph g window = do
+  saveD <- fileChooserDialogNew
+           (Just "Salvar arquivo")
+           (Just window)
+           FileChooserActionSave
+           [("Cancela",ResponseCancel),("Salva",ResponseAccept)]
+  fileChooserSetDoOverwriteConfirmation saveD True
+  widgetShow saveD
+  response <- dialogRun saveD
+  case response of
+    ResponseAccept -> do
+      filename <- fileChooserGetFilename saveD
+      case filename of
+        Nothing -> widgetDestroy saveD
+        Just path -> do
+           tentativa <- E.try (writeFile path $ show g)  :: IO (Either E.IOException ())
+           case tentativa of
+             Left _ -> print "Não foi possível escrever no arquivo"
+             Right _ -> return ()
+           widgetDestroy saveD
+    _  -> widgetDestroy saveD
+
+-- abrir grafo -----------------------------------------------------------------
+loadGraph :: Window -> IO (Maybe Graph)
+loadGraph window = do
+  loadD <- fileChooserDialogNew
+           (Just "Abrir Arquivo")
+           (Just window)
+           FileChooserActionOpen
+           [("Cancela", ResponseCancel), ("Abre",ResponseAccept)]
+  fileChooserSetDoOverwriteConfirmation loadD True
+  widgetShow loadD
+  response <- dialogRun loadD
+  case response of
+    ResponseAccept -> do
+      filename <- fileChooserGetFilename loadD
+      case filename of
+        Nothing -> do
+          widgetDestroy loadD
+          return Nothing
+        Just path -> do
+          tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
+          case tentativa of
+            Left _ -> do
+              print "Não foi possivel ler o arquivo"
+              return Nothing
+            Right content -> do
+              widgetDestroy loadD
+              --mapM (print . words) (lines content)
+              --return Nothing
+              return $ Just $ string2graph content
+    _               -> do
+      widgetDestroy loadD
+      return Nothing
+
+-- atualização do desenho do grafo ---------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
 drawGraph state sq canvas = do
   let (g, sNodes, sEdges) = state
@@ -357,6 +428,7 @@ drawGraph state sq canvas = do
                          stroke
     Nothing -> return ()
   return ()
+
 
 -- operações de interação ------------------------------------------------------
 -- verifica se o usuario selecionou algum nodo
@@ -547,10 +619,8 @@ dst1 edge
 
 
 -- To Do List ------------------------------------------------------------------
--- *Definir formas diferentes para os nodos
+-- *Salvar / carregar grafo
 -- *Estilos diferentes para as Edges
--- *Refatorar código
 -- *Separar a estrutura do grafo das estruturas gráficas
 -- *Definir a intersecção da linha da aresta com o retangulo do nodo
--- *Salvar / carregar grafo
 -- *Undo / Redo

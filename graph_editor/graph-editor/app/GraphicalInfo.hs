@@ -15,7 +15,7 @@ module GraphicalInfo
 )where
 
 -- estrutura auxiliar - define a forma de um nodo
-data NodeShape = NCircle | NRect | NQuad deriving (Enum, Show)
+data NodeShape = NCircle | NRect | NQuad deriving (Show, Read)
 
 
 -- estrutura de dados para desenhar um nodo
@@ -23,12 +23,13 @@ data NodeShape = NCircle | NRect | NQuad deriving (Enum, Show)
 -- color : cor de preenchimento
 -- lineColor : cor da linha e texto
 -- dims : dimensões do nodo
+-- shape : forma do nodo
 data NodeGI = NodeGI { position :: (Double, Double)
                      , fillColor :: (Double,Double,Double)
                      , lineColor :: (Double,Double,Double)
                      , dims :: (Double,Double)
                      , shape :: NodeShape
-                     } deriving (Show)
+                     } deriving (Show, Read)
 
 
 -- estrutura de dados para desenhar uma aresta
@@ -38,7 +39,7 @@ data NodeGI = NodeGI { position :: (Double, Double)
 data EdgeGI = EdgeGI { cPosition :: (Double,Double)
                      , color :: (Double,Double,Double)
                      , centered :: Bool
-                     }
+                     } deriving (Show, Read)
 -- contrutores
 newNodeGI :: NodeGI
 newNodeGI = NodeGI  { position = (0,0)

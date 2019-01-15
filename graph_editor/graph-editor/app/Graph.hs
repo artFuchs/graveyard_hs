@@ -1,5 +1,6 @@
 module Graph
 ( Graph (..)
+, string2graph
 , emptyGraph
 , graphGetID
 , graphGetNodes
@@ -39,7 +40,7 @@ type Info = String
 -- Estruturas do Grafo ---------------------------------------------------------------
 -- Nodo
 -- Node id informação
-data Node = Node Int Info NodeGI deriving (Show)
+data Node = Node Int Info NodeGI deriving (Show, Read)
 
 -- Comparação de nodos
 -- O que importa é o ID
@@ -61,7 +62,7 @@ nodeGetGI (Node _ _ gi) = gi
 
 -- Aresta
 -- Edge id informação
-data Edge = Edge Int Info EdgeGI
+data Edge = Edge Int Info EdgeGI deriving (Show, Read)
 
 -- Comparação de Arestas
 -- O que importa é o ID
@@ -88,18 +89,29 @@ data Graph = Graph Name (Edge->Int) (Edge->Int) [Edge] [Node]
 
 -- printar grafo
 instance Show Graph where
-  show = graphString
+  show = graph2string
 
 -- funções auxiliares para função 'show'
-edgeStr :: Edge -> (Edge->Int) -> (Edge->Int) -> String
-edgeStr e src dst = show (edgeGetID e) ++ ": " ++ ( show (src e) ) ++ " -> " ++ ( show (dst e) )
+conns2tuples :: [Edge] -> (Edge->Int) -> (Edge->Int) -> [(Int,Int,Int)]
+conns2tuples es src dst = map (\e -> (edgeGetID e, src e, dst e)) es
 
-edgesStr :: [Edge] -> (Edge->Int) -> (Edge->Int) -> String
-edgesStr es src dst = foldl (\acc e -> acc ++ (edgeStr e src dst) ++ ", ") "" es
+graph2string :: Graph -> String
+graph2string (Graph id src dst e n) = "Graph " ++ (show id) ++ " \n" ++ (show n) ++ "\n" ++ (show e) ++ "\n"  ++ (show $ conns2tuples e src dst)
 
-graphString :: Graph -> String
-graphString (Graph id src dst e n) = "Graph " ++ (show id) ++ " : \n Nodes: " ++ (show n) ++ ";\n Edges: [" ++ (edgesStr e src dst) ++ "]"
+-- função auxiliar para função string2graph
+tuples2conns :: [(Int,Int,Int)] -> ((Edge->Int), (Edge->Int))
+tuples2conns xs = foldl (\ (f1,f2) (e,n1,n2) -> (\a -> if edgeGetID a == e then n1 else f1 a, \a -> if edgeGetID a == e then n2 else f2 a) ) (\a -> 0, \a -> 0) xs
 
+-- converte uma string para um grafo, semelhante a função read (não usa)
+string2graph :: String -> Graph
+string2graph s = Graph name src dst edges nodes
+  where slines = lines s
+        name = read (words (slines!!0) !! 1) :: String
+        nodes = read (slines!!1) :: [Node]
+        edges = read (slines!!2) :: [Edge]
+        (src,dst) = tuples2conns (read (slines!!3) :: [(Int,Int,Int)])
+        --src = (\e -> 0)
+        --dst = (\e -> 0)
 
 -- construtor base para o grafo
 emptyGraph :: String -> Graph
