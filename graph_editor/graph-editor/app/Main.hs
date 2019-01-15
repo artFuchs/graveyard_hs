@@ -92,7 +92,7 @@ main = do
   boxPackStart vBoxShape radioRect PackGrow 0
   radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quadrado"
   boxPackStart vBoxShape radioQuad PackGrow 0
-
+  let radioShapes = [radioCircle, radioRect, radioQuad]
 
   -- cria um canvas em branco
   canvas <- drawingAreaNew
@@ -141,15 +141,15 @@ main = do
           ([],[], False) -> do
             writeIORef st (graph, [], [])
             writeIORef squareSelection $ Just (x,y,0,0)
-            updatePropMenu ([],[]) entryNodeID entryNodeName colorBtn lineColorBtn
+            updatePropMenu ([],[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
           (n,e,False) -> do
             writeIORef st (editorGetGraph es, sNode, sEdge)
-            updatePropMenu (sNode,sEdge) entryNodeID entryNodeName colorBtn lineColorBtn
+            updatePropMenu (sNode,sEdge) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
           (n,e,True) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
             writeIORef st (graph, jointSN, jointSE)
-            updatePropMenu (jointSN, jointSE) entryNodeID entryNodeName colorBtn lineColorBtn
+            updatePropMenu (jointSN, jointSE) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
         widgetQueueDraw canvas
       -- clique com o botão direito: insere edges entre nodos
       RightButton -> liftIO $ do
@@ -162,7 +162,7 @@ main = do
           else createEdges st dstNode
 
         widgetQueueDraw canvas
-        updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn
+        updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
       _           -> return ()
     return True
 
@@ -295,8 +295,8 @@ main = do
 
 -- Callbacks -------------------------------------------------------------------
 -- atualização do menu de propriedades -----------------------------------------
-updatePropMenu :: ([Node],[Edge]) -> Entry -> Entry -> ColorButton -> ColorButton -> IO()
-updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn = do
+updatePropMenu :: ([Node],[Edge]) -> Entry -> Entry -> ColorButton -> ColorButton -> [RadioButton] -> IO()
+updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn radioShapes = do
   case (length nodes, length edges) of
     (0, 0) -> do
       entrySetText entryID ""
@@ -310,10 +310,16 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn = do
           (r',g',b') = lineColor . nodeGetGI $ (nodes!!0)
           nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
+          nodeShape = shape . nodeGetGI $ (nodes!!0)
       entrySetText entryID iD
       entrySetText entryName name
       colorButtonSetColor colorBtn nodeColor
       colorButtonSetColor lcolorBtn nodeLineC
+      case nodeShape of
+        NCircle -> toggleButtonSetActive (radioShapes!!0) True
+        NRect -> toggleButtonSetActive (radioShapes!!1) True
+        NQuad -> toggleButtonSetActive (radioShapes!!2) True
+
     (0, 1) -> do
       let iD = show . edgeGetID $ (edges!!0)
           name = edgeGetInfo $ (edges!!0)
