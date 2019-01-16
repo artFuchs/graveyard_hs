@@ -15,29 +15,43 @@ import Render
 import Helper
 
 -- | estado do editor de grafos
---   (grafo, nodos selecionados, arestas selecionadas)
-type EditorState = (Graph, [Node], [Edge])
+--   contém todas as informações necssárias para desenhar o grafo
+-- (grafo, nodos selecionados, arestas selecionadas, zoom, Pan)
+type EditorState = (Graph, [Node], [Edge], Double, (Double,Double))
 
 editorGetGraph :: EditorState -> Graph
-editorGetGraph (g,_,_) = g
+editorGetGraph (g,_,_,_,_) = g
 
 editorSetGraph :: Graph -> EditorState -> EditorState
-editorSetGraph g (_,n,e) = (g,n,e)
+editorSetGraph g (_,n,e,z,p) = (g,n,e,z,p)
 
 editorGetSelected :: EditorState -> ([Node], [Edge])
-editorGetSelected (_,n,e) = (n,e)
+editorGetSelected (_,n,e,_,_) = (n,e)
 
 editorSetSelected :: ([Node], [Edge]) -> EditorState -> EditorState
-editorSetSelected (n,e) (g,_,_) = (g,n,e)
+editorSetSelected (n,e) (g,_,_,z,p) = (g,n,e,z,p)
 
 editorGetSelectedNodes :: EditorState -> [Node]
-editorGetSelectedNodes (_,n,_) = n
+editorGetSelectedNodes (_,n,_,_,_) = n
 
 editorSetSelectedNodes :: [Node] -> EditorState -> EditorState
-editorSetSelectedNodes n (g,_,e) = (g,n,e)
+editorSetSelectedNodes n (g,_,e,z,p) = (g,n,e,z,p)
 
 editorGetSelectedEdges :: EditorState -> [Edge]
-editorGetSelectedEdges (_,_,e) = e
+editorGetSelectedEdges (_,_,e,_,_) = e
+
+editorGetZoom :: EditorState -> Double
+editorGetZoom (_,_,_,z,_) = z
+
+editorSetZoom :: Double -> EditorState -> EditorState
+editorSetZoom z (g,n,e,_,p) = (g,n,e,z,p)
+
+editorGetPan :: EditorState -> (Double,Double)
+editorGetPan (_,_,_,_,p) = p
+
+editorSetPan :: (Double,Double) -> EditorState -> EditorState
+editorSetPan p (g,n,e,z,_) = (g,n,e,z,p)
+
 
 
 
@@ -119,9 +133,9 @@ main = do
   widgetShowAll window
 
   -- inicializa estado
-  st <- newIORef (emptyGraph "Vazio", [], []) -- estado do editor
+  st <- newIORef (emptyGraph "Vazio", [], [], 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
-  squareSelection <- newIORef Nothing
+  squareSelection <- newIORef Nothing -- estado da caixa de seleção
 
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
@@ -152,16 +166,16 @@ main = do
         case (sNode, sEdge, Shift `elem` ms) of
           -- clico no espaço em branco, Shift não pressionado
           ([],[], False) -> do
-            writeIORef st (graph, [], [])
+            modifyIORef st (editorSetSelected ([],[]))
             writeIORef squareSelection $ Just (x,y,0,0)
             updatePropMenu ([],[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
           (n,e,False) -> do
-            writeIORef st (editorGetGraph es, sNode, sEdge)
+            modifyIORef st (editorSetSelected (sNode, sEdge))
             updatePropMenu (sNode,sEdge) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
           (n,e,True) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
-            writeIORef st (graph, jointSN, jointSE)
+            modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
             updatePropMenu (jointSN, jointSE) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
         widgetQueueDraw canvas
       -- clique com o botão direito: insere edges entre nodos
@@ -177,6 +191,7 @@ main = do
         widgetQueueDraw canvas
         updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
       _           -> return ()
+
     return True
 
   -- movimento do mouse
@@ -186,19 +201,26 @@ main = do
     (ox,oy) <- liftIO $ readIORef oldPoint
     es <- liftIO $ readIORef st
     let leftButton = Button1 `elem` ms
+        middleButton = Button2 `elem` ms
         (sNodes, sEdges) = editorGetSelected es
-    case (leftButton, sNodes, sEdges) of
-      (True, [], []) -> liftIO $ do
+    case (leftButton, middleButton, sNodes, sEdges) of
+      (True, False, [], []) -> liftIO $ do
         modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x-a,y-b))
         sq <- readIORef squareSelection
         widgetQueueDraw canvas
         --print $ "squareSelection: " ++ show sq
-      (True, n, e) -> liftIO $ do
+      (True, False, n, e) -> liftIO $ do
         modifyIORef st (\es -> moveNode es (ox,oy) (x,y))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x,y))
         writeIORef oldPoint (x,y)
         widgetQueueDraw canvas
-      (_,_,_) -> return ()
+      (False ,True, _, _) -> liftIO $ do
+        modifyIORef st (\es -> let (deltaX, deltaY) = (x-ox,y-oy)
+                                   (px,py) = editorGetPan es
+                                in editorSetPan (px+deltaX, py+deltaY) es)
+        writeIORef oldPoint (x,y)
+        widgetQueueDraw canvas
+      (_,_,_,_) -> return ()
     return True
 
   -- soltar botão do mouse
@@ -208,15 +230,15 @@ main = do
       LeftButton -> liftIO $ do
         es <- readIORef st
         sq <- readIORef squareSelection
-        case (es,sq) of
-          ((_,[],[]), Just (x,y,w,h)) -> do
+        case (editorGetSelected es,sq) of
+          (([],[]), Just (x,y,w,h)) -> do
             let graph = editorGetGraph es
                 sNodes = filter (\n -> let pos = position . nodeGetGI $ n
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2) , abs w, abs h)) $ graphGetNodes graph
                 sEdges = filter (\e -> let pos = cPosition . edgeGetGI $ e
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
-            writeIORef st (graph, sNodes, sEdges)
-          ((_,n,e), Nothing) -> modifyIORef st (adjustEdges)
+            modifyIORef st (editorSetGraph graph . editorSetSelected (sNodes, sEdges))
+          ((n,e), Nothing) -> modifyIORef st (adjustEdges)
           (_,_) -> return ()
       _ -> return ()
     liftIO $ do
@@ -228,26 +250,33 @@ main = do
   -- teclado
   canvas `on` keyPressEvent $ do
     k <- eventKeyName
+    ms <- eventModifierAll
     liftIO $ do
       pos <- readIORef oldPoint
       context <- widgetGetPangoContext canvas
-      case T.unpack k of
-        "Insert" -> do
+      case (Control `elem` ms, T.unpack k) of
+        (False,"Insert") -> do
           createNode st pos context
           widgetQueueDraw canvas
-        "Delete" -> do
+        (False,"Delete") -> do
           modifyIORef st (\es -> deleteSelected es)
           widgetQueueDraw canvas
-        "s" -> do
+        (True,"plus") -> do
+          modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
+          widgetQueueDraw canvas
+        (True,"minus") -> do
+          modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 0.9) es )
+          widgetQueueDraw canvas
+        (True,"s") -> do
           es <- readIORef st
           let g = editorGetGraph es
           saveGraph g window
-        "o" -> do
+        (True,"o") -> do
           mg <- loadGraph window
           case mg of
             Just g -> do
               print g
-              writeIORef st (g,[],[])
+              writeIORef st (g,[],[],1.0,(0.0,0.0))
               widgetQueueDraw canvas
             _      -> return ()
         _       -> return ()
@@ -269,31 +298,38 @@ main = do
 
   onColorSet colorBtn $ do
     Color r g b <- colorButtonGetColor colorBtn
+    es <- readIORef st
     let col = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
-    (graph, nodes, edges) <- readIORef st
-    newNodes <- forM (nodes) (\n -> let nid = nodeGetID n
-                                        c = nodeGetInfo n
-                                        gi = nodeGiSetColor col $ nodeGetGI n
-                                    in return $ Node nid c gi)
-    let newGraph = foldl (\g n -> changeNode g n) graph newNodes
-    writeIORef st (newGraph, newNodes, edges)
+        graph = editorGetGraph es
+        (nodes,edges) = editorGetSelected es
+        changeColor = (\n -> let nid = nodeGetID n
+                                 c = nodeGetInfo n
+                                 gi = nodeGiSetColor col $ nodeGetGI n
+                             in Node nid c gi)
+        newNodes = map changeColor nodes
+        newGraph = foldl (\g n -> changeNode g n) graph newNodes
+    modifyIORef st (\es -> editorSetGraph newGraph . editorSetSelectedNodes newNodes $ es)
     widgetQueueDraw canvas
 
   onColorSet lineColorBtn $ do
     Color r g b <- colorButtonGetColor lineColorBtn
+    es <- readIORef st
     let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
-    (graph, nodes, edges) <- readIORef st
-    newNodes <- forM (nodes) (\n -> let nid = nodeGetID n
-                                        c = nodeGetInfo n
-                                        gi = nodeGiSetLineColor color $ nodeGetGI n
-                                    in return $ Node nid c gi )
-    newEdges <- forM (edges) (\e -> let eid = edgeGetID e
-                                        c = edgeGetInfo e
-                                        gi = edgeGiSetColor color $ edgeGetGI e
-                                    in return $ Edge eid c gi )
-    let newGraph = foldl (\g n -> changeNode g n) graph newNodes
-    let newGraph' = foldl (\g e -> changeEdge g e) newGraph newEdges
-    writeIORef st (newGraph', newNodes, edges)
+        graph = editorGetGraph es
+        (nodes,edges) = editorGetSelected es
+        changeNLC = (\n -> let nid = nodeGetID n
+                               c = nodeGetInfo n
+                               gi = nodeGiSetLineColor color $ nodeGetGI n
+                           in Node nid c gi )
+        newNodes = map changeNLC nodes
+        changeELC = (\e -> let eid = edgeGetID e
+                               c = edgeGetInfo e
+                               gi = edgeGiSetColor color $ edgeGetGI e
+                           in Edge eid c gi )
+        newEdges = map changeELC edges
+        newGraph = foldl (\g n -> changeNode g n) graph newNodes
+        newGraph' = foldl (\g e -> changeEdge g e) newGraph newEdges
+    modifyIORef st (\es -> editorSetGraph newGraph . editorSetSelected (newNodes,newEdges) $ es)
     widgetQueueDraw canvas
 
   radioCircle `on` toggled $ do
@@ -418,9 +454,10 @@ loadGraph window = do
 
 -- atualização do desenho do grafo ---------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
-drawGraph state sq canvas = do
-  let (g, sNodes, sEdges) = state
+drawGraph (g, sNodes, sEdges, z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
+  scale z z
+  translate px py
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
@@ -570,13 +607,16 @@ deleteSelected es = editorSetSelected ([],[]) . editorSetGraph newGraph $ es
 -- renomeia os selecionados
 renameSelected:: IORef EditorState -> String -> PangoContext -> IO()
 renameSelected state name context = do
-  (graph, nodes, edges) <- readIORef state
+  es <- readIORef state
   dim <- getStringDims name context
-  let renamedNodes = map (\n -> Node (nodeGetID n) name (nodeGiSetDims dim . nodeGetGI $ n)) nodes
+  let graph = editorGetGraph es
+      (nodes,edges) = editorGetSelected es
+      renamedNodes = map (\n -> Node (nodeGetID n) name (nodeGiSetDims dim . nodeGetGI $ n)) nodes
       renamedEdges = map (\e -> Edge (edgeGetID e) name $ edgeGetGI e) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
-  writeIORef state (newGraph',renamedNodes, renamedEdges)
+      newEs = editorSetGraph newGraph . editorSetSelected (renamedNodes, renamedEdges) $ es
+  writeIORef state newEs
 
 -- muda a forma de um nodo
 changeNodeShape :: EditorState -> NodeShape -> EditorState
