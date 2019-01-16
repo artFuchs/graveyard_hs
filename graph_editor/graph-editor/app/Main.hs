@@ -489,10 +489,11 @@ checkSelectNode g (x,y) = case find (\n -> isSelected n) $ graphGetNodes g of
                             Nothing -> []
   where isSelected = (\n -> let (nx,ny) = position . nodeGetGI $ n
                                 (w,h) = dims . nodeGetGI $ n
+                                l = max w h
                             in case shape . nodeGetGI $ n of
-                              NCircle -> pointDistance (x,y) (nx,ny) < (w/2)
+                              NCircle -> pointDistance (x,y) (nx,ny) < l/2
                               NRect -> pointInsideRectangle (x,y) (nx,ny,w,h)
-                              NQuad -> pointInsideRectangle (x,y) (nx,ny,w,w) )
+                              NQuad -> pointInsideRectangle (x,y) (nx,ny,l,l) )
 
 -- verifica se o usuario selecionou alguma aresta
 checkSelectEdge:: Graph -> (Double,Double) -> [Edge]

@@ -23,19 +23,18 @@ renderNode node selected context = do
                     then (0,1,0)
                     else lineColor . nodeGetGI $ node
       content = nodeGetInfo $ node
-      offset = 4
-
-  pL <- liftIO $ layoutText context content
-  (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+      (pw,ph) = dims . nodeGetGI $ node
+  --(_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
 
   setSourceRGB r g b
   case shape . nodeGetGI $ node of
-    NCircle -> let radius = (max pw ph)/2 + offset/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl)
-    NRect -> renderRectangle (x, y, pw+offset, ph+offset) (r,g,b) (rl,gl,bl)
-    NQuad -> renderRectangle (x,y, pw+offset, pw+offset) (r,g,b) (rl,gl,bl)
+    NCircle -> let radius = (max pw ph)/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl)
+    NRect -> renderRectangle (x, y, pw, ph) (r,g,b) (rl,gl,bl)
+    NQuad -> renderRectangle (x,y, (max pw ph), (max pw ph)) (r,g,b) (rl,gl,bl)
 
   setSourceRGB rl gl bl
-  moveTo (x-(pw/2)) (y-(ph/2))
+  moveTo (x-(pw/2-2)) (y-(ph/2-2))
+  pL <- liftIO $ layoutText context content
   showLayout pL
 
 renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,Double,Double) ->  Render ()
