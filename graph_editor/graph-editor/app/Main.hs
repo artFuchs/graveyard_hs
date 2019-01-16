@@ -151,23 +151,27 @@ main = do
     b <- eventButton
     (x,y) <- eventCoordinates
     ms <- eventModifierAll
+    es <- liftIO $ readIORef st
+    let z = editorGetZoom es
+        (px,py) = editorGetPan es
+        (x',y') = ((x-px)/z, (y-py)/z)
     liftIO $ do
-      writeIORef oldPoint (x,y)
+      writeIORef oldPoint (x',y')
       widgetGrabFocus canvas
     case b of
       -- clique com o botão esquerdo: seleciona nodos e edges
       LeftButton  -> liftIO $ do
-        es <- readIORef st
+
         let (oldSN,oldSE) = editorGetSelected es
             graph = editorGetGraph es
-            sNode = checkSelectNode graph (x,y)
-            sEdge = checkSelectEdge graph (x,y)
+            sNode = checkSelectNode graph (x',y')
+            sEdge = checkSelectEdge graph (x',y')
         -- Shift: seleção de multiplos elementos
         case (sNode, sEdge, Shift `elem` ms) of
           -- clico no espaço em branco, Shift não pressionado
           ([],[], False) -> do
             modifyIORef st (editorSetSelected ([],[]))
-            writeIORef squareSelection $ Just (x,y,0,0)
+            writeIORef squareSelection $ Just (x',y',0,0)
             updatePropMenu ([],[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
           (n,e,False) -> do
             modifyIORef st (editorSetSelected (sNode, sEdge))
@@ -178,14 +182,13 @@ main = do
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
             updatePropMenu (jointSN, jointSE) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
         widgetQueueDraw canvas
-      -- clique com o botão direito: insere edges entre nodos
+      -- clique com o botão direito: cria nodos e insere edges entre nodos
       RightButton -> liftIO $ do
-        es <- readIORef st
         let g = editorGetGraph es
-            dstNode = checkSelectNode g (x,y)
+            dstNode = checkSelectNode g (x',y')
         context <- widgetGetPangoContext canvas
         if length dstNode == 0
-          then createNode st (x,y) context
+          then createNode st (x',y') context
           else modifyIORef st (\es -> createEdges es dstNode)
 
         widgetQueueDraw canvas
@@ -203,22 +206,22 @@ main = do
     let leftButton = Button1 `elem` ms
         middleButton = Button2 `elem` ms
         (sNodes, sEdges) = editorGetSelected es
+        z = editorGetZoom es
+        (px,py) = editorGetPan es
+        (x',y') = ((x-px)/z, (y-py)/z)
     case (leftButton, middleButton, sNodes, sEdges) of
       (True, False, [], []) -> liftIO $ do
-        modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x-a,y-b))
+        modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x'-a,y'-b))
         sq <- readIORef squareSelection
         widgetQueueDraw canvas
         --print $ "squareSelection: " ++ show sq
       (True, False, n, e) -> liftIO $ do
-        modifyIORef st (\es -> moveNode es (ox,oy) (x,y))
-        modifyIORef st (\es -> moveEdges es (ox,oy) (x,y))
-        writeIORef oldPoint (x,y)
+        modifyIORef st (\es -> moveNode es (ox,oy) (x',y'))
+        modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
+        writeIORef oldPoint (x',y')
         widgetQueueDraw canvas
       (False ,True, _, _) -> liftIO $ do
-        modifyIORef st (\es -> let (deltaX, deltaY) = (x-ox,y-oy)
-                                   (px,py) = editorGetPan es
-                                in editorSetPan (px+deltaX, py+deltaY) es)
-        writeIORef oldPoint (x,y)
+        modifyIORef st (editorSetPan (px+x'-ox, py+y'-oy))
         widgetQueueDraw canvas
       (_,_,_,_) -> return ()
     return True
@@ -456,8 +459,8 @@ loadGraph window = do
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
 drawGraph (g, sNodes, sEdges, z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
-  scale z z
   translate px py
+  scale z z
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
