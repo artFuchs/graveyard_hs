@@ -56,15 +56,18 @@ buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
     opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
     svn <- actionNew "SVN" "Save File" (Just "Just a stub") (Just stockSave)
+    edt <- actionNew "EDT" "Edit" Nothing Nothing
+    udo <- actionNew "UDO" "Undo" (Just "Just a stub") (Just stockUndo)
+    rdo <- actionNew "RDO" "Redo" (Just "Just a stub") (Just stockRedo)
     agr <- actionGroupNew "AGR"
-    actionGroupAddAction agr fma
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [opn,svn]
+    mapM_ (actionGroupAddAction agr) [fma,edt]
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [opn,svn,udo,rdo]
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, opn, svn)
+    return (maybeMenubar, opn, svn, udo, rdo)
 
   where uiStr = "<ui>\
 \                 <menubar>\
@@ -72,6 +75,10 @@ buildMaybeMenubar = do
 \                     <menuitem action=\"OPN\"/>\
 \                     <menuitem action=\"SVN\"/>\
 \                   </menu> \
+\                   <menu action=\"EDT\">\
+\                     <menuitem action=\"UDO\"/>\
+\                     <menuitem action=\"RDO\"/>\
+\                   </menu>\
 \                 </menubar>\
 \                </ui>"
 
@@ -95,7 +102,7 @@ main = do
   containerAdd window vBoxMain
 
   -- cria o menu
-  (maybeMenubar,opn,svn) <- buildMaybeMenubar
+  (maybeMenubar,opn,svn,udo,rdo) <- buildMaybeMenubar
   case maybeMenubar of
     Just x -> boxPackStart vBoxMain x PackNatural 0
     Nothing -> return ()
@@ -169,6 +176,9 @@ main = do
   st <- newIORef (emptyGraph "Vazio", [], [], 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
   squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
+  changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
+  movingGI <- newIORef False -- se o usuario começou a mover algum objeto
+
 
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
@@ -209,6 +219,7 @@ main = do
           (n,e,False) -> do
             modifyIORef st (editorSetSelected (sNode, sEdge))
             updatePropMenu (sNode,sEdge) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
+
           (n,e,True) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
@@ -221,8 +232,15 @@ main = do
             dstNode = checkSelectNode g (x',y')
         context <- widgetGetPangoContext canvas
         if length dstNode == 0
-          then createNode st (x',y') context
-          else modifyIORef st (\es -> createEdges es dstNode)
+          then do
+            createNode st (x',y') context
+            modifyIORef changes (\(u,r) -> (g:u,[]))
+          else do
+            modifyIORef st (\es -> createEdges es dstNode)
+            es <- readIORef st
+            modifyIORef changes (\(u,r) -> (g:u,[]))
+
+
 
         widgetQueueDraw canvas
         updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
@@ -252,6 +270,12 @@ main = do
         modifyIORef st (\es -> moveNode es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
+        mv <- readIORef movingGI
+        if not mv
+          then do
+            writeIORef movingGI True
+            modifyIORef changes (\(u,r) -> let g = editorGetGraph es in (g:u, r))
+          else return ()
         widgetQueueDraw canvas
       (False ,True, _, _) -> liftIO $ do
         modifyIORef st (editorSetPan (px+x'-ox, py+y'-oy))
@@ -264,6 +288,7 @@ main = do
     b <- eventButton
     case b of
       LeftButton -> liftIO $ do
+        writeIORef movingGI False
         es <- readIORef st
         sq <- readIORef squareSelection
         case (editorGetSelected es,sq) of
@@ -295,7 +320,9 @@ main = do
           createNode st pos context
           widgetQueueDraw canvas
         (False,"Delete") -> do
+          es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
+          modifyIORef changes (\(u,r) -> let g = editorGetGraph es in (g:u, []))
           widgetQueueDraw canvas
         (True,"plus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
@@ -305,6 +332,31 @@ main = do
           widgetQueueDraw canvas
         (True,"equal") -> do
           modifyIORef st (\es -> editorSetZoom 1.0 es )
+          widgetQueueDraw canvas
+        (True, "s") -> do
+          es <- readIORef st
+          let g = editorGetGraph es
+          saveGraph g window
+        (True, "o") -> do
+          mg <- loadGraph window
+          case mg of
+            Just g -> do
+              writeIORef st (g,[],[],1.0,(0.0,0.0))
+              widgetQueueDraw canvas
+            _      -> return ()
+        (True,"z") -> do
+          ur <- readIORef changes
+          es <- readIORef st
+          let (nur,nes) = applyUndo ur es
+          writeIORef changes nur
+          writeIORef st nes
+          widgetQueueDraw canvas
+        (True,"r") -> do
+          ur <- readIORef changes
+          es <- readIORef st
+          let (nur,nes) = applyRedo ur es
+          writeIORef changes nur
+          writeIORef st nes
           widgetQueueDraw canvas
         _       -> return ()
 
@@ -323,6 +375,23 @@ main = do
     es <- readIORef st
     let g = editorGetGraph es
     saveGraph g window
+
+  udo `on` actionActivated $ do
+    ur <- readIORef changes
+    es <- readIORef st
+    let (nur,nes) = applyUndo ur es
+    writeIORef changes nur
+    writeIORef st nes
+    widgetQueueDraw canvas
+
+  rdo `on` actionActivated $ do
+    ur <- readIORef changes
+    es <- readIORef st
+    let (nur,nes) = applyRedo ur es
+    writeIORef changes nur
+    writeIORef st nes
+    widgetQueueDraw canvas
+
 
   -- tratamento de eventos -- menu de propriedades -----------------------------
   entryNodeName `on` keyPressEvent $ do
@@ -669,8 +738,20 @@ changeNodeShape es s = editorSetGraph newGraph . editorSetSelectedNodes newNodes
       newNodes = map (\n -> Node (nodeGetID n) (nodeGetInfo n) (nodeGiSetShape s $ nodeGetGI n)) nodes
       newGraph = foldl (\g n -> changeNode g n) (editorGetGraph es) newNodes
 
+-- Undo / Redo -----------------------------------------------------------------
+applyUndo :: ([Graph],[Graph]) -> EditorState -> (([Graph],[Graph]), EditorState)
+applyUndo ([],r) es = (([],r),es)
+applyUndo (g:u,r) es = ((u, og:r), editorSetGraph g es)
+  where og = editorGetGraph es
+
+applyRedo :: ([Graph],[Graph]) -> EditorState -> (([Graph],[Graph]), EditorState)
+applyRedo (u,[]) es = ((u,[]),es)
+applyRedo (u,g:r) es = ((og:u, r), editorSetGraph g es)
+  where og = editorGetGraph es
+
+
+
 -- To Do List ------------------------------------------------------------------
--- *Undo / Redo
 -- *Estilos diferentes para as Edges
 -- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Separar a estrutura do grafo das estruturas gráficas

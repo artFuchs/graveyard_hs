@@ -40,13 +40,10 @@ type Info = String
 -- Estruturas do Grafo ---------------------------------------------------------------
 -- Nodo
 -- Node id informação
-data Node = Node Int Info NodeGI deriving (Show, Read)
+data Node = Node Int Info NodeGI deriving (Eq,Show, Read)
 
 -- Comparação de nodos
 -- O que importa é o ID
-instance Eq Node where
-  (Node nID1 _ _) == (Node nID2 _ _) = nID1 == nID2
-
 instance Ord Node where
   (Node nID1 _ _) <= (Node nID2 _ _) = nID1 <= nID2
 
@@ -62,13 +59,10 @@ nodeGetGI (Node _ _ gi) = gi
 
 -- Aresta
 -- Edge id informação
-data Edge = Edge Int Info EdgeGI deriving (Show, Read)
+data Edge = Edge Int Info EdgeGI deriving (Eq,Show, Read)
 
 -- Comparação de Arestas
 -- O que importa é o ID
-instance Eq Edge where
-  (Edge eID1 _ _) == (Edge eID2 _ _) = eID1 == eID2
-
 instance Ord Edge where
   (Edge eID1 _ _) <= (Edge eID2 _ _) = eID1 <= eID2
 
@@ -86,6 +80,17 @@ edgeGetGI (Edge _ _ gi) = gi
 -- Graph nome edges_src edges_dest edges nodes
 type Name = String
 data Graph = Graph Name (Edge->Int) (Edge->Int) [Edge] [Node]
+
+instance Eq Graph where
+  g1 == g2 = (ns1 == ns2) && (es1 == es2) && (conns1 == conns2)
+    where
+      ns1 = graphGetNodes g1
+      ns2 = graphGetNodes g2
+      es1 = graphGetEdges g1
+      es2 = graphGetEdges g2
+      conns1 = conns2tuples es1 (graphGetSrcFunc g1) (graphGetDstFunc g1)
+      conns2 = conns2tuples es2 (graphGetSrcFunc g2) (graphGetDstFunc g2)
+
 
 -- printar grafo
 instance Show Graph where
@@ -140,7 +145,7 @@ graphGetDstFunc (Graph _ _ dst _ _) = dst
 -- insere um nodo no grafo
 insertNode :: Graph -> Node -> Graph
 insertNode (Graph iD src dst e ns) n =
-  if (n `notElem` ns)
+  if (nodeGetID n `notElem` (map nodeGetID ns))
     then Graph iD src dst e (n:ns)
     else Graph iD src dst e ns
 
@@ -150,12 +155,12 @@ removeNode g n =
   Graph iD src dst es ns'
   -- removeConnectors defined bellow ↓↓↓↓↓
   where (Graph iD src dst es ns) = removeConnectors g n
-        ns' = filter (\node -> node /= n) ns
+        ns' = filter (\node -> nodeGetID node /= nodeGetID n) ns
 
 -- muda um nodo do grafo
 changeNode :: Graph -> Node -> Graph
 changeNode (Graph iD src dst es ns) n =
-  let newNodes = map (\node -> if node == n then n else node) ns
+  let newNodes = map (\node -> if nodeGetID node == nodeGetID n then n else node) ns
   in Graph iD src dst es newNodes
 
 -- insere uma aresta no grafo
@@ -164,22 +169,22 @@ insertEdge (Graph iD src dst es ns) n1 n2 = Graph iD src' dst' (ne:es) ns
   where neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
         pos1 = position . nodeGetGI $ n1
         pos2 = position . nodeGetGI $ n2
-        gi = if n1 == n2
-         then edgeGiSetPosition (fst pos1 + 30, snd pos1 + 30) newEdgeGI
+        gi = if nodeGetID n1 == nodeGetID n2
+         then edgeGiSetPosition (fst pos1 + 30, snd pos1 - 30) newEdgeGI
          else edgeGiSetPosition (midPoint pos1 pos2) newEdgeGI
         ne = Edge neID "" gi
         nID1 = nodeGetID n1
         nID2 = nodeGetID n2
-        src' = \e -> if e == ne then nID1 else src e
-        dst' = \e -> if e == ne then nID2 else dst e
+        src' = \e -> if edgeGetID e == neID then nID1 else src e
+        dst' = \e -> if edgeGetID e == neID then nID2 else dst e
 
 -- remove uma aresta do grafo
 removeEdge :: Graph -> Edge -> Graph
 removeEdge (Graph iD src dst es ns) e =
-  if (e `elem` es)
-  then let es' = filter (/=e) es
-           src' = \a -> if a == e then 0 else src a
-           dst' = \a -> if a == e then 0 else dst a
+  if (edgeGetID e `elem` (map edgeGetID es))
+  then let es' = filter (\edge -> edgeGetID edge /= edgeGetID e) es
+           src' = \a -> if edgeGetID a == edgeGetID e then 0 else src a
+           dst' = \a -> if edgeGetID a == edgeGetID e then 0 else dst a
         in Graph iD src' dst' es' ns
   else Graph iD src dst es ns
 
