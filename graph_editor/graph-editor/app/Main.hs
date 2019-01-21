@@ -234,11 +234,11 @@ main = do
         if length dstNode == 0
           then do
             createNode st (x',y') context
-            modifyIORef changes (\(u,r) -> (g:u,[]))
+            stackUndo changes es
           else do
             modifyIORef st (\es -> createEdges es dstNode)
             es <- readIORef st
-            modifyIORef changes (\(u,r) -> (g:u,[]))
+            stackUndo changes es
 
 
 
@@ -274,7 +274,7 @@ main = do
         if not mv
           then do
             writeIORef movingGI True
-            modifyIORef changes (\(u,r) -> let g = editorGetGraph es in (g:u, r))
+            stackUndo changes es
           else return ()
         widgetQueueDraw canvas
       (False ,True, _, _) -> liftIO $ do
@@ -322,7 +322,7 @@ main = do
         (False,"Delete") -> do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
-          modifyIORef changes (\(u,r) -> let g = editorGetGraph es in (g:u, []))
+          stackUndo changes es
           widgetQueueDraw canvas
         (True,"plus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
@@ -345,18 +345,10 @@ main = do
               widgetQueueDraw canvas
             _      -> return ()
         (True,"z") -> do
-          ur <- readIORef changes
-          es <- readIORef st
-          let (nur,nes) = applyUndo ur es
-          writeIORef changes nur
-          writeIORef st nes
+          applyUndo changes st
           widgetQueueDraw canvas
         (True,"r") -> do
-          ur <- readIORef changes
-          es <- readIORef st
-          let (nur,nes) = applyRedo ur es
-          writeIORef changes nur
-          writeIORef st nes
+          applyRedo changes st
           widgetQueueDraw canvas
         _       -> return ()
 
@@ -377,19 +369,11 @@ main = do
     saveGraph g window
 
   udo `on` actionActivated $ do
-    ur <- readIORef changes
-    es <- readIORef st
-    let (nur,nes) = applyUndo ur es
-    writeIORef changes nur
-    writeIORef st nes
+    applyUndo changes st
     widgetQueueDraw canvas
 
   rdo `on` actionActivated $ do
-    ur <- readIORef changes
-    es <- readIORef st
-    let (nur,nes) = applyRedo ur es
-    writeIORef changes nur
-    writeIORef st nes
+    applyRedo changes st
     widgetQueueDraw canvas
 
 
@@ -739,15 +723,32 @@ changeNodeShape es s = editorSetGraph newGraph . editorSetSelectedNodes newNodes
       newGraph = foldl (\g n -> changeNode g n) (editorGetGraph es) newNodes
 
 -- Undo / Redo -----------------------------------------------------------------
-applyUndo :: ([Graph],[Graph]) -> EditorState -> (([Graph],[Graph]), EditorState)
-applyUndo ([],r) es = (([],r),es)
-applyUndo (g:u,r) es = ((u, og:r), editorSetGraph g es)
-  where og = editorGetGraph es
+stackUndo :: IORef ([Graph],[Graph]) -> EditorState -> IO ()
+stackUndo changes es = do
+  let g = editorGetGraph es
+  modifyIORef changes (\(u,r) -> (g:u,[]))
 
-applyRedo :: ([Graph],[Graph]) -> EditorState -> (([Graph],[Graph]), EditorState)
-applyRedo (u,[]) es = ((u,[]),es)
-applyRedo (u,g:r) es = ((og:u, r), editorSetGraph g es)
-  where og = editorGetGraph es
+applyUndo :: IORef ([Graph],[Graph]) -> IORef EditorState -> IO ()
+applyUndo changes st = do
+  ur <- readIORef changes
+  es <- readIORef st
+  let apply ([],r) es = (([],r), es)
+      apply (g:u,r) es = ((u, editorGetGraph es : r), editorSetGraph g es)
+      (nur, nes) = apply ur es
+  writeIORef changes nur
+  writeIORef st nes
+
+applyRedo :: IORef ([Graph],[Graph]) -> IORef EditorState -> IO ()
+applyRedo changes st = do
+  ur <- readIORef changes
+  es <- readIORef st
+  let apply (u,[]) es = ((u,[]), es)
+      apply (u,g:r) es = ((editorGetGraph es : u, r), editorSetGraph g es)
+      (nur, nes) = apply ur es
+  writeIORef changes nur
+  writeIORef st nes
+
+
 
 
 
