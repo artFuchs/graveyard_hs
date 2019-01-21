@@ -52,19 +52,20 @@ editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,n,e,z,_) = (g,n,e,z,p)
 
 
-
 buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
-    opn <- actionNew "OPN" "Open File" Nothing Nothing
-    svn <- actionNew "SVN" "Save File" Nothing Nothing
+    opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
+    svn <- actionNew "SVN" "Save File" (Just "Just a stub") (Just stockSave)
     agr <- actionGroupNew "AGR"
-    mapM_ (actionGroupAddAction agr) [fma,opn,svn]
+    actionGroupAddAction agr fma
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [opn,svn]
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
     return (maybeMenubar, opn, svn)
+
   where uiStr = "<ui>\
 \                 <menubar>\
 \                   <menu action=\"FMA\">\
@@ -73,6 +74,8 @@ buildMaybeMenubar = do
 \                   </menu> \
 \                 </menubar>\
 \                </ui>"
+
+
 
 
 main :: IO()
@@ -300,18 +303,9 @@ main = do
         (True,"minus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 0.9) es )
           widgetQueueDraw canvas
-        (True,"s") -> do
-          es <- readIORef st
-          let g = editorGetGraph es
-          saveGraph g window
-        (True,"o") -> do
-          mg <- loadGraph window
-          case mg of
-            Just g -> do
-              --print g
-              writeIORef st (g,[],[],1.0,(0.0,0.0))
-              widgetQueueDraw canvas
-            _      -> return ()
+        (True,"equal") -> do
+          modifyIORef st (\es -> editorSetZoom 1.0 es )
+          widgetQueueDraw canvas
         _       -> return ()
 
     return True
@@ -676,8 +670,7 @@ changeNodeShape es s = editorSetGraph newGraph . editorSetSelectedNodes newNodes
       newGraph = foldl (\g n -> changeNode g n) (editorGetGraph es) newNodes
 
 -- To Do List ------------------------------------------------------------------
--- *criar menu para salvar/abrir arquivos
+-- *Undo / Redo
 -- *Estilos diferentes para as Edges
 -- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Separar a estrutura do grafo das estruturas gráficas
--- *Undo / Redo
