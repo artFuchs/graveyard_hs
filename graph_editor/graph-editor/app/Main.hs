@@ -8,7 +8,6 @@ import Data.List
 import Data.Maybe
 import qualified Data.Text as T
 import qualified Control.Exception as E
-import qualified Data.ByteString as BS
 import Graph
 import GraphicalInfo
 import Render
@@ -54,6 +53,27 @@ editorSetPan p (g,n,e,z,_) = (g,n,e,z,p)
 
 
 
+buildMaybeMenubar = do
+    fma <- actionNew "FMA" "File" Nothing Nothing
+    opn <- actionNew "OPN" "Open File" Nothing Nothing
+    svn <- actionNew "SVN" "Save File" Nothing Nothing
+    agr <- actionGroupNew "AGR"
+    mapM_ (actionGroupAddAction agr) [fma,opn,svn]
+
+    ui <- uiManagerNew
+    uiManagerAddUiFromString ui uiStr
+    uiManagerInsertActionGroup ui agr 0
+    maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
+    return (maybeMenubar, opn, svn)
+  where uiStr = "<ui>\
+\                 <menubar>\
+\                   <menu action=\"FMA\">\
+\                     <menuitem action=\"OPN\"/>\
+\                     <menuitem action=\"SVN\"/>\
+\                   </menu> \
+\                 </menubar>\
+\                </ui>"
+
 
 main :: IO()
 main = do
@@ -67,9 +87,19 @@ main = do
               , windowDefaultWidth  := 640
               , windowDefaultHeight := 480]
 
-  -- cria um HPane para dividir o canvas e o menu de propriedades
+  -- cria uma VBox para separar o editor do menu
+  vBoxMain <- vBoxNew False 8
+  containerAdd window vBoxMain
+
+  -- cria o menu
+  (maybeMenubar,opn,svn) <- buildMaybeMenubar
+  case maybeMenubar of
+    Just x -> boxPackStart vBoxMain x PackNatural 0
+    Nothing -> return ()
+
+  -- cria um HPane para dividir o canvas e o menu de propriedade
   hPaneAction <- hPanedNew
-  containerAdd window hPaneAction
+  boxPackStart vBoxMain hPaneAction PackGrow 0
 
   -- cria uma VBox para adicionar o menu de propriedades
   vBoxProps <- vBoxNew False 8
@@ -132,10 +162,10 @@ main = do
   -- mostra a GUI
   widgetShowAll window
 
-  -- inicializa estado
+  -- inicializa estado do editor -----------------------------------------------
   st <- newIORef (emptyGraph "Vazio", [], [], 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
-  squareSelection <- newIORef Nothing -- estado da caixa de seleção
+  squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
 
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
@@ -278,13 +308,27 @@ main = do
           mg <- loadGraph window
           case mg of
             Just g -> do
-              print g
+              --print g
               writeIORef st (g,[],[],1.0,(0.0,0.0))
               widgetQueueDraw canvas
             _      -> return ()
         _       -> return ()
 
     return True
+
+  -- tratamento de eventos -- menu toolbar -------------------------------------
+  opn `on` actionActivated $ do
+    mg <- loadGraph window
+    case mg of
+      Just g -> do
+        writeIORef st (g,[],[],1.0,(0.0,0.0))
+        widgetQueueDraw canvas
+      _      -> return ()
+
+  svn `on` actionActivated $ do
+    es <- readIORef st
+    let g = editorGetGraph es
+    saveGraph g window
 
   -- tratamento de eventos -- menu de propriedades -----------------------------
   entryNodeName `on` keyPressEvent $ do
@@ -471,12 +515,13 @@ drawGraph (g, sNodes, sEdges, z, (px,py)) sq canvas = do
   forM (graphGetNodes g) (\n -> renderNode n (n `elem`sNodes) context)
   -- desenha a selectionBox
   case sq of
-    Just (x,y,w,h) -> do rectangle x y w h
-                         setSourceRGBA 0 0 1 0.5
-                         fill
-                         rectangle x y w h
-                         setSourceRGBA 0 0 1 1
-                         stroke
+    Just (x,y,w,h) -> do
+      rectangle x y w h
+      setSourceRGBA 0 0 1 0.5
+      fill
+      rectangle x y w h
+      setSourceRGBA 0 0 1 1
+      stroke
     Nothing -> return ()
   return ()
 
@@ -631,9 +676,8 @@ changeNodeShape es s = editorSetGraph newGraph . editorSetSelectedNodes newNodes
       newGraph = foldl (\g n -> changeNode g n) (editorGetGraph es) newNodes
 
 -- To Do List ------------------------------------------------------------------
+-- *criar menu para salvar/abrir arquivos
 -- *Estilos diferentes para as Edges
--- *Separar a estrutura do grafo das estruturas gráficas
 -- *Definir a intersecção da linha da aresta com o retangulo do nodo
+-- *Separar a estrutura do grafo das estruturas gráficas
 -- *Undo / Redo
--- *Pan
--- *Zoom
