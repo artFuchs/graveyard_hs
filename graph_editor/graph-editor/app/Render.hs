@@ -60,8 +60,8 @@ renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) = do
 renderEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
 renderEdge edge selected nodeSrc nodeDst context = do
   if nodeSrc == nodeDst
-    then renderLoop edge selected nodeSrc context
-    else renderNormalEdge edge selected nodeSrc nodeDst context
+    then renderLoop edge selected nodeSrc
+    else renderNormalEdge edge selected nodeSrc nodeDst
   -- draw Label
   let content = edgeGetInfo $ edge
   if null content
@@ -79,15 +79,9 @@ renderEdge edge selected nodeSrc nodeDst context = do
       moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
       showLayout pL
 
-renderNormalEdge :: Edge -> Bool -> Node -> Node -> PangoContext -> Render ()
-renderNormalEdge edge selected nodeSrc nodeDst context = do
+renderNormalEdge :: Edge -> Bool -> Node -> Node -> Render ()
+renderNormalEdge edge selected nodeSrc nodeDst = do
   setSourceRGB 0 0 0
-
-  -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
-  -- pL <- liftIO $ layoutText context . nodeGetInfo $ nodeSrc
-  -- pL2 <- liftIO $ layoutText context . nodeGetInfo $ nodeDst
-  -- (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
-  -- (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
 
   -- calculo dos pontos de origem e destino da aresta
   let (x1, y1) = position . nodeGetGI $ nodeSrc
@@ -137,8 +131,8 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
   arc xe  ye 2 0 (2*pi)
   fill
 
-renderLoop:: Edge -> Bool -> Node -> PangoContext -> Render ()
-renderLoop edge selected node context = do
+renderLoop:: Edge -> Bool -> Node -> Render ()
+renderLoop edge selected node = do
   let (xe, ye) = cPosition . edgeGetGI $ edge
       (x,y) = position . nodeGetGI $ node
       a = angle (x,y) (xe, ye)

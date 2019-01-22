@@ -238,17 +238,12 @@ main = do
         let g = editorGetGraph es
             dstNode = checkSelectNode g (x',y')
         context <- widgetGetPangoContext canvas
+        stackUndo changes es
         if length dstNode == 0
           then do
             createNode st (x',y') context
-            stackUndo changes es
           else do
             modifyIORef st (\es -> createEdges es dstNode)
-            es <- readIORef st
-            stackUndo changes es
-
-
-
         widgetQueueDraw canvas
         updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes (labelPosition, labelDims)
       _           -> return ()
@@ -323,9 +318,6 @@ main = do
       pos <- readIORef oldPoint
       context <- widgetGetPangoContext canvas
       case (Control `elem` ms, T.unpack k) of
-        (False,"Insert") -> do
-          createNode st pos context
-          widgetQueueDraw canvas
         (False,"Delete") -> do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
@@ -390,6 +382,8 @@ main = do
     liftIO $ do
       case T.unpack k of
         "Return" -> do
+          es <- readIORef st
+          stackUndo changes es
           name <- entryGetText entryNodeName :: IO String
           context <- widgetGetPangoContext canvas
           renameSelected st name context
@@ -722,11 +716,11 @@ renameSelected state name context = do
   dim <- getStringDims name context
   let graph = editorGetGraph es
       (nodes,edges) = editorGetSelected es
-      renamedNodes = map (\n -> Node (nodeGetID n) name (nodeGiSetDims dim . nodeGetGI $ n)) nodes
+  let renamedNodes = map (\n -> Node (nodeGetID n) name (nodeGiSetDims dim . nodeGetGI $ n)) nodes
       renamedEdges = map (\e -> Edge (edgeGetID e) name $ edgeGetGI e) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
-      newEs = editorSetGraph newGraph . editorSetSelected (renamedNodes, renamedEdges) $ es
+      newEs = editorSetGraph newGraph' . editorSetSelected (renamedNodes, renamedEdges) $ es
   writeIORef state newEs
 
 -- muda a forma de um nodo
@@ -752,6 +746,7 @@ applyUndo changes st = do
       (nur, nes) = apply ur es
   writeIORef changes nur
   writeIORef st nes
+  putStrLn "undo"
 
 applyRedo :: IORef ([Graph],[Graph]) -> IORef EditorState -> IO ()
 applyRedo changes st = do
@@ -768,8 +763,6 @@ applyRedo changes st = do
 
 
 -- To Do List ------------------------------------------------------------------
--- *Definir a intersecção da linha da aresta com o retangulo do nodo
 -- *Estilos diferentes para as Edges
 -- *Melhorar Menu de Propriedades
 -- *Separar a estrutura do grafo das estruturas gráficas
---
