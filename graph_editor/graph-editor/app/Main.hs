@@ -13,6 +13,7 @@ import Graph
 import GraphicalInfo
 import Render
 import Helper
+import UIConstructors
 
 -- | estado do editor de grafos
 --   contém todas as informações necssárias para desenhar o grafo
@@ -53,39 +54,6 @@ editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,n,e,z,_) = (g,n,e,z,p)
 
 
-buildMaybeMenubar = do
-    fma <- actionNew "FMA" "File" Nothing Nothing
-    opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
-    svn <- actionNew "SVN" "Save File" (Just "Just a stub") (Just stockSave)
-    edt <- actionNew "EDT" "Edit" Nothing Nothing
-    udo <- actionNew "UDO" "Undo" (Just "Just a stub") (Just stockUndo)
-    rdo <- actionNew "RDO" "Redo" (Just "Just a stub") (Just stockRedo)
-    agr <- actionGroupNew "AGR"
-    mapM_ (actionGroupAddAction agr) [fma,edt]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [opn,svn,udo,rdo]
-
-    ui <- uiManagerNew
-    uiManagerAddUiFromString ui uiStr
-    uiManagerInsertActionGroup ui agr 0
-    maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, opn, svn, udo, rdo)
-
-  where uiStr = "<ui>\
-\                 <menubar>\
-\                   <menu action=\"FMA\">\
-\                     <menuitem action=\"OPN\"/>\
-\                     <menuitem action=\"SVN\"/>\
-\                   </menu> \
-\                   <menu action=\"EDT\">\
-\                     <menuitem action=\"UDO\"/>\
-\                     <menuitem action=\"RDO\"/>\
-\                   </menu>\
-\                 </menubar>\
-\                </ui>"
-
-
-
-
 main :: IO()
 main = do
   -- inicializa a biblioteca GTK
@@ -112,62 +80,9 @@ main = do
   hPaneAction <- hPanedNew
   boxPackStart vBoxMain hPaneAction PackGrow 0
 
-  -- cria uma VBox para adicionar o menu de propriedades
-  vBoxProps <- vBoxNew False 8
+  (vBoxProps, entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, labelPosition, labelDims) <- buildPropMenu
+  let [radioCircle, radioRect, radioQuad] = radioShapes
   panedPack2 hPaneAction vBoxProps False True
-  -- cria a label de titulo
-  titleLabel <- labelNew $ Just "Propriedades"
-  boxPackStart vBoxProps titleLabel PackNatural 0
-  -- cria uma HBox para a propriedade ID
-  hBoxID <- hBoxNew False 8
-  boxPackStart vBoxProps hBoxID PackNatural 0
-  labelID <- labelNew $ Just "ID: "
-  boxPackStart hBoxID labelID PackNatural 0
-  entryNodeID <- entryNew
-  boxPackStart hBoxID entryNodeID PackGrow 0
-  widgetSetCanFocus entryNodeID False
-  set entryNodeID [ entryEditable := False ]
-  -- cria uma HBox para a propriedade nome
-  hBoxName <- hBoxNew False 8
-  boxPackStart vBoxProps hBoxName PackNatural 0
-  labelName <- labelNew $ Just "Nome: "
-  boxPackStart hBoxName labelName PackNatural 0
-  entryNodeName <- entryNew
-  boxPackStart hBoxName entryNodeName PackGrow 0
-  widgetSetCanFocus entryNodeName True
-  -- cria uma HBox para a propriedade cor
-  hBoxColor <- hBoxNew False 8
-  boxPackStart vBoxProps hBoxColor PackNatural 0
-  labelColor <- labelNew $ Just "Cor: "
-  boxPackStart hBoxColor labelColor PackNatural 0
-  colorBtn <- colorButtonNew
-  boxPackStart hBoxColor colorBtn PackNatural 0
-  -- cria uma HBox para a propriedade cor da linha
-  hBoxLineColor <- hBoxNew False 8
-  boxPackStart vBoxProps hBoxLineColor PackNatural 0
-  labelLineColor <- labelNew $ Just "Cor da linha: "
-  boxPackStart hBoxLineColor labelLineColor PackNatural 0
-  lineColorBtn <- colorButtonNew
-  boxPackStart hBoxLineColor lineColorBtn PackNatural 0
-  -- cria um frame contendo uma VBox para a propriedade forma do nodo
-  frameShape <- frameNew
-  boxPackStart vBoxProps frameShape PackNatural 0
-  vBoxShape <- vBoxNew False 8
-  containerAdd frameShape vBoxShape
-  radioCircle <- radioButtonNewWithLabel "Circulo"
-  boxPackStart vBoxShape radioCircle PackGrow 0
-  radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Retangulo"
-  boxPackStart vBoxShape radioRect PackGrow 0
-  radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quadrado"
-  boxPackStart vBoxShape radioQuad PackGrow 0
-  let radioShapes = [radioCircle, radioRect, radioQuad]
-  -- cria uma VBox contendo labels para depurar
-  vBoxDebug <- vBoxNew False 8
-  boxPackStart vBoxProps vBoxDebug PackNatural 0
-  labelPosition <- labelNew $ Just "Posicao: (--,--)"
-  labelDims <- labelNew $ Just "Dimensoes: (--,--)"
-  boxPackStart vBoxDebug labelPosition PackGrow 0
-  boxPackStart vBoxDebug labelDims PackGrow 0
 
   -- cria um canvas em branco
   canvas <- drawingAreaNew
@@ -186,8 +101,7 @@ main = do
   squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
   changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
   movingGI <- newIORef False -- se o usuario começou a mover algum objeto
-
-
+  actualShape <- newIORef NCircle
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
@@ -249,7 +163,8 @@ main = do
         stackUndo changes es
         if length dstNode == 0
           then do
-            createNode st (x',y') context
+            shape <- readIORef actualShape
+            createNode st (x',y') context shape
           else do
             modifyIORef st (\es -> createEdges es dstNode)
         widgetQueueDraw canvas
@@ -446,14 +361,17 @@ main = do
 
   radioCircle `on` toggled $ do
     modifyIORef st (\es -> changeNodeShape es NCircle)
+    writeIORef actualShape NCircle
     widgetQueueDraw canvas
 
   radioRect `on` toggled $ do
     modifyIORef st (\es -> changeNodeShape es NRect)
+    writeIORef actualShape NRect
     widgetQueueDraw canvas
 
   radioQuad `on` toggled $ do
     modifyIORef st (\es -> changeNodeShape es NQuad)
+    writeIORef actualShape NQuad
     widgetQueueDraw canvas
 
 
@@ -693,8 +611,8 @@ adjustEdges es = editorSetGraph newGraph es
 
 -- operações básicas sobre o grafo no estado -----------------------------------
 -- cria um novo nodo e insere no grafo
-createNode:: IORef EditorState -> (Double,Double) -> PangoContext -> IO ()
-createNode st pos context = do
+createNode:: IORef EditorState -> (Double,Double) -> PangoContext -> NodeShape -> IO ()
+createNode st pos context shape = do
   es <- readIORef st
   let graph = editorGetGraph es
       (nodes, edges) = editorGetSelected es
@@ -704,7 +622,7 @@ createNode st pos context = do
       nID = 1 + nodeGetID maxnode
       content = ("node " ++ show nID)
   dim <- getStringDims content context
-  let newNode = Node nID content $ nodeGiSetDims dim . nodeGiSetPosition pos $ newNodeGI
+  let newNode = Node nID content $ nodeGiSetShape shape . nodeGiSetDims dim . nodeGiSetPosition pos $ newNodeGI
       newGraph = insertNode graph newNode
   writeIORef st $ editorSetGraph newGraph . editorSetSelected ([newNode], []) $ es
 
