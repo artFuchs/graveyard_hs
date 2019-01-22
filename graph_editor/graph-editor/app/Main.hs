@@ -332,6 +332,12 @@ main = do
         (True,"equal") -> do
           modifyIORef st (\es -> editorSetZoom 1.0 es )
           widgetQueueDraw canvas
+        (True, "a") -> do
+          modifyIORef st (\es -> let g = editorGetGraph es
+                                     nodes = graphGetNodes g
+                                     edges = graphGetEdges g
+                                 in editorSetSelected (nodes,edges) es)
+          widgetQueueDraw canvas
         (True, "s") -> do
           es <- readIORef st
           let g = editorGetGraph es
@@ -766,3 +772,6 @@ applyRedo changes st = do
 -- *Estilos diferentes para as Edges
 -- *Melhorar Menu de Propriedades
 -- *Separar a estrutura do grafo das estruturas gráficas
+-- *Copy/Paste/Cut
+-- *New File
+-- *Select all/unselect all
