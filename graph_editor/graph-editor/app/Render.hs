@@ -104,7 +104,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
               n2 = 5 + (max pw2 ph2)/2
           in (x2 - vx2*n2, y2 - vy2*n2)
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
-        NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
+        NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
 
 
       -- configurações de cor
