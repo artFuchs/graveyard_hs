@@ -6,6 +6,7 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Data.List
 import Data.Maybe
+--import qualified Data.Char as C
 import qualified Data.Text as T
 import qualified Control.Exception as E
 import Graph
@@ -217,18 +218,25 @@ main = do
             sNode = checkSelectNode graph (x',y')
             sEdge = checkSelectEdge graph (x',y')
         -- Shift: seleção de multiplos elementos
-        (sNodes,sEdges) <- case (sNode, sEdge, Shift `elem` ms) of
-          -- clico no espaço em branco, Shift não pressionado
-          ([],[], False) -> do
+        (sNodes,sEdges) <- case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
+          -- clicou no espaço em branco, Shift não pressionado
+          ([],[], False, _) -> do
             modifyIORef st (editorSetSelected ([],[]))
             writeIORef squareSelection $ Just (x',y',0,0)
             return ([],[])
-          (n,e,False) -> do
+          ([],[], _, _) -> return (oldSN, oldSE)
+
+          (n,e,False, _) -> do
             modifyIORef st (editorSetSelected (sNode, sEdge))
             return (sNode, sEdge)
-          (n,e,True) -> do
+          (n,e,True, False) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
+            modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
+            return (jointSN, jointSE)
+          (n,e,True, True) -> do
+            let jointSN = delete (sNode!!0) oldSN
+                jointSE = delete (sEdge!!0) oldSE
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
             return (jointSN, jointSE)
         widgetQueueDraw canvas
@@ -317,42 +325,45 @@ main = do
     liftIO $ do
       pos <- readIORef oldPoint
       context <- widgetGetPangoContext canvas
-      case (Control `elem` ms, T.unpack k) of
-        (False,"Delete") -> do
+      case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
+        (False,False,"delete") -> do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
           stackUndo changes es
           widgetQueueDraw canvas
-        (True,"plus") -> do
+        (True,_,"plus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
           widgetQueueDraw canvas
-        (True,"minus") -> do
+        (True,_,"minus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 0.9) es )
           widgetQueueDraw canvas
-        (True,"equal") -> do
+        (True,_,"equal") -> do
           modifyIORef st (\es -> editorSetZoom 1.0 es )
           widgetQueueDraw canvas
-        (True, "a") -> do
+        (True, True, "a") -> do
+          modifyIORef st $ editorSetSelected ([],[])
+          widgetQueueDraw canvas
+        (True, False, "a") -> do
           modifyIORef st (\es -> let g = editorGetGraph es
                                      nodes = graphGetNodes g
                                      edges = graphGetEdges g
                                  in editorSetSelected (nodes,edges) es)
           widgetQueueDraw canvas
-        (True, "s") -> do
+        (True, False, "s") -> do
           es <- readIORef st
           let g = editorGetGraph es
           saveGraph g window
-        (True, "o") -> do
+        (True, False, "o") -> do
           mg <- loadGraph window
           case mg of
             Just g -> do
               writeIORef st (g,[],[],1.0,(0.0,0.0))
               widgetQueueDraw canvas
             _      -> return ()
-        (True,"z") -> do
+        (True, False, "z") -> do
           applyUndo changes st
           widgetQueueDraw canvas
-        (True,"r") -> do
+        (True, False, "r") -> do
           applyRedo changes st
           widgetQueueDraw canvas
         _       -> return ()
@@ -634,11 +645,10 @@ moveNode es (xold,yold) (xnew,ynew) = editorSetGraph newGraph' . editorSetSelect
                             (xe,ye) = cPosition . edgeGetGI $ edge
                             (xe',ye') = (xe+deltaX, ye+deltaY)
                             gi = edgeGetGI edge
-                        in if a == b && a `elem` sNodes
-                            then Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (xe',ye') gi
-                            else if centered gi
-                              then Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (midPoint newAPos newBPos) gi
-                              else edge
+                        in case (a == b, any (\n -> n `elem` sNodes) [a,b], centered gi) of
+                            (True, True, _) -> Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (xe',ye') gi
+                            (False, True, True) -> Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (midPoint newAPos newBPos) gi
+                            _ -> edge
                           )
       movedEdges = map moveE (graphGetEdges graph)
       -- atualiza o grafo
@@ -770,8 +780,11 @@ applyRedo changes st = do
 
 -- To Do List ------------------------------------------------------------------
 -- *Estilos diferentes para as Edges
--- *Melhorar Menu de Propriedades
--- *Separar a estrutura do grafo das estruturas gráficas
+-- *Melhorar menu de Propriedades
+--  *3 aparencias diferentes para nodos, edges e nodos+edges
+--  *Fazer update do menu quando um nodo for criado
 -- *Copy/Paste/Cut
 -- *New File
--- *Select all/unselect all
+-- *Espaçar edges quando entre dois nodos ouver mais de uma edge e ela estiver centralizada
+-- *Criar nodos com base na escolha do menu
+-- *Separar a estrutura do grafo das estruturas gráficas

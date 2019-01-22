@@ -170,7 +170,7 @@ insertEdge (Graph iD src dst es ns) n1 n2 = Graph iD src' dst' (ne:es) ns
         pos1 = position . nodeGetGI $ n1
         pos2 = position . nodeGetGI $ n2
         gi = if nodeGetID n1 == nodeGetID n2
-         then edgeGiSetPosition (fst pos1 + 30, snd pos1 - 30) newEdgeGI
+         then edgeGiSetCentered False . edgeGiSetPosition (fst pos1 + 30, snd pos1 - 30) $ newEdgeGI
          else edgeGiSetPosition (midPoint pos1 pos2) newEdgeGI
         ne = Edge neID "" gi
         nID1 = nodeGetID n1
