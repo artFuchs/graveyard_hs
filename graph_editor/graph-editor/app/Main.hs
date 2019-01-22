@@ -160,6 +160,13 @@ main = do
   radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quadrado"
   boxPackStart vBoxShape radioQuad PackGrow 0
   let radioShapes = [radioCircle, radioRect, radioQuad]
+  -- cria uma VBox contendo labels para depurar
+  vBoxDebug <- vBoxNew False 8
+  boxPackStart vBoxProps vBoxDebug PackNatural 0
+  labelPosition <- labelNew $ Just "Posicao: (--,--)"
+  labelDims <- labelNew $ Just "Dimensoes: (--,--)"
+  boxPackStart vBoxDebug labelPosition PackGrow 0
+  boxPackStart vBoxDebug labelDims PackGrow 0
 
   -- cria um canvas em branco
   canvas <- drawingAreaNew
@@ -210,22 +217,22 @@ main = do
             sNode = checkSelectNode graph (x',y')
             sEdge = checkSelectEdge graph (x',y')
         -- Shift: seleção de multiplos elementos
-        case (sNode, sEdge, Shift `elem` ms) of
+        (sNodes,sEdges) <- case (sNode, sEdge, Shift `elem` ms) of
           -- clico no espaço em branco, Shift não pressionado
           ([],[], False) -> do
             modifyIORef st (editorSetSelected ([],[]))
             writeIORef squareSelection $ Just (x',y',0,0)
-            updatePropMenu ([],[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
+            return ([],[])
           (n,e,False) -> do
             modifyIORef st (editorSetSelected (sNode, sEdge))
-            updatePropMenu (sNode,sEdge) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
-
+            return (sNode, sEdge)
           (n,e,True) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-            updatePropMenu (jointSN, jointSE) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
+            return (jointSN, jointSE)
         widgetQueueDraw canvas
+        updatePropMenu (sNode, sEdges) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes (labelPosition, labelDims)
       -- clique com o botão direito: cria nodos e insere edges entre nodos
       RightButton -> liftIO $ do
         let g = editorGetGraph es
@@ -243,7 +250,7 @@ main = do
 
 
         widgetQueueDraw canvas
-        updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes
+        updatePropMenu (dstNode,[]) entryNodeID entryNodeName colorBtn lineColorBtn radioShapes (labelPosition, labelDims)
       _           -> return ()
 
     return True
@@ -450,14 +457,16 @@ main = do
 
 -- Callbacks -------------------------------------------------------------------
 -- atualização do menu de propriedades -----------------------------------------
-updatePropMenu :: ([Node],[Edge]) -> Entry -> Entry -> ColorButton -> ColorButton -> [RadioButton] -> IO()
-updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn radioShapes = do
+updatePropMenu :: ([Node],[Edge]) -> Entry -> Entry -> ColorButton -> ColorButton -> [RadioButton] -> (Label,Label) -> IO()
+updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn radioShapes (lPos, lDims) = do
   case (length nodes, length edges) of
     (0, 0) -> do
       entrySetText entryID ""
       entrySetText entryName ""
       colorButtonSetColor colorBtn $ Color 49151 49151 49151
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
+      labelSetText lPos "Posiçao: --"
+      labelSetText lDims "Dimensoes: --"
     (1, 0) -> do
       let iD = show . nodeGetID $ (nodes!!0)
           name = nodeGetInfo $ (nodes!!0)
@@ -474,6 +483,10 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn radioShapes = 
         NCircle -> toggleButtonSetActive (radioShapes!!0) True
         NRect -> toggleButtonSetActive (radioShapes!!1) True
         NQuad -> toggleButtonSetActive (radioShapes!!2) True
+      let nodePos = position . nodeGetGI $ (nodes!!0)
+          nodeDims = dims . nodeGetGI $ (nodes!!0)
+      labelSetText lPos ("Posiçao: " ++ (show nodePos))
+      labelSetText lDims ("Dimensoes: " ++ (show nodeDims))
 
     (0, 1) -> do
       let iD = show . edgeGetID $ (edges!!0)
@@ -488,6 +501,8 @@ updatePropMenu (nodes,edges) entryID entryName colorBtn lcolorBtn radioShapes = 
       entrySetText entryName "----"
       colorButtonSetColor colorBtn $ Color 49151 49151 49151
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
+      labelSetText lPos "Posiçao: --"
+      labelSetText lDims "Dimensoes: --"
 
 -- salvar grafo ----------------------------------------------------------------
 saveGraph :: Graph -> Window -> IO ()
@@ -753,6 +768,8 @@ applyRedo changes st = do
 
 
 -- To Do List ------------------------------------------------------------------
--- *Estilos diferentes para as Edges
 -- *Definir a intersecção da linha da aresta com o retangulo do nodo
+-- *Estilos diferentes para as Edges
+-- *Melhorar Menu de Propriedades
 -- *Separar a estrutura do grafo das estruturas gráficas
+--

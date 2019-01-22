@@ -4,6 +4,7 @@ module Helper
 , multPoint
 , midPoint
 , pointInsideRectangle
+, intersectLineRect
 , getStringDims
 , pointAt
 , angle
@@ -39,7 +40,17 @@ pointAt ang dist (x,y) = (x + dist*cos(ang), y + dist*sin(ang))
 -- | verifica se um ponto está dentro de um retangulo
 -- faz o calculo considerando a posição do retangulo como sendo seu centro
 pointInsideRectangle :: (Double,Double) -> (Double,Double,Double,Double) -> Bool
-pointInsideRectangle (x,y) (rx,ry,rw,rh) = (x >= rx - rw/2) && (x <= rx + rw/2) && (y >= ry - rh/2) && (y <= ry + rh/2)
+pointInsideRectangle (x,y) (rx,ry,rw,rh) = (abs (x - rx) <= rw/2) && (abs (y - ry) <= rh/2)
+
+-- | Retorna o ponto de intersecção de uma linha com um retangulo
+-- recebe o ponto inicial da linha e a representação do retangulo (x,y,w,h)
+intersectLineRect :: (Double,Double) -> (Double,Double,Double,Double) -> (Double,Double)
+intersectLineRect (lx,ly) (rx,ry,rw,rh) = (rx + t*(lx - rx), ry + t*(ly - ry))
+  where t = min tx ty
+        tx = (rw/2) / abs (lx - rx)
+        ty = (rh/2) / abs (ly - ry)
+
+
 
 -- | dado um texto, adquire o tamanho da bounding box do texto para renderiza-lo
 -- utiliza a biblioteca pango para isso

@@ -84,23 +84,35 @@ renderNormalEdge edge selected nodeSrc nodeDst context = do
   setSourceRGB 0 0 0
 
   -- utiliza a biblioteca Pango para calcular o tamanho da bounding box do texto
-  pL <- liftIO $ layoutText context . nodeGetInfo $ nodeSrc
-  pL2 <- liftIO $ layoutText context . nodeGetInfo $ nodeDst
-  (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
-  (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
+  -- pL <- liftIO $ layoutText context . nodeGetInfo $ nodeSrc
+  -- pL2 <- liftIO $ layoutText context . nodeGetInfo $ nodeDst
+  -- (_,PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+  -- (_,PangoRectangle px2 py2 pw2 ph2) <- liftIO $ layoutGetExtents pL2
 
   -- calculo dos pontos de origem e destino da aresta
   let (x1, y1) = position . nodeGetGI $ nodeSrc
+      (pw, ph) = dims . nodeGetGI $ nodeSrc
       (x2, y2) = position . nodeGetGI $ nodeDst
+      (pw2, ph2) = dims . nodeGetGI $ nodeDst
       (xe, ye) = cPosition . edgeGetGI $ edge
-      d1 = pointDistance (x1,y1) (xe,ye)
-      d2 = pointDistance (xe,ye) (x2,y2)
-      (vx1,vy1) = ((xe-x1)/d1 , (ye-y1)/d1)
-      (vx2,vy2) = ((x2-xe)/d2 , (y2-ye)/d2)
-      n1 = 3 + (max pw ph)/2
-      n2 = 5 + (max pw2 ph2)/2
-      (x1', y1') = (x1 + vx1*n1, y1 + vy1*n1)
-      (x2', y2') = (x2 - vx2*n2, y2 - vy2*n2)
+      (x1', y1') = case shape . nodeGetGI $ nodeSrc of
+        NCircle ->
+          let d1 = pointDistance (x1,y1) (xe,ye)
+              (vx1,vy1) = ((xe-x1)/d1 , (ye-y1)/d1)
+              n1 = 3 + (max pw ph)/2
+          in (x1 + vx1*n1, y1 + vy1*n1)
+        NRect -> intersectLineRect (xe,ye) (x1,y1,pw+3,ph+3)
+        NQuad -> let l = max pw ph in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
+      (x2', y2') = case shape . nodeGetGI $ nodeSrc of
+        NCircle ->
+          let d2 = pointDistance (xe,ye) (x2,y2)
+              (vx2,vy2) = ((x2-xe)/d2 , (y2-ye)/d2)
+              n2 = 5 + (max pw2 ph2)/2
+          in (x2 - vx2*n2, y2 - vy2*n2)
+        NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
+        NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
+
+
       -- configurações de cor
       (r,g,b) = if selected then (0,1,0) else color . edgeGetGI $ edge
 
