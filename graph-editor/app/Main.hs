@@ -94,6 +94,7 @@ main = do
   canvas <- drawingAreaNew
   widgetSetCanFocus canvas True
   widgetAddEvents canvas [AllEventsMask]
+  widgetDelEvents canvas [SmoothScrollMask]
   widgetGrabFocus canvas
   widgetModifyBg canvas StateNormal (Color 65535 65535 65535) -- parece que não funciona
   containerAdd frameCanvas canvas
@@ -240,7 +241,20 @@ main = do
     liftIO $ do
       writeIORef squareSelection Nothing
       widgetQueueDraw canvas
+    return True
 
+  -- roda do mouse
+  canvas `on` scrollEvent $ do
+    d <- eventScrollDirection
+    ms <- eventModifierAll
+    case (Control `elem` ms, d) of
+      (True, ScrollUp)  -> liftIO $ do
+        modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
+        widgetQueueDraw canvas
+      (True, ScrollDown) -> liftIO $ do
+        modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.5 then editorSetZoom (editorGetZoom es * 0.9) es else es)
+        widgetQueueDraw canvas
+      _ -> return ()
     return True
 
   -- teclado
@@ -258,13 +272,9 @@ main = do
           widgetQueueDraw canvas
         (True,_,"plus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
-          es <- readIORef st
-          putStrLn $ "zoom in:" ++ show (editorGetZoom es)
           widgetQueueDraw canvas
         (True,_,"minus") -> do
           modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.5 then editorSetZoom (editorGetZoom es * 0.9) es else es)
-          es <- readIORef st
-          putStrLn $ "zoom out:" ++ show (editorGetZoom es)
           widgetQueueDraw canvas
         (True,_,"equal") -> do
           modifyIORef st (\es -> editorSetZoom 1.0 es )
@@ -741,9 +751,8 @@ applyRedo changes st = do
 -- *Estilos diferentes para as Edges
 -- *Melhorar menu de Propriedades
 --  *3 aparencias diferentes para nodos, edges e nodos+edges
---  *Fazer update do menu quando um nodo for criado
 -- *Copy/Paste/Cut
 -- *New File
 -- *Espaçar edges quando entre dois nodos ouver mais de uma edge e ela estiver centralizada
--- *Criar nodos com base na escolha do menu
 -- *Separar a estrutura do grafo das estruturas gráficas
+-- *Corrigir Zoom para ajustar o Pan quando ele for modificado
