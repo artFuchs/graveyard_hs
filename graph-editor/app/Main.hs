@@ -9,6 +9,7 @@ import Data.Maybe
 --import qualified Data.Char as C
 import qualified Data.Text as T
 import qualified Control.Exception as E
+import qualified Data.Map as M
 import Graph
 import GraphicalInfo
 import Render
@@ -126,7 +127,7 @@ main = do
     es <- liftIO $ readIORef st
     let z = editorGetZoom es
         (px,py) = editorGetPan es
-        (x',y') = ((x-px)/z, (y-py)/z)
+        (x',y') = (x/z - px, y/z - py)
     liftIO $ do
       writeIORef oldPoint (x',y')
       widgetGrabFocus canvas
@@ -194,7 +195,7 @@ main = do
         (sNodes, sEdges) = editorGetSelected es
         z = editorGetZoom es
         (px,py) = editorGetPan es
-        (x',y') = ((x-px)/z, (y-py)/z)
+        (x',y') = (x/z - px, y/z - py)
     case (leftButton, middleButton, sNodes, sEdges) of
       (True, False, [], []) -> liftIO $ do
         modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x'-a,y'-b))
@@ -213,7 +214,8 @@ main = do
           else return ()
         widgetQueueDraw canvas
       (False ,True, _, _) -> liftIO $ do
-        modifyIORef st (editorSetPan (px+x'-ox, py+y'-oy))
+        let (dx,dy) = (x'-ox,y'-oy)
+        modifyIORef st (editorSetPan (px+dx, py+dy))
         widgetQueueDraw canvas
       (_,_,_,_) -> return ()
     return True
@@ -252,7 +254,7 @@ main = do
         modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
         widgetQueueDraw canvas
       (True, ScrollDown) -> liftIO $ do
-        modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.5 then editorSetZoom (editorGetZoom es * 0.9) es else es)
+        modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.6 then editorSetZoom (editorGetZoom es * 0.9) es else es)
         widgetQueueDraw canvas
       _ -> return ()
     return True
@@ -274,13 +276,13 @@ main = do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
           widgetQueueDraw canvas
         (True,_,"minus") -> do
-          modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.5 then editorSetZoom (editorGetZoom es * 0.9) es else es)
+          modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.6 then editorSetZoom (editorGetZoom es * 0.9) es else es)
           widgetQueueDraw canvas
         (True,_,"equal") -> do
           modifyIORef st (\es -> editorSetZoom 1.0 es )
           widgetQueueDraw canvas
         (True,_,"0") -> do
-          modifyIORef st (\es -> editorSetPan (0,0) es )
+          modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
           widgetQueueDraw canvas
         (True, True, "a") -> do
           modifyIORef st $ editorSetSelected ([],[])
@@ -536,8 +538,8 @@ loadGraph window = do
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
 drawGraph (g, sNodes, sEdges, z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
-  translate px py
   scale z z
+  translate px py
   forM (graphGetEdges g) (\e -> do
     let dstN = getDstNode g e
         srcN = getSrcNode g e
@@ -743,6 +745,10 @@ applyRedo changes st = do
   writeIORef changes nur
   writeIORef st nes
 
+-- Copy / Paste / Cut ----------------------------------------------------------
+
+
+
 
 
 
@@ -750,9 +756,9 @@ applyRedo changes st = do
 -- To Do List ------------------------------------------------------------------
 -- *Estilos diferentes para as Edges
 -- *Melhorar menu de Propriedades
---  *3 aparencias diferentes para nodos, edges e nodos+edges
+--  *3 aparencias diferentes para nodos, edges e nodos+edges (done)
 -- *Copy/Paste/Cut
 -- *New File
 -- *Espaçar edges quando entre dois nodos ouver mais de uma edge e ela estiver centralizada
 -- *Separar a estrutura do grafo das estruturas gráficas
--- *Corrigir Zoom para ajustar o Pan quando ele for modificado
+-- *Corrigir Zoom para ajustar o Pan quando ele for modificado (Feito)
