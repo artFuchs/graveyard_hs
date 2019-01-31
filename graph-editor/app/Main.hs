@@ -329,11 +329,9 @@ main = do
         (True, False, "v") -> do
           es <- readIORef st
           (cNodes,cEdges) <- readIORef clipboard
+          stackUndo changes es
           modifyIORef st (pasteClipBoard (cNodes,cEdges))
           widgetQueueDraw canvas
-
-
-
         (True, False, "x") -> do
           es <- readIORef st
           writeIORef clipboard $ editorGetSelected es
@@ -776,15 +774,14 @@ applyRedo changes st = do
 
 -- Copy / Paste / Cut ----------------------------------------------------------
 pasteClipBoard :: ([Node],[Edge]) -> EditorState -> EditorState
-pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,newEdges) . editorSetGraph newGraph' $ es
+pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,[]) . editorSetGraph newGraph' $ es
   where g = editorGetGraph es
-        (px,py) = editorGetPan es
         minNID = nodeGetID $ maximum (graphGetNodes g)
         minEID = edgeGetID $ maximum (graphGetEdges g)
         minX = minimum $ map (fst . position . nodeGetGI) cNodes ++ map (fst . cPosition . edgeGetGI) cEdges
         minY = minimum $ map (snd . position . nodeGetGI) cNodes ++ map (snd . cPosition . edgeGetGI) cEdges
         upd (a,b) = (20+a-minX, 20+b-minY)
-        nIDs = map (+minNID) (take (length cNodes) [length cNodes,(length cNodes - 1)..1])
+        nIDs = map (+minNID) (let l = length cNodes in take l [l,(l - 1)..1])
         nPos = map (upd . position . nodeGetGI) cNodes
         newNodes = zipWith3 (\n nid pos -> Node nid (nodeGetInfo n) (nodeGiSetPosition pos $ nodeGetGI n)) cNodes nIDs nPos
         newGraph = foldl (insertNode) g newNodes
@@ -792,8 +789,8 @@ pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,newEdges) . edi
         ePos = map (upd . cPosition . edgeGetGI) cEdges
         newEdges = zipWith3 (\e eid pos -> Edge eid (edgeGetInfo e) (edgeGiSetPosition pos $ edgeGetGI e)) cEdges eIDs ePos
         nodesDict = M.fromList $ zipWith (\n n'-> (nodeGetID n, n')) cNodes newNodes
-        connections = map (\e -> (fromMaybe nullNode (getSrcNode g e), fromMaybe nullNode (getDstNode g e))) cEdges
         applyPair f (a,b) = (f a, f b)
+        connections = map (\e -> applyPair (\x -> fromMaybe nullNode x) (getSrcNode g e, getDstNode g e)) cEdges
         connections' = map (applyPair (\n -> fromMaybe n $ M.lookup (nodeGetID n) nodesDict)) connections
         newGraph' = foldl (\g (src,dst) -> insertEdge g src dst) newGraph connections'
 
@@ -801,13 +798,16 @@ pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,newEdges) . edi
 
 
 -- Tarefas ---------------------------------------------------------------------
--- *Estilos diferentes para as Edges
--- *Melhorar menu de Propriedades
--- *New File
--- *Espaçar edges quando entre dois nodos ouver mais de uma edge e ela estiver centralizada
+-- *Estilos diferentes para as arestas
+-- *Novo Arquivo
+-- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
 -- *Separar a estrutura do grafo das estruturas gráficas
+-- *Corrigir movimento das arestas quando mover um nodo
+-- corrigir arestas não sendo coladas com Cut/Paste
+
 
 -- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
--- *3 aparencias diferentes para nodos, edges e nodos+edges (Feito)
--- *Corrigir Zoom para ajustar o Pan quando ele for modificado (Feito)
--- *Copy/Paste/Cut (Feito)
+-- *Melhorar menu de Propriedades
+--  *3 aparencias diferentes para nodos, edges e nodos+edges
+-- *Corrigir Zoom para ajustar o Pan quando ele for modificado
+-- *Copy/Paste/Cut
