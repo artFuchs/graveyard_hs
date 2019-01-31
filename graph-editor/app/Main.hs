@@ -16,6 +16,9 @@ import Render
 import Helper
 import UIConstructors
 
+nullNode = Node 0 "" newNodeGI
+
+
 -- | estado do editor de grafos
 --   contém todas as informações necssárias para desenhar o grafo
 -- (grafo, nodos selecionados, arestas selecionadas, zoom, Pan)
@@ -110,6 +113,7 @@ main = do
   changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
   movingGI <- newIORef False -- se o usuario começou a mover algum objeto
   actualShape <- newIORef NCircle
+  clipboard <- newIORef ([],[]) -- clipboard - (Nodes, Edges)
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
@@ -267,11 +271,13 @@ main = do
       pos <- readIORef oldPoint
       context <- widgetGetPangoContext canvas
       case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
+        -- <delete> : delete selection
         (False,False,"delete") -> do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
           stackUndo changes es
           widgetQueueDraw canvas
+        -- CTRL + <+>/<->/<=> : zoom controls
         (True,_,"plus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
           widgetQueueDraw canvas
@@ -281,9 +287,11 @@ main = do
         (True,_,"equal") -> do
           modifyIORef st (\es -> editorSetZoom 1.0 es )
           widgetQueueDraw canvas
+        -- CTRL + <0> : reset pan & zoom
         (True,_,"0") -> do
           modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
           widgetQueueDraw canvas
+        -- CTRL + [SHIFT] + A : select/desselect all
         (True, True, "a") -> do
           modifyIORef st $ editorSetSelected ([],[])
           widgetQueueDraw canvas
@@ -293,10 +301,12 @@ main = do
                                      edges = graphGetEdges g
                                  in editorSetSelected (nodes,edges) es)
           widgetQueueDraw canvas
+        -- CTRL + S : save file
         (True, False, "s") -> do
           es <- readIORef st
           let g = editorGetGraph es
           saveGraph g window
+        -- CTRL + O : open file
         (True, False, "o") -> do
           mg <- loadGraph window
           case mg of
@@ -304,11 +314,31 @@ main = do
               writeIORef st (g,[],[],1.0,(0.0,0.0))
               widgetQueueDraw canvas
             _      -> return ()
+
+        -- CTRL + Z/R : undo/redo
         (True, False, "z") -> do
           applyUndo changes st
           widgetQueueDraw canvas
         (True, False, "r") -> do
           applyRedo changes st
+          widgetQueueDraw canvas
+        -- CTRL + C/V/X : copy/paste/cut
+        (True, False, "c") -> do
+          es <- readIORef st
+          writeIORef clipboard $ editorGetSelected es
+        (True, False, "v") -> do
+          es <- readIORef st
+          (cNodes,cEdges) <- readIORef clipboard
+          modifyIORef st (pasteClipBoard (cNodes,cEdges))
+          widgetQueueDraw canvas
+
+
+
+        (True, False, "x") -> do
+          es <- readIORef st
+          writeIORef clipboard $ editorGetSelected es
+          modifyIORef st (\es -> deleteSelected es)
+          stackUndo changes es
           widgetQueueDraw canvas
         _       -> return ()
 
@@ -629,7 +659,6 @@ moveEdges es (xold,yold) (xnew,ynew) = editorSetGraph newGraph . editorSetSelect
         moveE = (\edge-> let gi = edgeGetGI edge
                              (xe, ye) = cPosition gi
                              newPos = (xe+deltaX, ye+deltaY)
-                             nullNode = Node 0 "" newNodeGI
                              srcPos = position . nodeGetGI . fromMaybe nullNode $ getSrcNode graph edge
                              dstPos = position . nodeGetGI . fromMaybe nullNode $ getDstNode graph edge
                              mustCenter = pointLineDistance newPos srcPos dstPos < 10
@@ -746,19 +775,39 @@ applyRedo changes st = do
   writeIORef st nes
 
 -- Copy / Paste / Cut ----------------------------------------------------------
+pasteClipBoard :: ([Node],[Edge]) -> EditorState -> EditorState
+pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,newEdges) . editorSetGraph newGraph' $ es
+  where g = editorGetGraph es
+        (px,py) = editorGetPan es
+        minNID = nodeGetID $ maximum (graphGetNodes g)
+        minEID = edgeGetID $ maximum (graphGetEdges g)
+        minX = minimum $ map (fst . position . nodeGetGI) cNodes ++ map (fst . cPosition . edgeGetGI) cEdges
+        minY = minimum $ map (snd . position . nodeGetGI) cNodes ++ map (snd . cPosition . edgeGetGI) cEdges
+        upd (a,b) = (20+a-minX, 20+b-minY)
+        nIDs = map (+minNID) (take (length cNodes) [length cNodes,(length cNodes - 1)..1])
+        nPos = map (upd . position . nodeGetGI) cNodes
+        newNodes = zipWith3 (\n nid pos -> Node nid (nodeGetInfo n) (nodeGiSetPosition pos $ nodeGetGI n)) cNodes nIDs nPos
+        newGraph = foldl (insertNode) g newNodes
+        eIDs = map (+minEID) (take (length cEdges) [1..])
+        ePos = map (upd . cPosition . edgeGetGI) cEdges
+        newEdges = zipWith3 (\e eid pos -> Edge eid (edgeGetInfo e) (edgeGiSetPosition pos $ edgeGetGI e)) cEdges eIDs ePos
+        nodesDict = M.fromList $ zipWith (\n n'-> (nodeGetID n, n')) cNodes newNodes
+        connections = map (\e -> (fromMaybe nullNode (getSrcNode g e), fromMaybe nullNode (getDstNode g e))) cEdges
+        applyPair f (a,b) = (f a, f b)
+        connections' = map (applyPair (\n -> fromMaybe n $ M.lookup (nodeGetID n) nodesDict)) connections
+        newGraph' = foldl (\g (src,dst) -> insertEdge g src dst) newGraph connections'
 
 
 
 
-
-
-
--- To Do List ------------------------------------------------------------------
+-- Tarefas ---------------------------------------------------------------------
 -- *Estilos diferentes para as Edges
 -- *Melhorar menu de Propriedades
---  *3 aparencias diferentes para nodos, edges e nodos+edges (done)
--- *Copy/Paste/Cut
 -- *New File
 -- *Espaçar edges quando entre dois nodos ouver mais de uma edge e ela estiver centralizada
 -- *Separar a estrutura do grafo das estruturas gráficas
+
+-- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
+-- *3 aparencias diferentes para nodos, edges e nodos+edges (Feito)
 -- *Corrigir Zoom para ajustar o Pan quando ele for modificado (Feito)
+-- *Copy/Paste/Cut (Feito)
