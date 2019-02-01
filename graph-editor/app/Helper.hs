@@ -8,6 +8,7 @@ module Helper
 , pointAt
 , angle
 , quadrant
+, applyPair
 )where
 
 import Data.Fixed
@@ -62,3 +63,7 @@ quadrant ang = (c,d)
         b = if a < 0 then a + 2*pi else a
         c = if (abs a) <= pi/2 then 1 else -1
         d = if b < pi then 1 else -1
+
+-- Aplica uma função em um par
+applyPair :: (a->b) -> (a,a) -> (b,b)
+applyPair f (a,b) = (f a, f b)

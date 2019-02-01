@@ -113,7 +113,7 @@ main = do
   changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
   movingGI <- newIORef False -- se o usuario começou a mover algum objeto
   actualShape <- newIORef NCircle
-  clipboard <- newIORef ([],[]) -- clipboard - (Nodes, Edges)
+  clipboard <- newIORef ([],[],(\_ -> 0), (\_ -> 0)) -- clipboard - (Nodes, Edges, src, dst)
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
@@ -325,16 +325,22 @@ main = do
         -- CTRL + C/V/X : copy/paste/cut
         (True, False, "c") -> do
           es <- readIORef st
-          writeIORef clipboard $ editorGetSelected es
+          let (n,e) = editorGetSelected es
+              g = editorGetGraph es
+              (src,dst) = (graphGetSrcFunc g, graphGetDstFunc g)
+          writeIORef clipboard $ (n,e,src,dst)
         (True, False, "v") -> do
           es <- readIORef st
-          (cNodes,cEdges) <- readIORef clipboard
+          clip <- readIORef clipboard
           stackUndo changes es
-          modifyIORef st (pasteClipBoard (cNodes,cEdges))
+          modifyIORef st (pasteClipBoard clip)
           widgetQueueDraw canvas
         (True, False, "x") -> do
           es <- readIORef st
-          writeIORef clipboard $ editorGetSelected es
+          let (n,e) = editorGetSelected es
+              g = editorGetGraph es
+              (src,dst) = (graphGetSrcFunc g, graphGetDstFunc g)
+          writeIORef clipboard $ (n,e,src,dst)
           modifyIORef st (\es -> deleteSelected es)
           stackUndo changes es
           widgetQueueDraw canvas
@@ -773,11 +779,11 @@ applyRedo changes st = do
   writeIORef st nes
 
 -- Copy / Paste / Cut ----------------------------------------------------------
-pasteClipBoard :: ([Node],[Edge]) -> EditorState -> EditorState
-pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,[]) . editorSetGraph newGraph' $ es
+pasteClipBoard :: ([Node],[Edge],Edge->Int, Edge->Int) -> EditorState -> EditorState
+pasteClipBoard (cNodes, cEdges, src, dst)  es = editorSetSelected (newNodes,newEdges) . editorSetGraph newGraph' $ es
   where g = editorGetGraph es
-        minNID = nodeGetID $ maximum (graphGetNodes g)
-        minEID = edgeGetID $ maximum (graphGetEdges g)
+        minNID = let ns = graphGetNodes g in if length ns > 0 then nodeGetID $ maximum ns else 0
+        minEID = let es = graphGetEdges g in if length es > 0 then edgeGetID $ maximum es else 0
         minX = minimum $ map (fst . position . nodeGetGI) cNodes ++ map (fst . cPosition . edgeGetGI) cEdges
         minY = minimum $ map (snd . position . nodeGetGI) cNodes ++ map (snd . cPosition . edgeGetGI) cEdges
         upd (a,b) = (20+a-minX, 20+b-minY)
@@ -789,10 +795,9 @@ pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,[]) . editorSet
         ePos = map (upd . cPosition . edgeGetGI) cEdges
         newEdges = zipWith3 (\e eid pos -> Edge eid (edgeGetInfo e) (edgeGiSetPosition pos $ edgeGetGI e)) cEdges eIDs ePos
         nodesDict = M.fromList $ zipWith (\n n'-> (nodeGetID n, n')) cNodes newNodes
-        applyPair f (a,b) = (f a, f b)
-        connections = map (\e -> applyPair (\x -> fromMaybe nullNode x) (getSrcNode g e, getDstNode g e)) cEdges
-        connections' = map (applyPair (\n -> fromMaybe n $ M.lookup (nodeGetID n) nodesDict)) connections
-        newGraph' = foldl (\g (src,dst) -> insertEdge g src dst) newGraph connections'
+        connections = map (\e -> applyPair (\x -> fromMaybe nullNode x) (M.lookup (src e) nodesDict, M.lookup (dst e) nodesDict)) cEdges
+        newGraph' = foldl (\g (src,dst) -> insertEdge g src dst) newGraph connections
+        
 
 
 
@@ -803,11 +808,10 @@ pasteClipBoard (cNodes, cEdges) es = editorSetSelected (newNodes,[]) . editorSet
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
 -- *Separar a estrutura do grafo das estruturas gráficas
 -- *Corrigir movimento das arestas quando mover um nodo
--- corrigir arestas não sendo coladas com Cut/Paste
-
 
 -- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
 -- *Melhorar menu de Propriedades
 --  *3 aparencias diferentes para nodos, edges e nodos+edges
 -- *Corrigir Zoom para ajustar o Pan quando ele for modificado
 -- *Copy/Paste/Cut
+-- *Corrigir arestas não sendo coladas com Cut/Paste
