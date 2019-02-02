@@ -1,5 +1,6 @@
 module GraphicalInfo
-( NodeShape (..)
+( GraphicalInfo (..)
+, NodeShape (..)
 , NodeGI (..)
 , EdgeGI (..)
 , newNodeGI
@@ -13,6 +14,10 @@ module GraphicalInfo
 , edgeGiSetColor
 , edgeGiSetCentered
 )where
+
+import qualified Data.Map as M
+
+type GraphicalInfo = (M.Map Int NodeGI, M.Map Int EdgeGI)
 
 -- estrutura auxiliar - define a forma de um nodo
 data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
