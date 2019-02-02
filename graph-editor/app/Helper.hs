@@ -2,6 +2,7 @@
 module Helper
 ( pointDistance
 , pointLineDistance
+, addPoint
 , multPoint
 , midPoint
 , pointInsideRectangle
@@ -22,6 +23,10 @@ pointDistance (x1,y1) (x2,y2) = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
 -- | calcula a distancia de um ponto para uma reta
 pointLineDistance :: (Double,Double) -> (Double,Double) -> (Double,Double) -> Double
 pointLineDistance (x0,y0) (x1,y1) (x2,y2) = ( abs $ (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 - y2*x1 ) / (pointDistance (x1,y1) (x2,y2))
+
+-- faz a adição de do
+addPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)
+addPoint (a,b) (c,d) = (a+c,b+d)
 
 -- | multiplicação de dois pontos
 multPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)

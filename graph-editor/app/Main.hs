@@ -220,7 +220,7 @@ main = do
         widgetQueueDraw canvas
         --print $ "squareSelection: " ++ show sq
       (True, False, n, e) -> liftIO $ do
-        modifyIORef st (\es -> moveNode es (ox,oy) (x',y'))
+        modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
         mv <- readIORef movingGI
@@ -248,9 +248,10 @@ main = do
         case (editorGetSelected es,sq) of
           (([],[]), Just (x,y,w,h)) -> do
             let graph = editorGetGraph es
-                sNodes = filter (\n -> let pos = position . nodeGetGI $ n
+                (ngi, egi) = editorGetGI es
+                sNodes = filter (\n -> let pos = position $ fromMaybe newNodeGI (M.lookup (nodeGetID n) ngi)
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2) , abs w, abs h)) $ graphGetNodes graph
-                sEdges = filter (\e -> let pos = cPosition . edgeGetGI $ e
+                sEdges = filter (\e -> let pos = cPosition $ fromMaybe newEdgeGI (M.lookup (edgeGetID e) egi)
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
             modifyIORef st (editorSetGraph graph . editorSetSelected (sNodes, sEdges))
             updatePropMenu (sNodes, sEdges) propWidgets propBoxes
@@ -636,47 +637,33 @@ checkSelectEdge (_,edgesG) (x,y) = case find (\e -> isSelected (snd e)) $ (M.toL
   where isSelected = (\e -> pointDistance (x,y) (cPosition e) < 5)
 
 -- move os nodos selecionados
-moveNode:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
-moveNode es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,egi)  es
+moveNodes:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
+moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
   where
       (sNodes, sEdges) = editorGetSelected es
       graph = editorGetGraph es
-      (ngi,egi) = editorGetGI es
+      (ngiM,egiM) = editorGetGI es
       (deltaX, deltaY) = (xnew-xold, ynew-yold)
-      -- move nodes
+      -- move os nodos
       moveN = (\giMap node -> let nid = nodeGetID node
-                                  gi = fromMaybe newNodeGI $ M.lookup nid ngi
+                                  gi = fromMaybe newNodeGI $ M.lookup nid giMap
                                   (ox, oy) = position gi
                               in M.insert nid (nodeGiSetPosition (ox+deltaX,oy+deltaY) gi) giMap )
-      -- moveN = (\node -> let gi = nodeGetGI node
-      --                       (nox, noy)  = position gi
-      --                       newPos  = (nox+deltaX, noy+deltaY)
-      --                    in Node (nodeGetID node) (nodeGetInfo node) (nodeGiSetPosition newPos gi) )
-      movedNGIs = foldl moveN ngi sNodes
-
+      movedNGIs = foldl moveN ngiM sNodes
       -- move as arestas que estão no ponto entre os nodos
-      -- moveE = (\edge -> let a = fromMaybe nullNode $ getSrcNode graph edge
-      --                       b = fromMaybe nullNode $ getDstNode graph edge
-      --                       aPos = position. nodeGetGI $ a
-      --                       bPos = position. nodeGetGI $ b
-      --                       getMovedNGI = (\ngi -> fromMaybe ngi $ find (\(k,a) -> nodeGetID ngi == k) movedNGIs)
-      --                       newAPos = position getMovedNGI a
-      --                       newBPos = position getMovedNGI b
-      --                       (xe,ye) = cPosition . edgeGetGI $ edge
-      --                       (xe',ye') = (xe+deltaX, ye+deltaY)
-      --                       gi = edgeGetGI edge
-      --                   in case (nodeGetID a == nodeGetID b, any (\n -> n `elem` sNodes) [a,b], centered gi) of
-      --                       (True, True, _) -> Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (xe',ye') gi
-      --                       (False, True, True) -> Edge (edgeGetID edge) (edgeGetInfo edge) $ edgeGiSetPosition (midPoint newAPos newBPos) gi
-      --                       _ -> edge
-      --                     )
-      -- movedEdges = map moveE (graphGetEdges graph)
-      -- atualiza o grafo
-      -- mvng = (\g n -> changeNode g n)
-      -- mveg = (\g e -> changeEdge g e)
-      -- newSEdges = map (\edge -> fromMaybe edge $ find (==edge) movedEdges ) sEdges
-      -- newGraph = foldl mvng graph movedNodes
-      -- newGraph' = foldl mveg newGraph movedEdges
+      moveE = (\giMap edge -> let a = graphGetSrcFunc graph edge
+                                  b = graphGetDstFunc graph edge
+                                  getPos = \nid -> position . fromMaybe newNodeGI $ M.lookup nid movedNGIs
+                                  aPos = getPos a
+                                  bPos = getPos b
+                                  gi = fromMaybe newEdgeGI (M.lookup (edgeGetID edge) egiM)
+                                  (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
+                              in case (a == b, any (`elem` (map nodeGetID sNodes)) [a,b], centered gi) of
+                                  (True, True, _) -> M.insert (edgeGetID edge) (edgeGiSetPosition (xd,yd) gi) giMap
+                                  (False, True, True) -> M.insert (edgeGetID edge) (edgeGiSetPosition (midPoint aPos bPos) gi) giMap
+                                  _ -> giMap
+                                  )
+      movedEGIs = foldl moveE egiM (graphGetEdges graph)
 
 -- move as arestas selecionadas
 moveEdges:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
