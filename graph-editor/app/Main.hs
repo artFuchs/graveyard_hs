@@ -630,12 +630,11 @@ moveNode es (xold,yold) (xnew,ynew) = editorSetGraph newGraph' . editorSetSelect
                          in Node (nodeGetID node) (nodeGetInfo node) (nodeGiSetPosition newPos gi) )
       movedNodes = map moveN sNodes
       -- move as arestas que estão no ponto entre os nodos
-      moveE = (\edge -> let nullNode = Node 0 "" newNodeGI
-                            a = fromMaybe nullNode $ getSrcNode graph edge
+      moveE = (\edge -> let a = fromMaybe nullNode $ getSrcNode graph edge
                             b = fromMaybe nullNode $ getDstNode graph edge
-                            getMovedNode = (\node -> fromMaybe node $ find (\n -> n == node) movedNodes)
                             aPos = position. nodeGetGI $ a
                             bPos = position. nodeGetGI $ b
+                            getMovedNode = (\node -> fromMaybe node $ find (\n -> nodeGetID n == nodeGetID node) movedNodes)
                             newAPos = position. nodeGetGI $ getMovedNode a
                             newBPos = position. nodeGetGI $ getMovedNode b
                             (xe,ye) = cPosition . edgeGetGI $ edge
@@ -797,7 +796,7 @@ pasteClipBoard (cNodes, cEdges, src, dst)  es = editorSetSelected (newNodes,newE
         nodesDict = M.fromList $ zipWith (\n n'-> (nodeGetID n, n')) cNodes newNodes
         connections = map (\e -> applyPair (\x -> fromMaybe nullNode x) (M.lookup (src e) nodesDict, M.lookup (dst e) nodesDict)) cEdges
         newGraph' = foldl (\g (src,dst) -> insertEdge g src dst) newGraph connections
-        
+
 
 
 
@@ -807,7 +806,6 @@ pasteClipBoard (cNodes, cEdges, src, dst)  es = editorSetSelected (newNodes,newE
 -- *Novo Arquivo
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
 -- *Separar a estrutura do grafo das estruturas gráficas
--- *Corrigir movimento das arestas quando mover um nodo
 
 -- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
 -- *Melhorar menu de Propriedades
@@ -815,3 +813,4 @@ pasteClipBoard (cNodes, cEdges, src, dst)  es = editorSetSelected (newNodes,newE
 -- *Corrigir Zoom para ajustar o Pan quando ele for modificado
 -- *Copy/Paste/Cut
 -- *Corrigir arestas não sendo coladas com Cut/Paste
+-- *Corrigir movimento das arestas quando mover um nodo
