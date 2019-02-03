@@ -64,6 +64,9 @@ editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,gi,n,e,z,_) = (g,gi,n,e,z,p)
 
 
+getNodeGI nid giM = fromMaybe newNodeGI $ M.lookup nid giM
+getEdgeGI eid giM = fromMaybe newEdgeGI $ M.lookup eid giM
+
 main :: IO()
 main = do
   -- inicializa a biblioteca GTK
@@ -406,13 +409,12 @@ main = do
     let col = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
         graph = editorGetGraph es
         (nodes,edges) = editorGetSelected es
-        changeColor = (\n -> let nid = nodeGetID n
-                                 c = nodeGetInfo n
-                                 gi = nodeGiSetColor col $ nodeGetGI n
-                             in Node nid c gi)
-        newNodes = map changeColor nodes
-        newGraph = foldl (\g n -> changeNode g n) graph newNodes
-    modifyIORef st (\es -> editorSetGraph newGraph . editorSetSelectedNodes newNodes $ es)
+        (ngiM, egiM) = editorGetGI es
+        changeColor = (\giMap n -> let nid = nodeGetID n
+                                       gi = nodeGiSetColor col $ getNodeGI nid ngiM
+                                   in M.insert nid gi giMap)
+        newngiM = foldl changeColor ngiM nodes
+    modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
     widgetQueueDraw canvas
 
   onColorSet lineColorBtn $ do
@@ -421,19 +423,16 @@ main = do
     let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
         graph = editorGetGraph es
         (nodes,edges) = editorGetSelected es
-        changeNLC = (\n -> let nid = nodeGetID n
-                               c = nodeGetInfo n
-                               gi = nodeGiSetLineColor color $ nodeGetGI n
-                           in Node nid c gi )
-        newNodes = map changeNLC nodes
-        changeELC = (\e -> let eid = edgeGetID e
-                               c = edgeGetInfo e
-                               gi = edgeGiSetColor color $ edgeGetGI e
-                           in Edge eid c gi )
-        newEdges = map changeELC edges
-        newGraph = foldl (\g n -> changeNode g n) graph newNodes
-        newGraph' = foldl (\g e -> changeEdge g e) newGraph newEdges
-    modifyIORef st (\es -> editorSetGraph newGraph . editorSetSelected (newNodes,newEdges) $ es)
+        (ngiM, egiM) = editorGetGI es
+        changeNLC = (\giMap n -> let nid = nodeGetID n
+                                     gi = nodeGiSetLineColor color $ getNodeGI nid ngiM
+                                 in M.insert nid gi giMap)
+        newngiM = foldl changeNLC ngiM nodes
+        changeELC = (\giMap e -> let eid = edgeGetID e
+                                     gi = edgeGiSetColor color $ getEdgeGI eid egiM
+                                 in M.insert eid gi giMap)
+        newegiM = foldl changeELC egiM edges
+    modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
     widgetQueueDraw canvas
 
   radioCircle `on` toggled $ do
@@ -646,14 +645,14 @@ moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
       (deltaX, deltaY) = (xnew-xold, ynew-yold)
       -- move os nodos
       moveN = (\giMap node -> let nid = nodeGetID node
-                                  gi = fromMaybe newNodeGI $ M.lookup nid giMap
+                                  gi = getNodeGI nid giMap
                                   (ox, oy) = position gi
                               in M.insert nid (nodeGiSetPosition (ox+deltaX,oy+deltaY) gi) giMap )
       movedNGIs = foldl moveN ngiM sNodes
       -- move as arestas que estão no ponto entre os nodos
       moveE = (\giMap edge -> let a = graphGetSrcFunc graph edge
                                   b = graphGetDstFunc graph edge
-                                  getPos = \nid -> position . fromMaybe newNodeGI $ M.lookup nid movedNGIs
+                                  getPos = \nid -> position . getNodeGI nid $ movedNGIs
                                   aPos = getPos a
                                   bPos = getPos b
                                   gi = fromMaybe newEdgeGI (M.lookup (edgeGetID edge) egiM)
@@ -672,11 +671,11 @@ moveEdges es (xold,yold) (xnew,ynew) = editorSetGI (ngi,newegi) es
         (sNodes,sEdges) = editorGetSelected es
         (deltaX, deltaY) = (xnew-xold,ynew-yold)
         (ngi,egi) = editorGetGI es
-        moveE = (\egiM edge -> let gi = fromMaybe newEdgeGI $ M.lookup (edgeGetID edge) egi
+        moveE = (\egiM edge -> let gi = getEdgeGI (edgeGetID edge) egi
                                    (xe, ye) = cPosition gi
                                    newPos = (xe+deltaX, ye+deltaY)
-                                   srcPos = position . fromMaybe newNodeGI $ M.lookup (graphGetSrcFunc graph edge) ngi
-                                   dstPos = position . fromMaybe newNodeGI $ M.lookup (graphGetDstFunc graph edge) ngi
+                                   srcPos = position . getNodeGI (graphGetSrcFunc graph edge) $ ngi
+                                   dstPos = position . getNodeGI (graphGetDstFunc graph edge) $ ngi
                                    mustCenter = pointLineDistance newPos srcPos dstPos < 10
                                in M.insert (edgeGetID edge) (edgeGiSetCentered mustCenter . edgeGiSetPosition newPos $ gi) egiM)
         newegi = foldl moveE egi sEdges
@@ -733,9 +732,12 @@ createEdges es dstNodes = editorSetGraph newGraph . editorSetGI (ngi, newegi) . 
 
 -- deleta os nodos e arestas selecionados no grafo
 deleteSelected:: EditorState -> EditorState
-deleteSelected es = editorSetSelected ([],[]) . editorSetGraph newGraph $ es
+deleteSelected es = editorSetSelected ([],[]) . editorSetGI (newngiM, newegiM) . editorSetGraph newGraph $ es
   where graph = editorGetGraph es
         (nodes,edges) = editorGetSelected es
+        (ngiM, egiM) = editorGetGI es
+        newngiM = foldl (\giM n -> M.delete n giM) ngiM (map nodeGetID nodes)
+        newegiM = foldl (\giM n -> M.delete n giM) egiM (map edgeGetID edges)
         graph' = foldl (\g n -> removeNode g n) graph nodes
         newGraph = foldl (\g e -> removeEdge g e) graph' edges
 
