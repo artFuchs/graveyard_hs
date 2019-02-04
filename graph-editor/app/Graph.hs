@@ -167,14 +167,9 @@ changeNode (Graph iD src dst es ns) n =
 insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 = Graph iD src' dst' (ne:es) ns
   where neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
-        pos1 = position . nodeGetGI $ n1
-        pos2 = position . nodeGetGI $ n2
-        gi = if nodeGetID n1 == nodeGetID n2
-         then edgeGiSetCentered False . edgeGiSetPosition (fst pos1 + 30, snd pos1 - 30) $ newEdgeGI
-         else edgeGiSetPosition (midPoint pos1 pos2) newEdgeGI
+        gi = newEdgeGI
         ne = Edge neID "" gi
-        nID1 = nodeGetID n1
-        nID2 = nodeGetID n2
+        (nID1,nID2) = applyPair nodeGetID (n1,n2)
         src' = \e -> if edgeGetID e == neID then nID1 else src e
         dst' = \e -> if edgeGetID e == neID then nID2 else dst e
 

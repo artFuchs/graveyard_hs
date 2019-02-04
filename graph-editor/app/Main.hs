@@ -179,7 +179,8 @@ main = do
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
             return (jointSN, jointSE)
         widgetQueueDraw canvas
-        updatePropMenu (sNode, sEdges) propWidgets propBoxes
+        es <- readIORef st
+        updatePropMenu es propWidgets propBoxes
       -- clique com o botão direito: cria nodos e insere edges entre nodos
       RightButton -> liftIO $ do
         let g = editorGetGraph es
@@ -199,7 +200,8 @@ main = do
                     modifyIORef st (\es -> createEdges es dstNode)
                     return dstNode
         widgetQueueDraw canvas
-        updatePropMenu (sNode,[]) propWidgets propBoxes
+        es <- readIORef st
+        updatePropMenu es propWidgets propBoxes
       _           -> return ()
 
     return True
@@ -256,8 +258,9 @@ main = do
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2) , abs w, abs h)) $ graphGetNodes graph
                 sEdges = filter (\e -> let pos = cPosition $ fromMaybe newEdgeGI (M.lookup (edgeGetID e) egi)
                                    in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
-            modifyIORef st (editorSetGraph graph . editorSetSelected (sNodes, sEdges))
-            updatePropMenu (sNodes, sEdges) propWidgets propBoxes
+                newEs = editorSetGraph graph . editorSetSelected (sNodes, sEdges) $ es
+            writeIORef st es
+            updatePropMenu newEs propWidgets propBoxes
           ((n,e), Nothing) -> modifyIORef st (adjustEdges)
           (_,_) -> return ()
       _ -> return ()
@@ -462,8 +465,10 @@ main = do
 
 -- Callbacks -------------------------------------------------------------------
 -- atualização do menu de propriedades -----------------------------------------
-updatePropMenu :: ([Node],[Edge]) -> (Entry, Entry, ColorButton, ColorButton, [RadioButton]) -> (HBox, Frame)-> IO ()
-updatePropMenu (nodes,edges) (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxColor, frameShape) = do
+updatePropMenu :: EditorState -> (Entry, Entry, ColorButton, ColorButton, [RadioButton]) -> (HBox, Frame)-> IO ()
+updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxColor, frameShape) = do
+  let (nodes,edges) = editorGetSelected es
+      (ngiM,egiM) = editorGetGI es
   case (length nodes, length edges) of
     (0,0) -> do
       entrySetText entryID ""
@@ -473,14 +478,15 @@ updatePropMenu (nodes,edges) (entryID, entryName, colorBtn, lcolorBtn, radioShap
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
     (1,0) -> do
-      let iD = show . nodeGetID $ (nodes!!0)
+      let iD = nodeGetID $ (nodes!!0)
           name = nodeGetInfo $ (nodes!!0)
-          (r,g,b) = fillColor . nodeGetGI $ (nodes!!0)
-          (r',g',b') = lineColor . nodeGetGI $ (nodes!!0)
+          gi = getNodeGI iD ngiM
+          (r,g,b) = fillColor gi
+          (r',g',b') = lineColor gi
           nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
-          nodeShape = shape . nodeGetGI $ (nodes!!0)
-      entrySetText entryID iD
+          nodeShape = shape gi
+      entrySetText entryID (show iD)
       entrySetText entryName name
       colorButtonSetColor colorBtn nodeColor
       colorButtonSetColor lcolorBtn nodeLineC
@@ -492,11 +498,12 @@ updatePropMenu (nodes,edges) (entryID, entryName, colorBtn, lcolorBtn, radioShap
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
     (0,1) -> do
-      let iD = show . edgeGetID $ (edges!!0)
+      let iD = edgeGetID $ (edges!!0)
           name = edgeGetInfo (edges!!0)
-          (r,g,b) = color . edgeGetGI $ (edges!!0)
+          gi = getEdgeGI iD egiM
+          (r,g,b) = color gi
           edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
-      entrySetText entryID iD
+      entrySetText entryID (show iD)
       entrySetText entryName name
       colorButtonSetColor lcolorBtn edgeColor
 
@@ -682,16 +689,16 @@ moveEdges es (xold,yold) (xnew,ynew) = editorSetGI (ngi,newegi) es
 
 -- ajusta a posição das edges selecionadas caso a propriedade centered seja True
 adjustEdges:: EditorState -> EditorState
-adjustEdges es = editorSetGraph newGraph es
+adjustEdges es = editorSetGI (ngiM,newEgiM) es
   where graph = editorGetGraph es
-        adjust = (\e -> let nullNode = Node 0 "" newNodeGI
-                            srcPos = position . nodeGetGI . fromMaybe nullNode $ getSrcNode graph e
-                            dstPos = position . nodeGetGI . fromMaybe nullNode $ getDstNode graph e
-                        in if centered (edgeGetGI e)
-                          then Edge (edgeGetID e) (edgeGetInfo e) (edgeGiSetCentered True . edgeGiSetPosition (midPoint srcPos dstPos) $ edgeGetGI e)
-                          else e)
-        newEdges = map adjust (editorGetSelectedEdges es)
-        newGraph = foldl (\g e -> changeEdge g e) graph newEdges
+        (ngiM,egiM) = editorGetGI es
+        adjust = (\giM e -> let srcPos = position $ getNodeGI (graphGetSrcFunc graph e) ngiM
+                                dstPos = position $ getNodeGI (graphGetDstFunc graph e) ngiM
+                                gi = getEdgeGI (edgeGetID e) egiM
+                        in if centered gi
+                          then M.insert (edgeGetID e) (edgeGiSetPosition (midPoint srcPos dstPos) gi) giM
+                          else giM)
+        newEgiM = foldl adjust egiM (editorGetSelectedEdges es)
 
 
 
@@ -702,30 +709,33 @@ createNode st pos context shape = do
   es <- readIORef st
   let graph = editorGetGraph es
       (nodes, edges) = editorGetSelected es
-      maxnode = if length (graphGetNodes graph) > 0
-                  then maximum (graphGetNodes graph)
-                  else Node 0 "" newNodeGI
-      nID = 1 + nodeGetID maxnode
+      maxNID = if length (graphGetNodes graph) > 0
+                  then nodeGetID $ maximum (graphGetNodes graph)
+                  else 0
+      nID = 1 + maxNID
+      newNode = Node nID content newNodeGI
+      newGraph = insertNode graph newNode
       content = ("node " ++ show nID)
   dim <- getStringDims content context
-  let newNode = Node nID content $ nodeGiSetShape shape . nodeGiSetDims dim . nodeGiSetPosition pos $ newNodeGI
-      newGraph = insertNode graph newNode
-      newGI = (M.insert nID (nodeGetGI newNode) $ fst (editorGetGI es), snd (editorGetGI es))
-  writeIORef st $ editorSetGI newGI . editorSetGraph newGraph . editorSetSelected ([newNode], []) $ es
+  let newNgi = nodeGiSetShape shape . nodeGiSetDims dim . nodeGiSetPosition pos $ newNodeGI
+      newGIM = (M.insert nID newNgi $ fst (editorGetGI es), snd (editorGetGI es))
+  writeIORef st $ editorSetGI newGIM . editorSetGraph newGraph . editorSetSelected ([newNode], []) $ es
 
 -- cria e insere uma nova edge no grafo
 createEdges:: EditorState -> [Node] -> EditorState
-createEdges es dstNodes = editorSetGraph newGraph . editorSetGI (ngi, newegi) . editorSetSelected (dstNodes,[]) $ es
+createEdges es dstNodes = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected (dstNodes,[]) $ es
   where selectedNodes = editorGetSelectedNodes es
         graph = editorGetGraph es
-        (ngi,egi) = editorGetGI es
-        (newGraph, newegi) = if length dstNodes == 1
+        (ngiM,egiM) = editorGetGI es
+        (newGraph, newegiM) = if length dstNodes == 1
           then foldl (\(g,giM) n -> let ng = insertEdge g n (dstNodes!!0)
                                         e = (graphGetEdges ng)!!0
                                         eid = edgeGetID e
-                                        negi = edgeGetGI e
-                                    in (ng, M.insert eid negi giM)) (graph, egi) selectedNodes
-          else (graph,egi)
+                                        getPos = (\n -> position . getNodeGI (nodeGetID n) $ ngiM)
+                                        (srcPos,dstPos) = applyPair getPos (n,dstNodes!!0)
+                                        negi = edgeGiSetPosition (midPoint srcPos dstPos) newEdgeGI
+                                    in (ng, M.insert eid negi giM)) (graph, egiM) selectedNodes
+          else (graph,egiM)
 
 
 
@@ -748,20 +758,24 @@ renameSelected state name context = do
   dim <- getStringDims name context
   let graph = editorGetGraph es
       (nodes,edges) = editorGetSelected es
-  let renamedNodes = map (\n -> Node (nodeGetID n) name (nodeGiSetDims dim . nodeGetGI $ n)) nodes
+      (ngiM,egiM) = editorGetGI es
+  let renamedNodes = map (\n -> Node (nodeGetID n) name newNodeGI) nodes
+      newNgiM = M.mapWithKey (\k gi -> if k `elem` (map nodeGetID nodes) then nodeGiSetDims dim gi else gi) ngiM
       renamedEdges = map (\e -> Edge (edgeGetID e) name $ edgeGetGI e) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
-      newEs = editorSetGraph newGraph' . editorSetSelected (renamedNodes, renamedEdges) $ es
+      newEs = editorSetGI (newNgiM,egiM) . editorSetGraph newGraph' . editorSetSelected (renamedNodes, renamedEdges) $ es
   writeIORef state newEs
 
 -- muda a forma de um nodo
 changeNodeShape :: EditorState -> NodeShape -> EditorState
-changeNodeShape es s = editorSetGraph newGraph . editorSetSelectedNodes newNodes $ es
+changeNodeShape es s = editorSetGI (newNgiM, egiM) $ es
   where
       nodes = editorGetSelectedNodes es
-      newNodes = map (\n -> Node (nodeGetID n) (nodeGetInfo n) (nodeGiSetShape s $ nodeGetGI n)) nodes
-      newGraph = foldl (\g n -> changeNode g n) (editorGetGraph es) newNodes
+      (ngiM, egiM) = editorGetGI es
+      newNgiM = M.mapWithKey (\k gi -> if k `elem` (map nodeGetID nodes) then nodeGiSetShape s gi else gi) ngiM
+
+
 
 -- função auxiliar para createNode e renameSelected
 -- dado um texto, adquire o tamanho da bounding box do texto para renderiza-lo
@@ -801,15 +815,16 @@ applyRedo changes st = do
 
 -- Copy / Paste / Cut ----------------------------------------------------------
 pasteClipBoard :: ([Node],[Edge],Edge->Int, Edge->Int) -> EditorState -> EditorState
-pasteClipBoard (cNodes, cEdges, src, dst)  es = editorSetSelected (newNodes,newEdges) . editorSetGraph newGraph' $ es
+pasteClipBoard (cNodes, cEdges, src, dst)  es = es -- editorSetSelected (newNodes,newEdges) . editorSetGraph newGraph' $ es
   where g = editorGetGraph es
+        (ngiM, egiM) = editorGetGI es
         minNID = let ns = graphGetNodes g in if length ns > 0 then nodeGetID $ maximum ns else 0
         minEID = let es = graphGetEdges g in if length es > 0 then edgeGetID $ maximum es else 0
-        minX = minimum $ map (fst . position . nodeGetGI) cNodes ++ map (fst . cPosition . edgeGetGI) cEdges
-        minY = minimum $ map (snd . position . nodeGetGI) cNodes ++ map (snd . cPosition . edgeGetGI) cEdges
+        minX = minimum $ map (\n -> fst . position . getNodeGI (nodeGetID n) $ ngiM) cNodes ++ map (\e -> fst . cPosition . getEdgeGI (edgeGetID e) $ egiM) cEdges
+        minY = minimum $ map (\n -> snd . position . getNodeGI (nodeGetID n) $ ngiM) cNodes ++ map (\e -> snd . cPosition . getEdgeGI (edgeGetID e) $ egiM) cEdges
         upd (a,b) = (20+a-minX, 20+b-minY)
         nIDs = map (+minNID) (let l = length cNodes in take l [l,(l - 1)..1])
-        nPos = map (upd . position . nodeGetGI) cNodes
+        nPos = map (\n -> upd . position . getNodeGI (nodeGetID n) $ ngiM) cNodes
         newNodes = zipWith3 (\n nid pos -> Node nid (nodeGetInfo n) (nodeGiSetPosition pos $ nodeGetGI n)) cNodes nIDs nPos
         newGraph = foldl (insertNode) g newNodes
         eIDs = map (+minEID) (take (length cEdges) [1..])

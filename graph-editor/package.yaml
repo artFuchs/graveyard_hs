@@ -39,6 +39,7 @@ executables:
     - cairo
     - pango
     - text
+    - containers
 
 tests:
   graph-editor-test:
