@@ -165,8 +165,9 @@ changeNode (Graph iD src dst es ns) n =
 
 -- insere uma aresta no grafo
 insertEdge :: Graph -> Node -> Node -> Graph
-insertEdge (Graph iD src dst es ns) n1 n2 = Graph iD src' dst' (ne:es) ns
-  where neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
+insertEdge (Graph iD src dst es ns) n1 n2 = if haveNodes then Graph iD src' dst' (ne:es) ns else Graph iD src dst es ns
+  where haveNodes = all (`elem` ns) [n1,n2]
+        neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
         gi = newEdgeGI
         ne = Edge neID "" gi
         (nID1,nID2) = applyPair nodeGetID (n1,n2)
