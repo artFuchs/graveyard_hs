@@ -21,46 +21,37 @@ nullEdge = Edge 0 ""
 -- | estado do editor de grafos
 --   contém todas as informações necssárias para desenhar o grafo
 -- (grafo, nodos selecionados, arestas selecionadas, zoom, Pan)
-type EditorState = (Graph, GraphicalInfo, [Node], [Edge], Double, (Double,Double))
+type EditorState = (Graph, GraphicalInfo, ([Node],[Edge]) , Double, (Double,Double))
 
 editorGetGraph :: EditorState -> Graph
-editorGetGraph (g,_,_,_,_,_) = g
+editorGetGraph (g,_,_,_,_) = g
 
 editorSetGraph :: Graph -> EditorState -> EditorState
-editorSetGraph g (_,gi,n,e,z,p) = (g,gi,n,e,z,p)
+editorSetGraph g (_,gi,s,z,p) = (g,gi,s,z,p)
 
 editorGetGI :: EditorState -> GraphicalInfo
-editorGetGI (_,gi,_,_,_,_) = gi
+editorGetGI (_,gi,_,_,_) = gi
 
 editorSetGI :: GraphicalInfo -> EditorState -> EditorState
-editorSetGI gi (g,_,n,e,z,p) = (g,gi,n,e,z,p)
+editorSetGI gi (g,_,s,z,p) = (g,gi,s,z,p)
 
 editorGetSelected :: EditorState -> ([Node], [Edge])
-editorGetSelected (_,_,n,e,_,_) = (n,e)
+editorGetSelected (_,_,s,_,_) = s
 
 editorSetSelected :: ([Node], [Edge]) -> EditorState -> EditorState
-editorSetSelected (n,e) (g,gi,_,_,z,p) = (g,gi,n,e,z,p)
-
-editorGetSelectedNodes :: EditorState -> [Node]
-editorGetSelectedNodes (_,_,n,_,_,_) = n
-
-editorSetSelectedNodes :: [Node] -> EditorState -> EditorState
-editorSetSelectedNodes n (g,gi,_,e,z,p) = (g,gi,n,e,z,p)
-
-editorGetSelectedEdges :: EditorState -> [Edge]
-editorGetSelectedEdges (_,_,_,e,_,_) = e
+editorSetSelected s (g,gi,_,z,p) = (g,gi,s,z,p)
 
 editorGetZoom :: EditorState -> Double
-editorGetZoom (_,_,_,_,z,_) = z
+editorGetZoom (_,_,_,z,_) = z
 
 editorSetZoom :: Double -> EditorState -> EditorState
-editorSetZoom z (g,gi,n,e,_,p) = (g,gi,n,e,z,p)
+editorSetZoom z (g,gi,s,_,p) = (g,gi,s,z,p)
 
 editorGetPan :: EditorState -> (Double,Double)
-editorGetPan (_,_,_,_,_,p) = p
+editorGetPan (_,_,_,_,p) = p
 
 editorSetPan :: (Double,Double) -> EditorState -> EditorState
-editorSetPan p (g,gi,n,e,z,_) = (g,gi,n,e,z,p)
+editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
 
 
 getNodeGI nid giM = fromMaybe newNodeGI $ M.lookup nid giM
@@ -83,7 +74,7 @@ main = do
   containerAdd window vBoxMain
 
   -- cria o menu
-  (maybeMenubar,opn,svn,udo,rdo) <- buildMaybeMenubar
+  (maybeMenubar,new,opn,svn,udo,rdo) <- buildMaybeMenubar
   case maybeMenubar of
     Just x -> boxPackStart vBoxMain x PackNatural 0
     Nothing -> return ()
@@ -115,7 +106,7 @@ main = do
   widgetShowAll window
 
   -- inicializa estado do editor -----------------------------------------------
-  st <- newIORef (emptyGraph "New", (M.empty, M.empty), [], [], 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
+  st <- newIORef (emptyGraph "New", (M.empty, M.empty), ([], []), 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
   squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
   changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
@@ -189,12 +180,12 @@ main = do
               Just nid -> (fromMaybe nullNode (getNodeByID g nid)) : []
         context <- widgetGetPangoContext canvas
         stackUndo changes es
-        sNode <- if length dstNode == 0
+        sNode <- if null dstNode
                   then do
                     shape <- readIORef actualShape
                     createNode st (x',y') context shape
                     es <- readIORef st
-                    return $ editorGetSelectedNodes es
+                    return $ fst (editorGetSelected es)
                   else do
                     modifyIORef st (\es -> createEdges es dstNode)
                     return dstNode
@@ -321,6 +312,10 @@ main = do
                                      edges = graphGetEdges g
                                  in editorSetSelected (nodes,edges) es)
           widgetQueueDraw canvas
+        -- CTRL + N : create a new file
+        (True, False, "n") -> do
+          modifyIORef st (\es -> (emptyGraph "", (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
+          widgetQueueDraw canvas
         -- CTRL + S : save file
         (True, False, "s") -> do
           es <- readIORef st
@@ -331,7 +326,7 @@ main = do
           mg <- loadGraph window
           case mg of
             Just g -> do
-              writeIORef st (g,(M.empty,M.empty),[],[],1.0,(0.0,0.0))
+              writeIORef st (g,(M.empty,M.empty),([],[]),1.0,(0.0,0.0))
               widgetQueueDraw canvas
             _      -> return ()
 
@@ -363,11 +358,15 @@ main = do
     return True
 
   -- tratamento de eventos -- menu toolbar -------------------------------------
+  new `on` actionActivated $ do
+    modifyIORef st (\es -> (emptyGraph "", (M.empty, M.empty), ([],[]),1.0,(0.0,0.0)))
+    widgetQueueDraw canvas
+
   opn `on` actionActivated $ do
     mg <- loadGraph window
     case mg of
       Just g -> do
-        writeIORef st (g,(M.empty,M.empty),[],[],1.0,(0.0,0.0))
+        writeIORef st (g,(M.empty,M.empty),([],[]),1.0,(0.0,0.0))
         widgetQueueDraw canvas
       _      -> return ()
 
@@ -584,7 +583,7 @@ loadGraph window = do
 
 -- atualização do desenho do grafo ---------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
-drawGraph (g, (nGI,eGI), sNodes, sEdges, z, (px,py)) sq canvas = do
+drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
   scale z z
   translate px py
@@ -693,7 +692,7 @@ adjustEdges es = editorSetGI (ngiM,newEgiM) es
                         in if centered gi
                           then M.insert (edgeGetID e) (edgeGiSetPosition (midPoint srcPos dstPos) gi) giM
                           else giM)
-        newEgiM = foldl adjust egiM (editorGetSelectedEdges es)
+        newEgiM = foldl adjust egiM (snd . editorGetSelected $ es)
 
 
 
@@ -719,7 +718,7 @@ createNode st pos context shape = do
 -- cria e insere uma nova edge no grafo
 createEdges:: EditorState -> [Node] -> EditorState
 createEdges es dstNodes = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected (dstNodes,[]) $ es
-  where selectedNodes = editorGetSelectedNodes es
+  where selectedNodes = fst $ editorGetSelected es
         graph = editorGetGraph es
         (ngiM,egiM) = editorGetGI es
         (newGraph, newegiM) = if length dstNodes == 1
@@ -766,7 +765,7 @@ renameSelected state name context = do
 changeNodeShape :: EditorState -> NodeShape -> EditorState
 changeNodeShape es s = editorSetGI (newNgiM, egiM) $ es
   where
-      nodes = editorGetSelectedNodes es
+      nodes = fst $ editorGetSelected es
       (ngiM, egiM) = editorGetGI es
       newNgiM = M.mapWithKey (\k gi -> if k `elem` (map nodeGetID nodes) then nodeGiSetShape s gi else gi) ngiM
 
@@ -851,11 +850,11 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 -- Tarefas ---------------------------------------------------------------------
 -- *Estilos diferentes para as arestas
--- *Novo Arquivo
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
+-- *Criar um editor de subgrafos
 
 -- Progresso -------------------------------------------------------------------
--- *Separar a estrutura do grafo das estruturas gráficas
+
 
 -- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
 -- *Melhorar menu de Propriedades
@@ -865,3 +864,5 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Corrigir arestas não sendo coladas com Cut/Paste
 -- *Corrigir movimento das arestas quando mover um nodo
 -- *corrigir bug no copiar/colar que ocorre quando a seleção é movida antes de copiar
+-- *Novo Arquivo
+-- *Separar a estrutura do grafo das estruturas gráficas
