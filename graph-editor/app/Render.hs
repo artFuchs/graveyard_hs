@@ -11,6 +11,8 @@ import qualified Data.Text as T
 import Data.List
 import GraphicalInfo
 import Helper
+import Control.Monad
+
 
 -- desenha um nodo, com seu texto
 renderNode :: NodeGI -> String -> Bool -> PangoContext -> Render ()
@@ -90,7 +92,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
         NCircle ->
           let d1 = pointDistance (x1,y1) (xe,ye)
               (vx1,vy1) = ((xe-x1)/d1 , (ye-y1)/d1)
-              n1 = 3 + (max pw ph)/2
+              n1 = (max pw ph + 1)/2
           in (x1 + vx1*n1, y1 + vy1*n1)
         NRect -> intersectLineRect (xe,ye) (x1,y1,pw+3,ph+3)
         NQuad -> let l = max pw ph in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
@@ -98,7 +100,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
         NCircle ->
           let d2 = pointDistance (xe,ye) (x2,y2)
               (vx2,vy2) = ((x2-xe)/d2 , (y2-ye)/d2)
-              n2 = 5 + (max pw2 ph2)/2
+              n2 = (max pw2 ph2 + 1)/2
           in (x2 - vx2*n2, y2 - vy2*n2)
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
         NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
@@ -109,10 +111,11 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
 
   -- desenha uma linha representando a aresta
   setSourceRGB r g b
-  moveTo x1' y1'
-  lineTo xe  ye
-  lineTo x2' y2'
-  stroke
+  --moveTo x1' y1'
+  --lineTo xe  ye
+  --lineTo x2' y2'
+  drawPointedLine (x1',y1') (xe,ye)
+  drawPointedLine (xe,ye) (x2',y2')
   -- desenha uma seta para indicar qual é o nó de destino
   let a = (angle (xe,ye) (x2,y2))
       d = pointDistance (xe,ye) (x2,y2)
@@ -123,7 +126,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
   lineTo xa2 ya2
   lineTo xa3 ya3
   lineTo xa1 ya1
-  --arc x2' y2' 3 0 (2*pi)
+  fill
   -- desenha um circulo para mostar o ponto de controle
   arc xe  ye 2 0 (2*pi)
   fill
@@ -158,3 +161,19 @@ intersectLineRect (lx,ly) (rx,ry,rw,rh) = (rx + t*(lx - rx), ry + t*(ly - ry))
   where t = min tx ty
         tx = (rw/2) / abs (lx - rx)
         ty = (rh/2) / abs (ly - ry)
+
+
+drawPointedLine :: (Double,Double) -> (Double,Double) -> Render ()
+drawPointedLine p1@(x1,y1) p2@(x2,y2)= do
+  let dist = pointDistance p1 p2
+      pointsN = dist/4 :: Double
+      linePoints = [0,(1/pointsN)..1]
+  forM linePoints (\t -> drawPointInLine p1 p2 t)
+  return ()
+
+drawPointInLine :: (Double,Double) -> (Double,Double) -> Double -> Render ()
+drawPointInLine p0@(x0,y0) p1@(x1,y1) t = do
+  let x = x0 + t * (x1 - x0)
+      y = y0 + t * (y1 - y0)
+  arc x y 1 0 (2*pi)
+  fill
