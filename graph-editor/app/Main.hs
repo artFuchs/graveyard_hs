@@ -345,30 +345,20 @@ main = do
         -- CTRL + C/V/X : copy/paste/cut
         (True, False, "c") -> do
           es <- readIORef st
-          let (ns,eds) = editorGetSelected es
-              g = editorGetGraph es
-              (ngiM, egiM) = editorGetGI es
-              cg = foldl (\g n -> insertNode g n) (emptyGraph "") ns
-              connPairs = map (\e -> applyPair (fromMaybe nullNode . getNodeByID g) (graphGetSrcFunc g e, graphGetDstFunc g e)) eds
-              cg' = foldl (\g (src,dst) -> insertEdge g src dst) cg connPairs
-              ngiM' = M.filterWithKey (\k _ -> k `elem` (map nodeGetID ns)) ngiM
-              egiM' = M.filterWithKey (\k _ -> k `elem` (map edgeGetID eds)) egiM
-          writeIORef clipboard $ (cg', (ngiM',egiM'))
+          writeIORef clipboard $ copySelected es
         (True, False, "v") -> do
           es <- readIORef st
           clip <- readIORef clipboard
           stackUndo changes es
           modifyIORef st (pasteClipBoard clip)
+
           widgetQueueDraw canvas
-        -- (True, False, "x") -> do
-        --   es <- readIORef st
-        --   let (n,e) = editorGetSelected es
-        --       g = editorGetGraph es
-        --       (src,dst) = (graphGetSrcFunc g, graphGetDstFunc g)
-        --   writeIORef clipboard $ (n,e,src,dst)
-        --   modifyIORef st (\es -> deleteSelected es)
-        --   stackUndo changes es
-        --   widgetQueueDraw canvas
+        (True, False, "x") -> do
+          es <- readIORef st
+          writeIORef clipboard $ copySelected es
+          modifyIORef st (\es -> deleteSelected es)
+          stackUndo changes es
+          widgetQueueDraw canvas
         _       -> return ()
 
     return True
@@ -670,9 +660,9 @@ moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
                                   bPos = getPos b
                                   gi = fromMaybe newEdgeGI (M.lookup (edgeGetID edge) egiM)
                                   (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
-                              in case (a == b, any (`elem` (map nodeGetID sNodes)) [a,b], centered gi) of
-                                  (True, True, _) -> M.insert (edgeGetID edge) (edgeGiSetPosition (xd,yd) gi) giMap
-                                  (False, True, True) -> M.insert (edgeGetID edge) (edgeGiSetPosition (midPoint aPos bPos) gi) giMap
+                              in case (edgeGetID edge `elem` (map edgeGetID sEdges), a == b, any (`elem` (map nodeGetID sNodes)) [a,b], centered gi) of
+                                  (False, True, True, _) -> M.insert (edgeGetID edge) (edgeGiSetPosition (xd,yd) gi) giMap
+                                  (False, False, True, True) -> M.insert (edgeGetID edge) (edgeGiSetPosition (midPoint aPos bPos) gi) giMap
                                   _ -> giMap
                                   )
       movedEGIs = foldl moveE egiM (graphGetEdges graph)
@@ -767,7 +757,7 @@ renameSelected state name context = do
       (ngiM,egiM) = editorGetGI es
   let renamedNodes = map (\n -> Node (nodeGetID n) name newNodeGI) nodes
       newNgiM = M.mapWithKey (\k gi -> if k `elem` (map nodeGetID nodes) then nodeGiSetDims dim gi else gi) ngiM
-      renamedEdges = map (\e -> Edge (edgeGetID e) name $ edgeGetGI e) edges
+      renamedEdges = map (\e -> Edge (edgeGetID e) name newEdgeGI) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
       newEs = editorSetGI (newNgiM,egiM) . editorSetGraph newGraph' . editorSetSelected (renamedNodes, renamedEdges) $ es
@@ -807,7 +797,6 @@ applyUndo changes st = do
       (nur, nes) = apply ur es
   writeIORef changes nur
   writeIORef st nes
-  putStrLn "undo"
 
 applyRedo :: IORef ([Graph],[Graph]) -> IORef EditorState -> IO ()
 applyRedo changes st = do
@@ -822,52 +811,65 @@ applyRedo changes st = do
 
 
 
+
+grUnion :: Graph -> Graph -> Graph
+grUnion g1 g2 = g3
+  where
+    -- mudar ids dos nodos
+    maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
+    nodesG2 = graphGetNodes g2
+    newNids = map (+maxNid) (let l = length nodesG2 in [1..l])
+    newNodesMap = M.fromList $ zipWith (\n nid -> (nodeGetID n, Node nid (nodeGetInfo n) newNodeGI) ) nodesG2 newNids
+    -- mudar funções das edges considerando os novos ids
+    connsG2 = map (\e -> (graphGetSrcFunc g2 e, graphGetDstFunc g2 e)) (graphGetEdges g2)
+    connsNew = map (\conn -> applyPair (\nid -> M.findWithDefault nullNode nid newNodesMap) conn) connsG2
+    -- inserir nodos
+    g1' = foldl insertNode g1 (M.elems newNodesMap)
+    -- inserir edges
+    g3 = foldl (\g conn -> insertEdge g (fst conn) (snd conn)) g1' connsNew
+
+
+
+diagrUnion :: (Graph, GraphicalInfo) -> (Graph, GraphicalInfo) -> (Graph, GraphicalInfo)
+diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
+  where
+    g3 = grUnion g1 g2
+    maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
+    maxEid = let es = graphGetEdges g1 in if null es then 0 else edgeGetID $ maximum es
+    nsG2 = graphGetNodes g2
+    esG2 = graphGetEdges g2
+    newNids = map (+maxNid) (let l = length nsG2 in [1..l])
+    ngiM2' = M.fromList $ zip newNids (M.elems ngiM2)
+    ngiM3 = M.union ngiM1 ngiM2'
+    newEids = map (+maxEid) (let l = length esG2 in [1..l])
+    egiM2' = M.fromList $ zip newEids (M.elems egiM2)
+    egiM3 = M.union egiM1 egiM2'
+
+
 -- Copy / Paste / Cut ----------------------------------------------------------
+copySelected :: EditorState -> (Graph, GraphicalInfo)
+copySelected  es = (cg',(ngiM',egiM'))
+  where
+    (ns,eds) = editorGetSelected es
+    g = editorGetGraph es
+    (ngiM, egiM) = editorGetGI es
+    cg = foldl (\g n -> insertNode g n) (emptyGraph "") ns
+    connPairs = map (\e -> applyPair (fromMaybe nullNode . getNodeByID g) (graphGetSrcFunc g e, graphGetDstFunc g e)) eds
+    cg' = foldl (\g (src,dst) -> insertEdge g src dst) cg connPairs
+    ngiM' = M.filterWithKey (\k _ -> k `elem` (map nodeGetID ns)) ngiM
+    egiM' = M.filterWithKey (\k _ -> k `elem` (map edgeGetID eds)) egiM
+
 pasteClipBoard :: (Graph, GraphicalInfo) -> EditorState -> EditorState
-pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,egiM) . editorSetGraph newGraph . editorSetSelected (newNodes, [])$ es
-  where graph = editorGetGraph es
-        maxN = let ns = graphGetNodes graph in if null ns then 0 else nodeGetID $ maximum ns
-        maxE = let es = graphGetEdges graph in if null es then 0 else edgeGetID $ maximum es
-        cNodes = graphGetNodes cGraph
-        newNids = map (+maxN) (let l = length cNodes in take l [l,(l - 1)..1])
-        newNodes = zipWith (\n nid -> Node nid (nodeGetInfo n) newNodeGI) cNodes newNids
-        newGraph = foldl (insertNode) graph newNodes
-
-
-        (ngiM, egiM) = editorGetGI es
-        minX = minimum $ map (\n -> fst . position . getNodeGI (nodeGetID n) $ cNgiM) cNodes
-        minY = minimum $ map (\n -> snd . position . getNodeGI (nodeGetID n) $ cNgiM) cNodes
-        upd (a,b) = (20+a-minX, 20+b-minY)
-        cNgiM' = M.fromList $ zip newNids (M.elems cNgiM)
-        cNgiM'' = M.map (\gi -> nodeGiSetPosition (upd $ position gi) gi) cNgiM'
-        newngiM = M.union ngiM cNgiM''
-
-
-
-
-
-
---
--- pasteClipBoard :: ([Node],[Edge],Edge->Int, Edge->Int) -> EditorState -> EditorState
--- pasteClipBoard (cNodes, cEdges, src, dst)  es = es -- editorSetSelected (newNodes,newEdges) . editorSetGraph newGraph' $ es
---   where g = editorGetGraph es
---         (ngiM, egiM) = editorGetGI es
---         minNID = let ns = graphGetNodes g in if length ns > 0 then nodeGetID $ maximum ns else 0
---         minEID = let es = graphGetEdges g in if length es > 0 then edgeGetID $ maximum es else 0
---         minX = minimum $ map (\n -> fst . position . getNodeGI (nodeGetID n) $ ngiM) cNodes ++ map (\e -> fst . cPosition . getEdgeGI (edgeGetID e) $ egiM) cEdges
---         minY = minimum $ map (\n -> snd . position . getNodeGI (nodeGetID n) $ ngiM) cNodes ++ map (\e -> snd . cPosition . getEdgeGI (edgeGetID e) $ egiM) cEdges
---         upd (a,b) = (20+a-minX, 20+b-minY)
---         nIDs = map (+minNID) (let l = length cNodes in take l [l,(l - 1)..1])
---         nPos = map (\n -> upd . position . getNodeGI (nodeGetID n) $ ngiM) cNodes
---         newNodes = zipWith3 (\n nid pos -> Node nid (nodeGetInfo n) (nodeGiSetPosition pos $ nodeGetGI n)) cNodes nIDs nPos
---         newGraph = foldl (insertNode) g newNodes
---         eIDs = map (+minEID) (take (length cEdges) [1..])
---         ePos = map (upd . cPosition . edgeGetGI) cEdges
---         newEdges = zipWith3 (\e eid pos -> Edge eid (edgeGetInfo e) (edgeGiSetPosition pos $ edgeGetGI e)) cEdges eIDs ePos
---         nodesDict = M.fromList $ zipWith (\n n'-> (nodeGetID n, n')) cNodes newNodes
---         connections = map (\e -> applyPair (\x -> fromMaybe nullNode x) (M.lookup (src e) nodesDict, M.lookup (dst e) nodesDict)) cEdges
---         newGraph' = foldl (\g (src,dst) -> insertEdge g src dst) newGraph connections
-
+pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . editorSetGraph newGraph . editorSetSelected ([], [])$ es
+  where
+    graph = editorGetGraph es
+    (ngiM, egiM) = editorGetGI es
+    minX = minimum $ map (fst . position) (M.elems cNgiM)
+    minY = minimum $ map (snd . position) (M.elems cNgiM)
+    upd (a,b) = (20+a-minX, 20+b-minY)
+    cNgiM' = M.map (\gi -> nodeGiSetPosition (upd $ position gi) gi) cNgiM
+    cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
+    (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
 
 
 
