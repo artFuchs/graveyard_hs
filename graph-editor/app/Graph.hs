@@ -21,15 +21,13 @@ module Graph
 , Node (..)
 , nodeGetID
 , nodeGetInfo
-, nodeGetGI
+, nullNode
 , Edge (..)
 , edgeGetID
 , edgeGetInfo
-, edgeGetGI
 )where
 
 import Data.List
-import GraphicalInfo
 import Helper
 
 -- Estruturas de conteudo ------------------------------------------------------
@@ -41,44 +39,38 @@ type Info = String
 -- Estruturas do Grafo ---------------------------------------------------------------
 -- Nodo
 -- Node id informação
-data Node = Node Int Info NodeGI deriving (Eq,Show, Read)
+data Node = Node Int Info deriving (Eq,Show, Read)
 
 -- Comparação de nodos
 -- O que importa é o ID
 instance Ord Node where
-  (Node nID1 _ _) <= (Node nID2 _ _) = nID1 <= nID2
+  (Node nID1 _) <= (Node nID2 _) = nID1 <= nID2
 
 -- Getters
 nodeGetID :: Node -> Int
-nodeGetID (Node nID _ _) = nID
+nodeGetID (Node nID _) = nID
 
 nodeGetInfo :: Node -> Info
-nodeGetInfo (Node _ info _) = info
-
-nodeGetGI :: Node -> NodeGI
-nodeGetGI (Node _ _ gi) = gi
+nodeGetInfo (Node _ info) = info
 
 nullNode :: Node
-nullNode = Node 0 "" newNodeGI
+nullNode = Node 0 ""
 
 -- Aresta
 -- Edge id informação
-data Edge = Edge Int Info EdgeGI deriving (Eq,Show, Read)
+data Edge = Edge Int Info deriving (Eq,Show, Read)
 
 -- Comparação de Arestas
 -- O que importa é o ID
 instance Ord Edge where
-  (Edge eID1 _ _) <= (Edge eID2 _ _) = eID1 <= eID2
+  (Edge eID1 _) <= (Edge eID2 _) = eID1 <= eID2
 
 -- Getters
 edgeGetID :: Edge -> Int
-edgeGetID (Edge eID _ _) = eID
+edgeGetID (Edge eID _) = eID
 
 edgeGetInfo :: Edge -> Info
-edgeGetInfo (Edge _ info _) = info
-
-edgeGetGI :: Edge -> EdgeGI
-edgeGetGI (Edge _ _ gi) = gi
+edgeGetInfo (Edge _ info) = info
 
 -- Grafo
 -- Graph nome edges_src edges_dest edges nodes
@@ -172,8 +164,7 @@ insertEdge :: Graph -> Node -> Node -> Graph
 insertEdge (Graph iD src dst es ns) n1 n2 = if haveNodes then Graph iD src' dst' (ne:es) ns else Graph iD src dst es ns
   where haveNodes = all (`elem` ns) [n1,n2]
         neID = if length es > 0 then (maximum (map edgeGetID es)) + 1 else 1
-        gi = newEdgeGI
-        ne = Edge neID "" gi
+        ne = Edge neID ""
         (nID1,nID2) = applyPair nodeGetID (n1,n2)
         src' = \e -> if edgeGetID e == neID then nID1 else src e
         dst' = \e -> if edgeGetID e == neID then nID2 else dst e
@@ -231,7 +222,7 @@ graphUnion g1 g2 = g3
     maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
     nodesG2 = graphGetNodes g2
     newNids = map (+maxNid) (let l = length nodesG2 in [1..l])
-    newNodesMap = zipWith (\n nid -> (nodeGetID n, Node nid (nodeGetInfo n) newNodeGI) ) nodesG2 newNids
+    newNodesMap = zipWith (\n nid -> (nodeGetID n, Node nid (nodeGetInfo n)) ) nodesG2 newNids
     connsG2 = map (\e -> (graphGetSrcFunc g2 e, graphGetDstFunc g2 e)) (graphGetEdges g2)
     connsNew = map (\conn -> applyPair (\nid -> lookup nid newNodesMap) conn) connsG2
     g1' = foldl insertNode g1 (map snd newNodesMap)

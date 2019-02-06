@@ -16,8 +16,7 @@ import Render
 import Helper
 import UIConstructors
 
-nullNode = Node 0 "" newNodeGI
-nullEdge = Edge 0 "" newEdgeGI
+nullEdge = Edge 0 ""
 
 -- | estado do editor de grafos
 --   contém todas as informações necssárias para desenhar o grafo
@@ -258,7 +257,7 @@ main = do
                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetNodes graph
                 sEdges = filter (\e -> let pos = cPosition $ getEdgeGI (edgeGetID e) egi
                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ graphGetEdges graph
-                newEs = editorSetGraph graph . editorSetSelected (sNodes, sEdges) $ es
+                newEs = editorSetSelected (sNodes, sEdges) $ es
             writeIORef st newEs
             updatePropMenu newEs propWidgets propBoxes
           ((n,e), Nothing) -> modifyIORef st (adjustEdges)
@@ -351,7 +350,6 @@ main = do
           clip <- readIORef clipboard
           stackUndo changes es
           modifyIORef st (pasteClipBoard clip)
-
           widgetQueueDraw canvas
         (True, False, "x") -> do
           es <- readIORef st
@@ -572,7 +570,7 @@ loadGraph window = do
           tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
           case tentativa of
             Left _ -> do
-              print "Não foi possivel ler o arquivo"
+              putStrLn "Não foi possivel ler o arquivo"
               return Nothing
             Right content -> do
               widgetDestroy loadD
@@ -658,7 +656,7 @@ moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
                                   getPos = \nid -> position . getNodeGI nid $ movedNGIs
                                   aPos = getPos a
                                   bPos = getPos b
-                                  gi = fromMaybe newEdgeGI (M.lookup (edgeGetID edge) egiM)
+                                  gi = getEdgeGI (edgeGetID edge) egiM
                                   (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
                               in case (edgeGetID edge `elem` (map edgeGetID sEdges), a == b, any (`elem` (map nodeGetID sNodes)) [a,b], centered gi) of
                                   (False, True, True, _) -> M.insert (edgeGetID edge) (edgeGiSetPosition (xd,yd) gi) giMap
@@ -709,7 +707,7 @@ createNode st pos context shape = do
                   then nodeGetID $ maximum (graphGetNodes graph)
                   else 0
       nID = 1 + maxNID
-      newNode = Node nID content newNodeGI
+      newNode = Node nID content
       newGraph = insertNode graph newNode
       content = ("node " ++ show nID)
   dim <- getStringDims content context
@@ -755,9 +753,9 @@ renameSelected state name context = do
   let graph = editorGetGraph es
       (nodes,edges) = editorGetSelected es
       (ngiM,egiM) = editorGetGI es
-  let renamedNodes = map (\n -> Node (nodeGetID n) name newNodeGI) nodes
+  let renamedNodes = map (\n -> Node (nodeGetID n) name) nodes
       newNgiM = M.mapWithKey (\k gi -> if k `elem` (map nodeGetID nodes) then nodeGiSetDims dim gi else gi) ngiM
-      renamedEdges = map (\e -> Edge (edgeGetID e) name newEdgeGI) edges
+      renamedEdges = map (\e -> Edge (edgeGetID e) name) edges
       newGraph = foldl (\g n -> changeNode g n) graph renamedNodes
       newGraph' = foldl (\g e -> changeEdge g e) newGraph renamedEdges
       newEs = editorSetGI (newNgiM,egiM) . editorSetGraph newGraph' . editorSetSelected (renamedNodes, renamedEdges) $ es
@@ -860,6 +858,7 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Estilos diferentes para as arestas
 -- *Novo Arquivo
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
+-- *corrigir bug no copiar/colar que ocorre quando a seleção é movida antes de copiar
 
 -- Progresso -------------------------------------------------------------------
 -- *Separar a estrutura do grafo das estruturas gráficas
