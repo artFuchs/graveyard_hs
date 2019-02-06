@@ -103,7 +103,7 @@ graph2string (Graph id src dst e n) = "Graph " ++ (show id) ++ " \n" ++ (show n)
 tuples2conns :: [(Int,Int,Int)] -> ((Edge->Int), (Edge->Int))
 tuples2conns xs = foldl (\ (f1,f2) (e,n1,n2) -> (\a -> if edgeGetID a == e then n1 else f1 a, \a -> if edgeGetID a == e then n2 else f2 a) ) (\a -> 0, \a -> 0) xs
 
--- converte uma string para um grafo, semelhante a função read (não usa)
+-- converte uma string para um grafo, semelhante a função read
 string2graph :: String -> Graph
 string2graph s = Graph name src dst edges nodes
   where slines = lines s
@@ -111,8 +111,6 @@ string2graph s = Graph name src dst edges nodes
         nodes = read (slines!!1) :: [Node]
         edges = read (slines!!2) :: [Edge]
         (src,dst) = tuples2conns (read (slines!!3) :: [(Int,Int,Int)])
-        --src = (\e -> 0)
-        --dst = (\e -> 0)
 
 -- construtor base para o grafo
 emptyGraph :: String -> Graph
