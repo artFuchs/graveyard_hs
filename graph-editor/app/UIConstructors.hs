@@ -4,29 +4,31 @@ module UIConstructors
 , buildPropMenu
 ) where
 
-import Graphics.UI.Gtk hiding (rectangle)
+import Graphics.UI.Gtk
 
 -- constroi a menu toolbar
 buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
-    opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
-    svn <- actionNew "SVN" "Save File" (Just "Just a stub") (Just stockSave)
+    new <- actionNew "NEW" "New File" (Just "Just a stub") Nothing
+    opn <- actionNew "OPN" "Open File" (Just "Just a stub") Nothing
+    svn <- actionNew "SVN" "Save File" (Just "Just a stub") Nothing
     edt <- actionNew "EDT" "Edit" Nothing Nothing
-    udo <- actionNew "UDO" "Undo" (Just "Just a stub") (Just stockUndo)
-    rdo <- actionNew "RDO" "Redo" (Just "Just a stub") (Just stockRedo)
+    udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
+    rdo <- actionNew "RDO" "Redo" (Just "Just a stub") Nothing
     agr <- actionGroupNew "AGR"
     mapM_ (actionGroupAddAction agr) [fma,edt]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [opn,svn,udo,rdo]
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,udo,rdo]
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, opn, svn, udo, rdo)
+    return (maybeMenubar, new, opn, svn, udo, rdo)
 
   where uiStr = "<ui>\
 \                 <menubar>\
 \                   <menu action=\"FMA\">\
+\                     <menuitem action=\"NEW\"/>\
 \                     <menuitem action=\"OPN\"/>\
 \                     <menuitem action=\"SVN\"/>\
 \                   </menu> \
