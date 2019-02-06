@@ -221,12 +221,12 @@ graphUnion g1 g2 = g3
   where
     maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
     nodesG2 = graphGetNodes g2
-    newNids = map (+maxNid) (let l = length nodesG2 in [1..l])
+    newNids = map (+maxNid) (let l = length nodesG2 in [l,(l-1)..1])
     newNodesMap = zipWith (\n nid -> (nodeGetID n, Node nid (nodeGetInfo n)) ) nodesG2 newNids
-    connsG2 = map (\e -> (graphGetSrcFunc g2 e, graphGetDstFunc g2 e)) (graphGetEdges g2)
+    connsG2 = map (\e -> (graphGetSrcFunc g2 e, graphGetDstFunc g2 e)) (sort $ graphGetEdges g2)
     connsNew = map (\conn -> applyPair (\nid -> lookup nid newNodesMap) conn) connsG2
     g1' = foldl insertNode g1 (map snd newNodesMap)
     g3 = foldl (\g conn -> case conn of
                             (Just a, Just b) -> insertEdge g a b
-                            _ -> g  )
+                            _ -> g)
         g1' connsNew

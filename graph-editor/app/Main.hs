@@ -249,6 +249,7 @@ main = do
         writeIORef movingGI False
         es <- readIORef st
         sq <- readIORef squareSelection
+        let (n,e) = editorGetSelected es
         case (editorGetSelected es,sq) of
           (([],[]), Just (x,y,w,h)) -> do
             let graph = editorGetGraph es
@@ -806,12 +807,6 @@ applyRedo changes st = do
   writeIORef changes nur
   writeIORef st nes
 
-
-
-
-
-
-
 -- Copy / Paste / Cut ----------------------------------------------------------
 copySelected :: EditorState -> (Graph, GraphicalInfo)
 copySelected  es = (cg',(ngiM',egiM'))
@@ -819,8 +814,8 @@ copySelected  es = (cg',(ngiM',egiM'))
     (ns,eds) = editorGetSelected es
     g = editorGetGraph es
     (ngiM, egiM) = editorGetGI es
-    cg = foldl (\g n -> insertNode g n) (emptyGraph "") ns
-    connPairs = map (\e -> applyPair (fromMaybe nullNode . getNodeByID g) (graphGetSrcFunc g e, graphGetDstFunc g e)) eds
+    cg = foldl (\g n -> insertNode g n) (emptyGraph "") (sort ns)
+    connPairs = map (\e -> applyPair (fromMaybe nullNode . getNodeByID g) (graphGetSrcFunc g e, graphGetDstFunc g e)) (sort eds)
     cg' = foldl (\g (src,dst) -> insertEdge g src dst) cg connPairs
     ngiM' = M.filterWithKey (\k _ -> k `elem` (map nodeGetID ns)) ngiM
     egiM' = M.filterWithKey (\k _ -> k `elem` (map edgeGetID eds)) egiM
@@ -858,7 +853,6 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Estilos diferentes para as arestas
 -- *Novo Arquivo
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
--- *corrigir bug no copiar/colar que ocorre quando a seleção é movida antes de copiar
 
 -- Progresso -------------------------------------------------------------------
 -- *Separar a estrutura do grafo das estruturas gráficas
@@ -870,3 +864,4 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Copy/Paste/Cut
 -- *Corrigir arestas não sendo coladas com Cut/Paste
 -- *Corrigir movimento das arestas quando mover um nodo
+-- *corrigir bug no copiar/colar que ocorre quando a seleção é movida antes de copiar
