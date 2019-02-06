@@ -17,6 +17,7 @@ module Graph
 , getNodeByID
 , getDstNode
 , getSrcNode
+, graphUnion
 , Node (..)
 , nodeGetID
 , nodeGetInfo
@@ -56,6 +57,9 @@ nodeGetInfo (Node _ info _) = info
 
 nodeGetGI :: Node -> NodeGI
 nodeGetGI (Node _ _ gi) = gi
+
+nullNode :: Node
+nullNode = Node 0 "" newNodeGI
 
 -- Aresta
 -- Edge id informação
@@ -218,3 +222,20 @@ getDstNode g e = find (\n -> nodeGetID n == dst e ) ns
 getNodeByID :: Graph -> Int -> Maybe Node
 getNodeByID g nID = find (\n -> nodeGetID n == nID) ns
   where ns = graphGetNodes g
+
+
+-- juntar dois grafos
+graphUnion :: Graph -> Graph -> Graph
+graphUnion g1 g2 = g3
+  where
+    maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
+    nodesG2 = graphGetNodes g2
+    newNids = map (+maxNid) (let l = length nodesG2 in [1..l])
+    newNodesMap = zipWith (\n nid -> (nodeGetID n, Node nid (nodeGetInfo n) newNodeGI) ) nodesG2 newNids
+    connsG2 = map (\e -> (graphGetSrcFunc g2 e, graphGetDstFunc g2 e)) (graphGetEdges g2)
+    connsNew = map (\conn -> applyPair (\nid -> lookup nid newNodesMap) conn) connsG2
+    g1' = foldl insertNode g1 (map snd newNodesMap)
+    g3 = foldl (\g conn -> case conn of
+                            (Just a, Just b) -> insertEdge g a b
+                            _ -> g  )
+        g1' connsNew

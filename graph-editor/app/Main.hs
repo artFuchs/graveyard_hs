@@ -812,38 +812,6 @@ applyRedo changes st = do
 
 
 
-grUnion :: Graph -> Graph -> Graph
-grUnion g1 g2 = g3
-  where
-    -- mudar ids dos nodos
-    maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
-    nodesG2 = graphGetNodes g2
-    newNids = map (+maxNid) (let l = length nodesG2 in [1..l])
-    newNodesMap = M.fromList $ zipWith (\n nid -> (nodeGetID n, Node nid (nodeGetInfo n) newNodeGI) ) nodesG2 newNids
-    -- mudar funções das edges considerando os novos ids
-    connsG2 = map (\e -> (graphGetSrcFunc g2 e, graphGetDstFunc g2 e)) (graphGetEdges g2)
-    connsNew = map (\conn -> applyPair (\nid -> M.findWithDefault nullNode nid newNodesMap) conn) connsG2
-    -- inserir nodos
-    g1' = foldl insertNode g1 (M.elems newNodesMap)
-    -- inserir edges
-    g3 = foldl (\g conn -> insertEdge g (fst conn) (snd conn)) g1' connsNew
-
-
-
-diagrUnion :: (Graph, GraphicalInfo) -> (Graph, GraphicalInfo) -> (Graph, GraphicalInfo)
-diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
-  where
-    g3 = grUnion g1 g2
-    maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
-    maxEid = let es = graphGetEdges g1 in if null es then 0 else edgeGetID $ maximum es
-    nsG2 = graphGetNodes g2
-    esG2 = graphGetEdges g2
-    newNids = map (+maxNid) (let l = length nsG2 in [1..l])
-    ngiM2' = M.fromList $ zip newNids (M.elems ngiM2)
-    ngiM3 = M.union ngiM1 ngiM2'
-    newEids = map (+maxEid) (let l = length esG2 in [1..l])
-    egiM2' = M.fromList $ zip newEids (M.elems egiM2)
-    egiM3 = M.union egiM1 egiM2'
 
 
 -- Copy / Paste / Cut ----------------------------------------------------------
@@ -871,6 +839,20 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
     cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
     (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
 
+diagrUnion :: (Graph, GraphicalInfo) -> (Graph, GraphicalInfo) -> (Graph, GraphicalInfo)
+diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
+  where
+    g3 = graphUnion g1 g2
+    maxNid = let ns = graphGetNodes g1 in if null ns then 0 else nodeGetID $ maximum ns
+    maxEid = let es = graphGetEdges g1 in if null es then 0 else edgeGetID $ maximum es
+    nsG2 = graphGetNodes g2
+    esG2 = graphGetEdges g2
+    newNids = map (+maxNid) (let l = length nsG2 in [1..l])
+    ngiM2' = M.fromList $ zip newNids (M.elems ngiM2)
+    ngiM3 = M.union ngiM1 ngiM2'
+    newEids = map (+maxEid) (let l = length esG2 in [1..l])
+    egiM2' = M.fromList $ zip newEids (M.elems egiM2)
+    egiM3 = M.union egiM1 egiM2'
 
 
 
