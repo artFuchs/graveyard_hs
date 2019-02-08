@@ -87,7 +87,7 @@ buildPropMenu = do
   lineColorBtn <- colorButtonNew
   boxPackStart hBoxLineColor lineColorBtn PackNatural 0
 
-  -- cria um frame contendo uma VBox para a propriedade forma do nodo
+  -- cria um frame contendo uma VBox para a propriedade Node Shape
   frameShape <- frameNew
   set frameShape [frameLabel := "Node Shape"]
   boxPackStart vBoxProps frameShape PackNatural 0
@@ -101,4 +101,16 @@ buildPropMenu = do
   boxPackStart vBoxShape radioQuad PackGrow 0
   let radioShapes = [radioCircle, radioRect, radioQuad]
 
-  return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, (hBoxColor, frameShape))
+  -- cria um frame contendo uma VBox para a propriedade Edge Style
+  frameStyle <- frameNew
+  set frameStyle [frameLabel := "Edge Style"]
+  boxPackStart vBoxProps frameStyle PackNatural 0
+  vBoxStyle <- vBoxNew False 8
+  containerAdd frameStyle vBoxStyle
+  radioNormal <- radioButtonNewWithLabel "Normal"
+  boxPackStart vBoxStyle radioNormal PackGrow 0
+  radioPointed <- radioButtonNewWithLabelFromWidget radioNormal "Pointed"
+  boxPackStart vBoxStyle radioPointed PackGrow 0
+  let radioStyles = [radioNormal, radioPointed]
+
+  return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))

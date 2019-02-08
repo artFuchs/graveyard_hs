@@ -14,6 +14,7 @@ module GraphicalInfo
 , edgeGiSetPosition
 , edgeGiSetColor
 , edgeGiSetCentered
+, edgeGiSetStyle
 )where
 
 import qualified Data.Map as M

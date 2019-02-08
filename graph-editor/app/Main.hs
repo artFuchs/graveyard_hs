@@ -84,9 +84,10 @@ main = do
   boxPackStart vBoxMain hPaneAction PackGrow 0
 
   -- cria o menu de propriedades
-  (frameProps, entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, propBoxes) <- buildPropMenu
-  let propWidgets = (entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes)
-      [radioCircle,radioRect,radioQuad] = radioShapes
+  (frameProps, entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
+  let propWidgets = (entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, radioStyles)
+      [radioCircle, radioRect, radioQuad] = radioShapes
+      [radioNormal, radioPointed] = radioStyles
   panedPack2 hPaneAction frameProps False True
 
   -- cria um frame para englobar o canvas
@@ -112,6 +113,7 @@ main = do
   changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
   movingGI <- newIORef False -- se o usuario começou a mover algum objeto
   actualShape <- newIORef NCircle
+  actualStyle <- newIORef ENormal
   clipboard <- newIORef (emptyGraph "", (M.empty, M.empty)) -- clipboard - (Graph, GraphicalInfo)
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
@@ -187,7 +189,8 @@ main = do
                     es <- readIORef st
                     return $ fst (editorGetSelected es)
                   else do
-                    modifyIORef st (\es -> createEdges es dstNode)
+                    estyle <- readIORef actualStyle
+                    modifyIORef st (\es -> createEdges es dstNode estyle)
                     return dstNode
         widgetQueueDraw canvas
         es <- readIORef st
@@ -448,6 +451,16 @@ main = do
     writeIORef actualShape NQuad
     widgetQueueDraw canvas
 
+  radioNormal `on` toggled $ do
+    modifyIORef st (\es -> changeEdgeStyle es ENormal)
+    writeIORef actualStyle ENormal
+    widgetQueueDraw canvas
+
+  radioPointed `on` toggled $ do
+    modifyIORef st (\es -> changeEdgeStyle es EPointed)
+    writeIORef actualStyle EPointed
+    widgetQueueDraw canvas
+
 
   -- tratamento de eventos - janela principal ---------------------------------
   window `on` deleteEvent $ do
@@ -460,8 +473,8 @@ main = do
 
 -- Callbacks -------------------------------------------------------------------
 -- atualização do menu de propriedades -----------------------------------------
-updatePropMenu :: EditorState -> (Entry, Entry, ColorButton, ColorButton, [RadioButton]) -> (HBox, Frame)-> IO ()
-updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxColor, frameShape) = do
+updatePropMenu :: EditorState -> (Entry, Entry, ColorButton, ColorButton, [RadioButton], [RadioButton]) -> (HBox, Frame, Frame)-> IO ()
+updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
   let (nodes,edges) = editorGetSelected es
       (ngiM,egiM) = editorGetGI es
   case (length nodes, length edges) of
@@ -472,6 +485,7 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxCo
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
+      set frameStyle [widgetVisible := True]
     (1,0) -> do
       let iD = nodeGetID $ (nodes!!0)
           name = nodeGetInfo $ (nodes!!0)
@@ -492,18 +506,24 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxCo
 
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
+      set frameStyle [widgetVisible := False]
     (0,1) -> do
       let iD = edgeGetID $ (edges!!0)
           name = edgeGetInfo (edges!!0)
           gi = getEdgeGI iD egiM
           (r,g,b) = color gi
           edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
+          edgeStyle = style gi
       entrySetText entryID (show iD)
       entrySetText entryName name
       colorButtonSetColor lcolorBtn edgeColor
+      case edgeStyle of
+        ENormal -> toggleButtonSetActive (radioStyles!!0) True
+        EPointed -> toggleButtonSetActive (radioStyles!!1) True
 
       set hBoxColor [widgetVisible := False]
       set frameShape [widgetVisible := False]
+      set frameStyle [widgetVisible := True]
     (0,n) -> do
       entrySetText entryID "----"
       entrySetText entryName $ (\l -> let x:xs = l in if all (==x) xs then x else "----") (map edgeGetInfo edges)
@@ -511,6 +531,7 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxCo
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
       set hBoxColor [widgetVisible := False]
       set frameShape [widgetVisible := False]
+      set frameStyle [widgetVisible := True]
     (n,0) -> do
       entrySetText entryID "----"
       entrySetText entryName $ (\l -> let x:xs = l in if all (==x) xs then x else "----") (map nodeGetInfo nodes)
@@ -518,6 +539,7 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxCo
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
+      set frameStyle [widgetVisible := False]
     _ -> do
       entrySetText entryID "--"
       entrySetText entryName "----"
@@ -525,6 +547,7 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxCo
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
+      set frameStyle [widgetVisible := True]
 
 -- salvar grafo ----------------------------------------------------------------
 saveGraph :: (Graph,GraphicalInfo) -> Window -> IO ()
@@ -721,8 +744,8 @@ createNode st pos context shape = do
   writeIORef st $ editorSetGI newGIM . editorSetGraph newGraph . editorSetSelected ([newNode], []) $ es
 
 -- cria e insere uma nova edge no grafo
-createEdges:: EditorState -> [Node] -> EditorState
-createEdges es dstNodes = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected (dstNodes,[]) $ es
+createEdges:: EditorState -> [Node] -> EdgeStyle -> EditorState
+createEdges es dstNodes estyle = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected (dstNodes,[]) $ es
   where selectedNodes = fst $ editorGetSelected es
         graph = editorGetGraph es
         (ngiM,egiM) = editorGetGI es
@@ -732,7 +755,7 @@ createEdges es dstNodes = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) 
                                         eid = edgeGetID e
                                         getPos = (\n -> position . getNodeGI (nodeGetID n) $ ngiM)
                                         (srcPos,dstPos) = applyPair getPos (n,dstNodes!!0)
-                                        negi = edgeGiSetPosition (midPoint srcPos dstPos) newEdgeGI
+                                        negi = edgeGiSetPosition (midPoint srcPos dstPos) . edgeGiSetStyle estyle $ newEdgeGI
                                     in (ng, M.insert eid negi giM)) (graph, egiM) selectedNodes
           else (graph,egiM)
 
@@ -768,12 +791,19 @@ renameSelected state name context = do
 
 -- muda a forma de um nodo
 changeNodeShape :: EditorState -> NodeShape -> EditorState
-changeNodeShape es s = editorSetGI (newNgiM, egiM) $ es
+changeNodeShape es s = editorSetGI (newNgiM, egiM) es
   where
       nodes = fst $ editorGetSelected es
       (ngiM, egiM) = editorGetGI es
       newNgiM = M.mapWithKey (\k gi -> if k `elem` (map nodeGetID nodes) then nodeGiSetShape s gi else gi) ngiM
 
+-- muda o estilo das edges selecionadas
+changeEdgeStyle :: EditorState -> EdgeStyle -> EditorState
+changeEdgeStyle es s = editorSetGI (ngiM, newEgiM) es
+  where
+    edges = snd $ editorGetSelected es
+    (ngiM, egiM) = editorGetGI es
+    newEgiM = M.mapWithKey (\k gi -> if k `elem` (map edgeGetID edges) then edgeGiSetStyle s gi else gi) egiM
 
 
 -- função auxiliar para createNode e renameSelected
@@ -856,7 +886,7 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- Tarefas ---------------------------------------------------------------------
 -- *Estilos diferentes para as arestas
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
--- *Criar um editor de subgrafos
+-- *Criar um seletor de grafos
 
 -- Progresso -------------------------------------------------------------------
 
