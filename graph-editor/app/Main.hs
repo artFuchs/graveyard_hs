@@ -320,13 +320,14 @@ main = do
         (True, False, "s") -> do
           es <- readIORef st
           let g = editorGetGraph es
-          saveGraph g window
+              gi = editorGetGI es
+          saveGraph (g,gi) window
         -- CTRL + O : open file
         (True, False, "o") -> do
           mg <- loadGraph window
           case mg of
-            Just g -> do
-              writeIORef st (g,(M.empty,M.empty),([],[]),1.0,(0.0,0.0))
+            Just (g,gi) -> do
+              writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
               widgetQueueDraw canvas
             _      -> return ()
 
@@ -365,15 +366,16 @@ main = do
   opn `on` actionActivated $ do
     mg <- loadGraph window
     case mg of
-      Just g -> do
-        writeIORef st (g,(M.empty,M.empty),([],[]),1.0,(0.0,0.0))
+      Just (g,gi) -> do
+        writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
         widgetQueueDraw canvas
       _      -> return ()
 
   svn `on` actionActivated $ do
     es <- readIORef st
     let g = editorGetGraph es
-    saveGraph g window
+        gi = editorGetGI es
+    saveGraph (g,gi) window
 
   udo `on` actionActivated $ do
     applyUndo changes st
@@ -525,8 +527,8 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes) (hBoxCo
       set frameShape [widgetVisible := True]
 
 -- salvar grafo ----------------------------------------------------------------
-saveGraph :: Graph -> Window -> IO ()
-saveGraph g window = do
+saveGraph :: (Graph,GraphicalInfo) -> Window -> IO ()
+saveGraph (g,gi) window = do
   saveD <- fileChooserDialogNew
            (Just "Salvar arquivo")
            (Just window)
@@ -541,15 +543,18 @@ saveGraph g window = do
       case filename of
         Nothing -> widgetDestroy saveD
         Just path -> do
-           tentativa <- E.try (writeFile path $ show g)  :: IO (Either E.IOException ())
-           case tentativa of
-             Left _ -> print "Não foi possível escrever no arquivo"
-             Right _ -> return ()
-           widgetDestroy saveD
+          let writeGraph = do
+                            writeFile path $ show g
+                            appendFile path $ "\n" ++ show gi
+          tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
+          case tentativa of
+            Left _ -> print "Não foi possível escrever no arquivo"
+            Right _ -> return ()
+          widgetDestroy saveD
     _  -> widgetDestroy saveD
 
 -- abrir grafo -----------------------------------------------------------------
-loadGraph :: Window -> IO (Maybe Graph)
+loadGraph :: Window -> IO (Maybe (Graph, GraphicalInfo))
 loadGraph window = do
   loadD <- fileChooserDialogNew
            (Just "Abrir Arquivo")
@@ -574,9 +579,9 @@ loadGraph window = do
               return Nothing
             Right content -> do
               widgetDestroy loadD
-              --mapM (print . words) (lines content)
-              --return Nothing
-              return $ Just $ string2graph content
+              let (g, str) = string2graph content
+                  gi = read str :: GraphicalInfo
+              return $ Just $ (g,gi)
     _               -> do
       widgetDestroy loadD
       return Nothing
