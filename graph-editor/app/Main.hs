@@ -755,7 +755,9 @@ createEdges es dstNodes estyle = editorSetGraph newGraph . editorSetGI (ngiM, ne
                                         eid = edgeGetID e
                                         getPos = (\n -> position . getNodeGI (nodeGetID n) $ ngiM)
                                         (srcPos,dstPos) = applyPair getPos (n,dstNodes!!0)
-                                        negi = edgeGiSetPosition (midPoint srcPos dstPos) . edgeGiSetStyle estyle $ newEdgeGI
+                                        negi = if (dstNodes!!0 == n)
+                                                then edgeGiSetPosition (fst srcPos, snd srcPos - 50) . edgeGiSetStyle estyle $ newEdgeGI
+                                                else edgeGiSetPosition (midPoint srcPos dstPos) . edgeGiSetStyle estyle $ newEdgeGI
                                     in (ng, M.insert eid negi giM)) (graph, egiM) selectedNodes
           else (graph,egiM)
 
