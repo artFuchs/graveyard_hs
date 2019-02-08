@@ -149,15 +149,32 @@ renderLoop edge selected node = do
       p2' = pointAt (a-pi/2) (d/1.5) (f,g)
       (rl,gl,bl) = if selected then (0,1,0) else color edge
   -- desenha uma curva levando ao próprio nodo
-  moveTo x y
-  curveTo (fst p1) (snd p1) (fst p2) (snd p2) xe ye
-  moveTo x y
-  curveTo (fst p1') (snd p1') (fst p2') (snd p2') xe ye
   setSourceRGB rl gl bl
-  stroke
+  case style edge of
+    ENormal -> do
+      moveTo x y
+      curveTo (fst p1) (snd p1) (fst p2) (snd p2) xe ye
+      moveTo x y
+      curveTo (fst p1') (snd p1') (fst p2') (snd p2') xe ye
+      stroke
+    EPointed -> do
+      drawPointedCurve (x,y) p1 p2 (xe,ye)
+      drawPointedCurve (x,y) p1' p2' (xe,ye)
   -- desenha um arco para mostrar o ponto de controle
   arc f g 2 0 (2*pi)
   fill
+  -- desenha dois arcos para mostrar
+  setSourceRGB 1 0 0
+  arc (fst p1) (snd p1) 2 0 (2*pi)
+  fill
+  arc (fst p2) (snd p2) 2 0 (2*pi)
+  fill
+  setSourceRGB 0 0 1
+  arc (fst p1') (snd p1') 2 0 (2*pi)
+  fill
+  arc (fst p2') (snd p2') 2 0 (2*pi)
+  fill
+
 
 -- Retorna o ponto de intersecção de uma linha com um retangulo
 -- recebe o ponto inicial da linha e a representação do retangulo (x,y,w,h)
@@ -180,5 +197,24 @@ drawPointInLine :: (Double,Double) -> (Double,Double) -> Double -> Render ()
 drawPointInLine p0@(x0,y0) p1@(x1,y1) t = do
   let x = x0 + t * (x1 - x0)
       y = y0 + t * (y1 - y0)
+  arc x y 1 0 (2*pi)
+  fill
+
+drawPointedCurve :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> Render ()
+drawPointedCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) = do
+  let mid = midPoint p1 p2
+      dist = pointDistance p0 mid + pointDistance p3 mid
+      pointsN = dist/4 :: Double
+      linePoints = [0,(1/pointsN)..1]
+  forM linePoints (\t -> drawPointsInCurve p0 p1 p2 p3 t)
+  return ()
+
+drawPointsInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t = do
+  let b03 = (1-t)**3
+      b13 = 3 * t * (1-t)**2
+      b23 = 3 * t**2 * (1-t)
+      b33 = t**3
+      x = b03*x0 + b13*x1 + b23*x2 + b33*x3
+      y = b03*y0 + b13*y1 + b23*y2 + b33*y3
   arc x y 1 0 (2*pi)
   fill
