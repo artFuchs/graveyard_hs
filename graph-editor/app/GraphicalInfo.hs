@@ -2,6 +2,7 @@ module GraphicalInfo
 ( GraphicalInfo (..)
 , NodeShape (..)
 , NodeGI (..)
+, EdgeStyle (..)
 , EdgeGI (..)
 , newNodeGI
 , newEdgeGI
@@ -22,7 +23,6 @@ type GraphicalInfo = (M.Map Int NodeGI, M.Map Int EdgeGI)
 -- estrutura auxiliar - define a forma de um nodo
 data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
 
-
 -- estrutura de dados para desenhar um nodo
 -- position : posição do nodo
 -- color : cor de preenchimento
@@ -36,6 +36,7 @@ data NodeGI = NodeGI { position :: (Double, Double)
                      , shape :: NodeShape
                      } deriving (Eq, Show, Read)
 
+data EdgeStyle = ENormal | EPointed deriving (Eq ,Show, Read)
 
 -- estrutura de dados para desenhar uma aresta
 -- cPosition : posição do ponto de controle
@@ -44,6 +45,7 @@ data NodeGI = NodeGI { position :: (Double, Double)
 data EdgeGI = EdgeGI { cPosition :: (Double,Double)
                      , color :: (Double,Double,Double)
                      , centered :: Bool
+                     , style :: EdgeStyle
                      } deriving (Eq, Show, Read)
 -- contrutores
 newNodeGI :: NodeGI
@@ -58,6 +60,7 @@ newEdgeGI :: EdgeGI
 newEdgeGI = EdgeGI { cPosition = (0,0)
                    , color = (0,0,0)
                    , centered = True
+                   , style = ENormal
                    }
 
 -- métodos para "modificar" um NodeGI
@@ -106,16 +109,26 @@ edgeGiSetPosition :: (Double,Double) -> EdgeGI -> EdgeGI
 edgeGiSetPosition pos gi = EdgeGI { cPosition = pos
                                   , color = color gi
                                   , centered = centered gi
+                                  , style = style gi
                                   }
 
 edgeGiSetColor :: (Double,Double,Double) -> EdgeGI -> EdgeGI
 edgeGiSetColor col gi = EdgeGI { cPosition = cPosition gi
                                   , color = col
                                   , centered = centered gi
+                                  , style = style gi
                                   }
 
 edgeGiSetCentered :: Bool -> EdgeGI -> EdgeGI
 edgeGiSetCentered c gi = EdgeGI { cPosition = cPosition gi
                                 , color = color gi
                                 , centered = c
+                                , style = style gi
                                 }
+
+edgeGiSetStyle :: EdgeStyle -> EdgeGI -> EdgeGI
+edgeGiSetStyle s gi = EdgeGI { cPosition = cPosition gi
+                             , color = color gi
+                             , centered = centered gi
+                             , style = s
+                             }

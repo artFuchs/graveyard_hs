@@ -111,11 +111,15 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
 
   -- desenha uma linha representando a aresta
   setSourceRGB r g b
-  --moveTo x1' y1'
-  --lineTo xe  ye
-  --lineTo x2' y2'
-  drawPointedLine (x1',y1') (xe,ye)
-  drawPointedLine (xe,ye) (x2',y2')
+  case style edge of
+    ENormal -> do
+      moveTo x1' y1'
+      lineTo xe  ye
+      lineTo x2' y2'
+    EPointed -> do
+      drawPointedLine (x1',y1') (xe,ye)
+      drawPointedLine (xe,ye) (x2',y2')
+      
   -- desenha uma seta para indicar qual é o nó de destino
   let a = (angle (xe,ye) (x2,y2))
       d = pointDistance (xe,ye) (x2,y2)
