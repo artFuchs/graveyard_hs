@@ -10,6 +10,7 @@ module Helper
 , angle
 , quadrant
 , applyPair
+, interpolate
 )where
 
 import Data.Fixed
@@ -69,6 +70,13 @@ quadrant ang = (c,d)
         c = if (abs a) <= pi/2 then 1 else -1
         d = if b < pi then 1 else -1
 
--- Aplica uma função em um par
+-- | Aplica uma função em um par
 applyPair :: (a->b) -> (a,a) -> (b,b)
 applyPair f (a,b) = (f a, f b)
+
+-- | gera um ponto em uma reta dada por dois pontos no tempo t
+interpolate :: (Double,Double) -> (Double,Double) -> Double -> (Double,Double)
+interpolate (x0,y0) (x1,y1) t = (x,y)
+  where
+    x = x0 + t * (x1 - x0)
+    y = y0 + t * (y1 - y0)

@@ -120,6 +120,9 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
     EPointed -> do
       drawPointedLine (x1',y1') (xe,ye)
       drawPointedLine (xe,ye) (x2',y2')
+    ESlashed -> do
+      drawSlashedLine (x1',y1') (xe,ye)
+      drawSlashedLine (xe,ye) (x2',y2')
 
   -- desenha uma seta para indicar qual é o nó de destino
   let a = (angle (xe,ye) (x2,y2))
@@ -195,8 +198,7 @@ drawPointedLine p1@(x1,y1) p2@(x2,y2)= do
 
 drawPointInLine :: (Double,Double) -> (Double,Double) -> Double -> Render ()
 drawPointInLine p0@(x0,y0) p1@(x1,y1) t = do
-  let x = x0 + t * (x1 - x0)
-      y = y0 + t * (y1 - y0)
+  let (x,y) = interpolate p0 p1 t
   arc x y 1 0 (2*pi)
   fill
 
@@ -209,6 +211,7 @@ drawPointedCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) = do
   forM linePoints (\t -> drawPointsInCurve p0 p1 p2 p3 t)
   return ()
 
+drawPointsInCurve :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> Double -> Render ()
 drawPointsInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t = do
   let b03 = (1-t)**3
       b13 = 3 * t * (1-t)**2
@@ -218,3 +221,25 @@ drawPointsInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t = do
       y = b03*y0 + b13*y1 + b23*y2 + b33*y3
   arc x y 1 0 (2*pi)
   fill
+
+drawSlashedLine :: (Double,Double) -> (Double,Double) -> Render ()
+drawSlashedLine p0@(x0,y0) p1@(x1,y1) = do
+    let dist = pointDistance p0 p1
+        pointsN = dist/4 :: Double
+        linePoints = genPairs [0,(1/pointsN)..1]
+    forM linePoints (\(t0,t1) -> drawSlash p0 p1 t0 t1)
+    return ()
+
+genPairs :: [a] -> [(a,a)]
+genPairs [] = []
+genPairs (x:[]) = []
+genPairs (x:y:ls) = (x,y):(genPairs ls)
+
+drawSlash :: (Double,Double) -> (Double,Double) -> Double -> Double ->  Render ()
+drawSlash p0@(x0,y0) p1@(x1,y1) t0 t1 = do
+  let
+    (x,y)   = interpolate p0 p1 t0
+    (x',y') = interpolate p0 p1 t1
+  moveTo x y
+  lineTo x' y'
+  stroke

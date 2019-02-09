@@ -111,6 +111,8 @@ buildPropMenu = do
   boxPackStart vBoxStyle radioNormal PackGrow 0
   radioPointed <- radioButtonNewWithLabelFromWidget radioNormal "Pointed"
   boxPackStart vBoxStyle radioPointed PackGrow 0
-  let radioStyles = [radioNormal, radioPointed]
+  radioSlashed <- radioButtonNewWithLabelFromWidget radioNormal "Slashed"
+  boxPackStart vBoxStyle radioSlashed PackGrow 0
+  let radioStyles = [radioNormal, radioPointed, radioSlashed]
 
   return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))

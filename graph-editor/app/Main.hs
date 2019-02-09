@@ -87,7 +87,7 @@ main = do
   (frameProps, entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let propWidgets = (entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, radioStyles)
       [radioCircle, radioRect, radioQuad] = radioShapes
-      [radioNormal, radioPointed] = radioStyles
+      [radioNormal, radioPointed, radioSlashed] = radioStyles
   panedPack2 hPaneAction frameProps False True
 
   -- cria um frame para englobar o canvas
@@ -461,6 +461,11 @@ main = do
     writeIORef actualStyle EPointed
     widgetQueueDraw canvas
 
+  radioSlashed `on` toggled $ do
+    modifyIORef st (\es -> changeEdgeStyle es ESlashed)
+    writeIORef actualStyle ESlashed
+    widgetQueueDraw canvas
+
 
   -- tratamento de eventos - janela principal ---------------------------------
   window `on` deleteEvent $ do
@@ -520,6 +525,7 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioSt
       case edgeStyle of
         ENormal -> toggleButtonSetActive (radioStyles!!0) True
         EPointed -> toggleButtonSetActive (radioStyles!!1) True
+        ESlashed -> toggleButtonSetActive (radioStyles!!2) True
 
       set hBoxColor [widgetVisible := False]
       set frameShape [widgetVisible := False]

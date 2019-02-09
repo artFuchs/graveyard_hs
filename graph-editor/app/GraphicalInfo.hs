@@ -37,7 +37,7 @@ data NodeGI = NodeGI { position :: (Double, Double)
                      , shape :: NodeShape
                      } deriving (Eq, Show, Read)
 
-data EdgeStyle = ENormal | EPointed deriving (Eq ,Show, Read)
+data EdgeStyle = ENormal | EPointed | ESlashed deriving (Eq ,Show, Read)
 
 -- estrutura de dados para desenhar uma aresta
 -- cPosition : posição do ponto de controle
