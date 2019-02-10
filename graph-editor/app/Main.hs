@@ -482,6 +482,7 @@ updatePropMenu :: EditorState -> (Entry, Entry, ColorButton, ColorButton, [Radio
 updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
   let (nodes,edges) = editorGetSelected es
       (ngiM,egiM) = editorGetGI es
+      unifyNames (x:xs) = if all (==x) xs then x else "----"
   case (length nodes, length edges) of
     (0,0) -> do
       entrySetText entryID ""
@@ -491,61 +492,47 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioSt
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
-    (1,0) -> do
+    (n,0) -> do
       let iD = nodeGetID $ (nodes!!0)
-          name = nodeGetInfo $ (nodes!!0)
+          name = if n == 1 then nodeGetInfo $ (nodes!!0) else unifyNames (map nodeGetInfo nodes)
           gi = getNodeGI iD ngiM
           (r,g,b) = fillColor gi
           (r',g',b') = lineColor gi
           nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
           nodeShape = shape gi
-      entrySetText entryID (show iD)
+      entrySetText entryID $ if n==1 then (show iD) else "----"
       entrySetText entryName name
-      colorButtonSetColor colorBtn nodeColor
-      colorButtonSetColor lcolorBtn nodeLineC
-      case nodeShape of
-        NCircle -> toggleButtonSetActive (radioShapes!!0) True
-        NRect -> toggleButtonSetActive (radioShapes!!1) True
-        NQuad -> toggleButtonSetActive (radioShapes!!2) True
+      colorButtonSetColor colorBtn $ if n==1 then nodeColor else Color 49151 49151 49151
+      colorButtonSetColor lcolorBtn $ if n==1 then nodeLineC else Color 49151 49151 49151
+      case (n,nodeShape) of
+        (1,NCircle) -> toggleButtonSetActive (radioShapes!!0) True
+        (1,NRect) -> toggleButtonSetActive (radioShapes!!1) True
+        (1,NQuad) -> toggleButtonSetActive (radioShapes!!2) True
+        _ -> return ()
 
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := False]
-    (0,1) -> do
+    (0,n) -> do
       let iD = edgeGetID $ (edges!!0)
-          name = edgeGetInfo (edges!!0)
+          name = if n == 1 then edgeGetInfo (edges!!0) else unifyNames (map edgeGetInfo edges)
           gi = getEdgeGI iD egiM
           (r,g,b) = color gi
           edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           edgeStyle = style gi
-      entrySetText entryID (show iD)
+      entrySetText entryID $ if n == 1 then (show iD) else "----"
       entrySetText entryName name
-      colorButtonSetColor lcolorBtn edgeColor
-      case edgeStyle of
-        ENormal -> toggleButtonSetActive (radioStyles!!0) True
-        EPointed -> toggleButtonSetActive (radioStyles!!1) True
-        ESlashed -> toggleButtonSetActive (radioStyles!!2) True
+      colorButtonSetColor lcolorBtn $ if n == 1 then edgeColor else Color 49151 49151 49151
+      case (n,edgeStyle) of
+        (1,ENormal) -> toggleButtonSetActive (radioStyles!!0) True
+        (1,EPointed) -> toggleButtonSetActive (radioStyles!!1) True
+        (1,ESlashed) -> toggleButtonSetActive (radioStyles!!2) True
+        _ -> return ()
 
       set hBoxColor [widgetVisible := False]
       set frameShape [widgetVisible := False]
       set frameStyle [widgetVisible := True]
-    (0,n) -> do
-      entrySetText entryID "----"
-      entrySetText entryName $ (\l -> let x:xs = l in if all (==x) xs then x else "----") (map edgeGetInfo edges)
-      colorButtonSetColor colorBtn $ Color 49151 49151 49151
-      colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
-      set hBoxColor [widgetVisible := False]
-      set frameShape [widgetVisible := False]
-      set frameStyle [widgetVisible := True]
-    (n,0) -> do
-      entrySetText entryID "----"
-      entrySetText entryName $ (\l -> let x:xs = l in if all (==x) xs then x else "----") (map nodeGetInfo nodes)
-      colorButtonSetColor colorBtn $ Color 49151 49151 49151
-      colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
-      set hBoxColor [widgetVisible := True]
-      set frameShape [widgetVisible := True]
-      set frameStyle [widgetVisible := False]
     _ -> do
       entrySetText entryID "--"
       entrySetText entryName "----"
@@ -554,6 +541,9 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioSt
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
+
+
+
 
 -- salvar grafo ----------------------------------------------------------------
 saveGraph :: (Graph,GraphicalInfo) -> Window -> IO ()
@@ -892,9 +882,8 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 
 -- Tarefas ---------------------------------------------------------------------
--- *Estilos diferentes para as arestas
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
--- *Criar um seletor de grafos
+-- *Criar uma árvore de grafos
 
 -- Progresso -------------------------------------------------------------------
 
@@ -909,3 +898,4 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *corrigir bug no copiar/colar que ocorre quando a seleção é movida antes de copiar
 -- *Novo Arquivo
 -- *Separar a estrutura do grafo das estruturas gráficas
+-- *Estilos diferentes para as arestas
