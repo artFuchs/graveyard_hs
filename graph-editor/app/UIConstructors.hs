@@ -2,6 +2,7 @@
 module UIConstructors
 ( buildMaybeMenubar
 , buildPropMenu
+, showError
 ) where
 
 import Graphics.UI.Gtk
@@ -116,3 +117,11 @@ buildPropMenu = do
   let radioStyles = [radioNormal, radioPointed, radioSlashed]
 
   return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))
+
+showError :: Maybe Window -> String -> IO ()
+showError window msg = do
+  dlgE <- messageDialogNew window [DialogDestroyWithParent] MessageError ButtonsOk msg
+  widgetShow dlgE
+  dialogRun dlgE
+  widgetDestroy dlgE
+  return ()

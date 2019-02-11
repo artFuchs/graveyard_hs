@@ -205,8 +205,8 @@ main = do
     (x,y) <- eventCoordinates
     (ox,oy) <- liftIO $ readIORef oldPoint
     es <- liftIO $ readIORef st
-    let leftButton = Button1 `elem` ms
-        middleButton = Button2 `elem` ms
+    let leftButton = Button1 `elem` ms && not (Alt `elem` ms)
+        middleButton = Button2 `elem` ms || Button1 `elem` ms && Alt `elem` ms
         (sNodes, sEdges) = editorGetSelected es
         z = editorGetZoom es
         (px,py) = editorGetPan es
@@ -216,7 +216,6 @@ main = do
         modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x'-a,y'-b))
         sq <- readIORef squareSelection
         widgetQueueDraw canvas
-        --print $ "squareSelection: " ++ show sq
       (True, False, n, e) -> liftIO $ do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
@@ -567,7 +566,7 @@ saveGraph (g,gi) window = do
                             appendFile path $ "\n" ++ show gi
           tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
           case tentativa of
-            Left _ -> print "Não foi possível escrever no arquivo"
+            Left _ -> showError (Just window) "Não foi possível escrever no arquivo"
             Right _ -> return ()
           widgetDestroy saveD
     _  -> widgetDestroy saveD
@@ -586,22 +585,21 @@ loadGraph window = do
   case response of
     ResponseAccept -> do
       filename <- fileChooserGetFilename loadD
+      widgetDestroy loadD
       case filename of
         Nothing -> do
-          widgetDestroy loadD
           return Nothing
         Just path -> do
           tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
           case tentativa of
             Left _ -> do
-              putStrLn "Não foi possivel ler o arquivo"
+              showError (Just window) "Não foi possivel ler o arquivo"
               return Nothing
             Right content -> do
-              widgetDestroy loadD
-              let (g, str) = string2graph content
+              let (g,str) = string2graph content
                   gi = read str :: GraphicalInfo
               return $ Just $ (g,gi)
-    _               -> do
+    _             -> do
       widgetDestroy loadD
       return Nothing
 
@@ -883,7 +881,11 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 -- Tarefas ---------------------------------------------------------------------
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
--- *Criar uma árvore de grafos
+-- *Permitir editar multiplos grafos no mesmo projetos
+--   *Criar uma arvore de grafos
+-- *TypeGraph
+-- *Criar uma janela de mensagens para substituir prints
+-- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
 
 -- Progresso -------------------------------------------------------------------
 
