@@ -74,7 +74,7 @@ main = do
   containerAdd window vBoxMain
 
   -- cria o menu
-  (maybeMenubar,new,opn,svn,udo,rdo) <- buildMaybeMenubar
+  (maybeMenubar,new,opn,svn,udo,rdo,hlp) <- buildMaybeMenubar
   case maybeMenubar of
     Just x -> boxPackStart vBoxMain x PackNatural 0
     Nothing -> return ()
@@ -182,16 +182,14 @@ main = do
               Just nid -> (fromMaybe nullNode (getNodeByID g nid)) : []
         context <- widgetGetPangoContext canvas
         stackUndo changes es
-        sNode <- if null dstNode
-                  then do
-                    shape <- readIORef actualShape
-                    createNode st (x',y') context shape
-                    es <- readIORef st
-                    return $ fst (editorGetSelected es)
-                  else do
-                    estyle <- readIORef actualStyle
-                    modifyIORef st (\es -> createEdges es dstNode estyle)
-                    return dstNode
+        case (Control `elem` ms, null dstNode) of
+          (False, True) -> do
+            shape <- readIORef actualShape
+            createNode st (x',y') context shape
+          (False, False) -> do
+            estyle <- readIORef actualStyle
+            modifyIORef st (\es -> createEdges es dstNode estyle)
+          (True,_) -> return ()
         widgetQueueDraw canvas
         es <- readIORef st
         updatePropMenu es propWidgets propBoxes
@@ -205,8 +203,8 @@ main = do
     (x,y) <- eventCoordinates
     (ox,oy) <- liftIO $ readIORef oldPoint
     es <- liftIO $ readIORef st
-    let leftButton = Button1 `elem` ms && not (Alt `elem` ms)
-        middleButton = Button2 `elem` ms || Button1 `elem` ms && Alt `elem` ms
+    let leftButton = Button1 `elem` ms
+        middleButton = Button2 `elem` ms || Button3 `elem` ms && Control `elem` ms
         (sNodes, sEdges) = editorGetSelected es
         z = editorGetZoom es
         (px,py) = editorGetPan es
@@ -386,6 +384,29 @@ main = do
   rdo `on` actionActivated $ do
     applyRedo changes st
     widgetQueueDraw canvas
+
+  -- TODO: mover esse pedaço de código para o UIConstructors.hs
+  helpWindow <- windowNew
+  set helpWindow  [ windowTitle         := "Graph Editor - Help"]
+  helpBuffer <- textBufferNew Nothing
+  textBufferInsertAtCursor helpBuffer "Instruções: \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão direito do mouse no espaço vazio para criar um novo nodo. \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta para seleciona-lo(a). \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão direito sobre um nodo para criar arestas dos nodos selecionados para ele. \n"
+  textBufferInsertAtCursor helpBuffer "Para modificar as propriedades de um nodo/aresta, selecione-o e utiliza o menu de propriedades à direita. \n"
+  textBufferInsertAtCursor helpBuffer "Use Ctrl + roda do mouse ou Ctrl + [+/-] para aumentar/reduzir o zoom. \n"
+  textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] para restaurar o zoom para o original. \n"
+  textBufferInsertAtCursor helpBuffer "Pressione o botão do meio do mouse, ou Ctrl + botão direito do mouse para navegar pelo canvas. \n"
+
+  helpView <- textViewNewWithBuffer helpBuffer
+  containerAdd helpWindow helpView
+
+
+
+  hlp `on` actionActivated $ do
+    widgetShowAll helpWindow
+
+    return ()
 
 
   -- tratamento de eventos -- menu de propriedades -----------------------------
@@ -884,10 +905,10 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Permitir editar multiplos grafos no mesmo projetos
 --   *Criar uma arvore de grafos
 -- *TypeGraph
--- *Criar uma janela de mensagens para substituir prints
 -- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
 
 -- Progresso -------------------------------------------------------------------
+-- *Criar uma janela de ajuda
 
 
 -- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
@@ -901,3 +922,4 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Novo Arquivo
 -- *Separar a estrutura do grafo das estruturas gráficas
 -- *Estilos diferentes para as arestas
+-- *Criar uma janela de mensagens para substituir prints

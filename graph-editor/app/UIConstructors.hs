@@ -16,15 +16,17 @@ buildMaybeMenubar = do
     edt <- actionNew "EDT" "Edit" Nothing Nothing
     udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
     rdo <- actionNew "RDO" "Redo" (Just "Just a stub") Nothing
+    hlp <- actionNew "HLP" "Help" (Just "Just a stub") Nothing
+    hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
     agr <- actionGroupNew "AGR"
-    mapM_ (actionGroupAddAction agr) [fma,edt]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,udo,rdo]
+    mapM_ (actionGroupAddAction agr) [fma,edt,hlp]
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,udo,rdo,hlp']
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, new, opn, svn, udo, rdo)
+    return (maybeMenubar, new, opn, svn, udo, rdo, hlp')
 
   where uiStr = "<ui>\
 \                 <menubar>\
@@ -36,6 +38,9 @@ buildMaybeMenubar = do
 \                   <menu action=\"EDT\">\
 \                     <menuitem action=\"UDO\"/>\
 \                     <menuitem action=\"RDO\"/>\
+\                   </menu>\
+\                   <menu action=\"HLP\">\
+\                     <menuitem action=\"HLP'\"/>\
 \                   </menu>\
 \                 </menubar>\
 \                </ui>"
