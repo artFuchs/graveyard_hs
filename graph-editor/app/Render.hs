@@ -163,6 +163,9 @@ renderLoop edge selected node = do
     EPointed -> do
       drawPointedCurve (x,y) p1 p2 (xe,ye)
       drawPointedCurve (x,y) p1' p2' (xe,ye)
+    ESlashed -> do
+      drawSlashedCurve (x,y) p1 p2 (xe,ye)
+      drawSlashedCurve (x,y) p1' p2' (xe,ye)
   -- desenha um arco para mostrar o ponto de controle
   arc f g 2 0 (2*pi)
   fill
@@ -208,11 +211,11 @@ drawPointedCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) = do
       dist = pointDistance p0 mid + pointDistance p3 mid
       pointsN = dist/4 :: Double
       linePoints = [0,(1/pointsN)..1]
-  forM linePoints (\t -> drawPointsInCurve p0 p1 p2 p3 t)
+  forM linePoints (\t -> drawPointInCurve p0 p1 p2 p3 t)
   return ()
 
-drawPointsInCurve :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> Double -> Render ()
-drawPointsInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t = do
+drawPointInCurve :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> Double -> Render ()
+drawPointInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t = do
   let b03 = (1-t)**3
       b13 = 3 * t * (1-t)**2
       b23 = 3 * t**2 * (1-t)
@@ -227,7 +230,7 @@ drawSlashedLine p0@(x0,y0) p1@(x1,y1) = do
     let dist = pointDistance p0 p1
         pointsN = dist/4 :: Double
         linePoints = genPairs [0,(1/pointsN)..1]
-    forM linePoints (\(t0,t1) -> drawSlash p0 p1 t0 t1)
+    forM linePoints (\(t0,t1) -> drawSlashInLine p0 p1 t0 t1)
     return ()
 
 genPairs :: [a] -> [(a,a)]
@@ -235,11 +238,35 @@ genPairs [] = []
 genPairs (x:[]) = []
 genPairs (x:y:ls) = (x,y):(genPairs ls)
 
-drawSlash :: (Double,Double) -> (Double,Double) -> Double -> Double ->  Render ()
-drawSlash p0@(x0,y0) p1@(x1,y1) t0 t1 = do
+drawSlashInLine :: (Double,Double) -> (Double,Double) -> Double -> Double ->  Render ()
+drawSlashInLine p0@(x0,y0) p1@(x1,y1) t0 t1 = do
   let
     (x,y)   = interpolate p0 p1 t0
     (x',y') = interpolate p0 p1 t1
+  moveTo x y
+  lineTo x' y'
+  stroke
+
+drawSlashedCurve :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> Render ()
+drawSlashedCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) = do
+    let mid = midPoint p1 p2
+        dist = pointDistance p0 mid + pointDistance p3 mid
+        pointsN = dist/4 :: Double
+        curvePoints = genPairs [0,(1/pointsN)..1]
+
+    forM curvePoints (\(t0,t1) -> drawSlashInCurve p0 p1 p2 p3 t0 t1)
+    return ()
+
+drawSlashInCurve :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> Double -> Double -> Render ()
+drawSlashInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t1 t2 = do
+  let b03 t = (1-t)**3
+      b13 t = 3 * t * (1-t)**2
+      b23 t = 3 * t**2 * (1-t)
+      b33 t = t**3
+      x = (b03 t1)*x0 + (b13 t1)*x1 + (b23 t1)*x2 + (b33 t1)*x3
+      y = (b03 t1)*y0 + (b13 t1)*y1 + (b23 t1)*y2 + (b33 t1)*y3
+      x' = (b03 t2)*x0 + (b13 t2)*x1 + (b23 t2)*x2 + (b33 t2)*x3
+      y' = (b03 t2)*y0 + (b13 t2)*y1 + (b23 t2)*y2 + (b33 t2)*y3
   moveTo x y
   lineTo x' y'
   stroke
