@@ -2,6 +2,7 @@
 module UIConstructors
 ( buildMaybeMenubar
 , buildPropMenu
+, buildHelpWindow
 , showError
 ) where
 
@@ -122,6 +123,29 @@ buildPropMenu = do
   let radioStyles = [radioNormal, radioPointed, radioSlashed]
 
   return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))
+
+buildHelpWindow :: IO Window
+buildHelpWindow = do
+  helpWindow <- windowNew
+  set helpWindow  [ windowTitle         := "Graph Editor - Help"]
+  helpBuffer <- textBufferNew Nothing
+  textBufferInsertAtCursor helpBuffer "Instruções: \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão direito do mouse no espaço vazio para criar um novo nodo. \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta para seleciona-lo(a). \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta + Shift para adiciona-lo à seleção. \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta + Shift + Ctrl para removê-lo da seleção. \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um espaço vazio e arraste o mouse para criar uma àrea de seleção. Os nodos/arestas que estiverem dentro dessa área serão selecionados. \n"
+  textBufferInsertAtCursor helpBuffer "Clique com o botão direito sobre um nodo para criar arestas dos nodos selecionados para ele. \n"
+  textBufferInsertAtCursor helpBuffer "Para modificar as propriedades de um nodo/aresta, selecione-o e utiliza o menu de propriedades à direita. \n"
+  textBufferInsertAtCursor helpBuffer "Use Ctrl + roda do mouse ou Ctrl + [+/-] para aumentar/reduzir o zoom. \n"
+  textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] para restaurar o zoom para o original. \n"
+  textBufferInsertAtCursor helpBuffer "Pressione o botão do meio do mouse, ou Ctrl + botão direito do mouse para navegar pelo canvas. \n"
+
+  helpView <- textViewNewWithBuffer helpBuffer
+  containerAdd helpWindow helpView
+
+  return helpWindow
+
 
 showError :: Maybe Window -> String -> IO ()
 showError window msg = do

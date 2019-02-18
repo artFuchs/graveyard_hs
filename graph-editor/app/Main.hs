@@ -63,7 +63,10 @@ main = do
   initGUI
 
   -- definição da UI -----------------------------------------------------------
-  -- cria a janela principal
+  -- janela de ajuda
+  helpWindow <- buildHelpWindow
+
+  -- janela principal
   window <- windowNew
   set window  [ windowTitle         := "Graph Editor"
               , windowDefaultWidth  := 640
@@ -100,7 +103,7 @@ main = do
   widgetAddEvents canvas [AllEventsMask]
   widgetDelEvents canvas [SmoothScrollMask]
   widgetGrabFocus canvas
-  widgetModifyBg canvas StateNormal (Color 65535 65535 65535) -- parece que não funciona
+
   containerAdd frameCanvas canvas
 
   -- mostra a GUI
@@ -156,10 +159,14 @@ main = do
             writeIORef squareSelection $ Just (x',y',0,0)
             return ([],[])
           ([],[], _, _) -> return (oldSN, oldSE)
-
-          (n,e,False, _) -> do
-            modifyIORef st (editorSetSelected (sNode, sEdge))
-            return (sNode, sEdge)
+          (n, [], False, _) -> if n!!0 `elem` oldSN
+                                then return (oldSN,oldSE)
+                                else do modifyIORef st (editorSetSelected (n, []))
+                                        return (n,[])
+          ([],e,False, _) -> if e!!0 `elem` oldSE
+                                then return (oldSN,oldSE)
+                                else do modifyIORef st (editorSetSelected ([], e))
+                                        return ([],e)
           (n,e,True, False) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
@@ -183,12 +190,15 @@ main = do
         context <- widgetGetPangoContext canvas
         stackUndo changes es
         case (Control `elem` ms, null dstNode) of
+          -- nenhum nodo foi selecionado, criar nodo
           (False, True) -> do
             shape <- readIORef actualShape
             createNode st (x',y') context shape
+          -- um nodo foi selecionado, criar edges levando a esse nodo
           (False, False) -> do
             estyle <- readIORef actualStyle
             modifyIORef st (\es -> createEdges es dstNode estyle)
+          -- ctrl pressionado, emulação do botão do meio do mouse
           (True,_) -> return ()
         widgetQueueDraw canvas
         es <- readIORef st
@@ -384,24 +394,6 @@ main = do
   rdo `on` actionActivated $ do
     applyRedo changes st
     widgetQueueDraw canvas
-
-  -- TODO: mover esse pedaço de código para o UIConstructors.hs
-  helpWindow <- windowNew
-  set helpWindow  [ windowTitle         := "Graph Editor - Help"]
-  helpBuffer <- textBufferNew Nothing
-  textBufferInsertAtCursor helpBuffer "Instruções: \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão direito do mouse no espaço vazio para criar um novo nodo. \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta para seleciona-lo(a). \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão direito sobre um nodo para criar arestas dos nodos selecionados para ele. \n"
-  textBufferInsertAtCursor helpBuffer "Para modificar as propriedades de um nodo/aresta, selecione-o e utiliza o menu de propriedades à direita. \n"
-  textBufferInsertAtCursor helpBuffer "Use Ctrl + roda do mouse ou Ctrl + [+/-] para aumentar/reduzir o zoom. \n"
-  textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] para restaurar o zoom para o original. \n"
-  textBufferInsertAtCursor helpBuffer "Pressione o botão do meio do mouse, ou Ctrl + botão direito do mouse para navegar pelo canvas. \n"
-
-  helpView <- textViewNewWithBuffer helpBuffer
-  containerAdd helpWindow helpView
-
-
 
   hlp `on` actionActivated $ do
     widgetShowAll helpWindow
@@ -902,7 +894,7 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 -- Tarefas ---------------------------------------------------------------------
 -- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
--- *Permitir editar multiplos grafos no mesmo projetos
+-- *Editar multiplos grafos no mesmo projetos
 --   *Criar uma arvore de grafos
 -- *TypeGraph
 -- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
@@ -922,4 +914,5 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Novo Arquivo
 -- *Separar a estrutura do grafo das estruturas gráficas
 -- *Estilos diferentes para as arestas
--- *Criar uma janela de mensagens para substituir prints
+-- *Criar uma janela de mensagens de erros para substituir prints
+-- *Mudar para que quando o usuario clique em um nodo, ele não invalide toda a seleção se o nodo for parte da seleção
