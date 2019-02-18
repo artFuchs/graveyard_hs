@@ -87,8 +87,8 @@ main = do
   boxPackStart vBoxMain hPaneAction PackGrow 0
 
   -- cria o menu de propriedades
-  (frameProps, entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
-  let propWidgets = (entryNodeID, entryNodeName, colorBtn, lineColorBtn, radioShapes, radioStyles)
+  (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
+  let propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
       [radioCircle, radioRect, radioQuad] = radioShapes
       [radioNormal, radioPointed, radioSlashed] = radioStyles
   panedPack2 hPaneAction frameProps False True
@@ -133,15 +133,17 @@ main = do
     (x,y) <- eventCoordinates
     ms <- eventModifierAll
     es <- liftIO $ readIORef st
+    click <- eventClick
     let z = editorGetZoom es
         (px,py) = editorGetPan es
         (x',y') = (x/z - px, y/z - py)
     liftIO $ do
       writeIORef oldPoint (x',y')
       widgetGrabFocus canvas
-    case b of
+    case (b, click == DoubleClick) of
+      (LeftButton, True) -> liftIO $ widgetGrabFocus entryName
       -- clique com o botão esquerdo: seleciona nodos e edges
-      LeftButton  -> liftIO $ do
+      (LeftButton, False)  -> liftIO $ do
         let (oldSN,oldSE) = editorGetSelected es
             graph = editorGetGraph es
             gi = editorGetGI es
@@ -181,7 +183,7 @@ main = do
         es <- readIORef st
         updatePropMenu es propWidgets propBoxes
       -- clique com o botão direito: cria nodos e insere edges entre nodos
-      RightButton -> liftIO $ do
+      (RightButton, _) -> liftIO $ do
         let g = editorGetGraph es
             gi = editorGetGI es
             dstNode = case checkSelectNode gi (x',y') of
@@ -402,14 +404,14 @@ main = do
 
 
   -- tratamento de eventos -- menu de propriedades -----------------------------
-  entryNodeName `on` keyPressEvent $ do
+  entryName `on` keyPressEvent $ do
     k <- eventKeyName
     liftIO $ do
       case T.unpack k of
         "Return" -> do
           es <- readIORef st
           stackUndo changes es
-          name <- entryGetText entryNodeName :: IO String
+          name <- entryGetText entryName :: IO String
           context <- widgetGetPangoContext canvas
           renameSelected st name context
           widgetQueueDraw canvas
