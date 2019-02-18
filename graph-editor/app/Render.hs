@@ -80,9 +80,7 @@ renderEdge edge content selected nodeSrc nodeDst context = do
 
 renderNormalEdge :: EdgeGI -> Bool -> NodeGI -> NodeGI -> Render ()
 renderNormalEdge edge selected nodeSrc nodeDst = do
-  setSourceRGB 0 0 0
-
-  -- calculo dos pontos de origem e destino da aresta
+  -- calculo dos pontos de intersecção da aresta com os nodos de origem e destino
   let (x1, y1) = position nodeSrc
       (pw, ph) = dims nodeSrc
       (x2, y2) = position nodeDst
@@ -96,7 +94,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
           in (x1 + vx1*n1, y1 + vy1*n1)
         NRect -> intersectLineRect (xe,ye) (x1,y1,pw+3,ph+3)
         NQuad -> let l = max pw ph in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
-      (x2', y2') = case shape nodeSrc of
+      (x2', y2') = case shape nodeDst of
         NCircle ->
           let d2 = pointDistance (xe,ye) (x2,y2)
               (vx2,vy2) = ((x2-xe)/d2 , (y2-ye)/d2)
@@ -104,9 +102,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
           in (x2 - vx2*n2, y2 - vy2*n2)
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
         NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
-
-
-      -- configurações de cor
+      -- cor da aresta
       (r,g,b) = if selected then (0,1,0) else color edge
 
   -- desenha uma linha representando a aresta
