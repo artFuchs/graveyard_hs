@@ -113,7 +113,8 @@ main = do
   st <- newIORef (emptyGraph "New", (M.empty, M.empty), ([], []), 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
   squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
-  changes <- newIORef ([],[]) -- pilhas de undo/redo - ([Graph],[Graph])
+  undoStack <- newIORef ([] :: [(Graph, GraphicalInfo)]) -- pilha de undo
+  redoStack <- newIORef ([] :: [(Graph, GraphicalInfo)]) -- pilha de redo
   movingGI <- newIORef False -- se o usuario começou a mover algum objeto
   actualShape <- newIORef NCircle
   actualStyle <- newIORef ENormal
@@ -190,7 +191,7 @@ main = do
               Nothing -> []
               Just nid -> (fromMaybe nullNode (getNodeByID g nid)) : []
         context <- widgetGetPangoContext canvas
-        stackUndo changes es
+        stackUndo undoStack redoStack es
         case (Control `elem` ms, null dstNode) of
           -- nenhum nodo foi selecionado, criar nodo
           (False, True) -> do
@@ -234,7 +235,7 @@ main = do
         if not mv
           then do
             writeIORef movingGI True
-            stackUndo changes es
+            stackUndo undoStack redoStack es
           else return ()
         widgetQueueDraw canvas
       (False ,True, _, _) -> liftIO $ do
@@ -298,7 +299,7 @@ main = do
         (False,False,"delete") -> do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
-          stackUndo changes es
+          stackUndo undoStack redoStack es
           widgetQueueDraw canvas
         -- CTRL + <+>/<->/<=> : zoom controls
         (True,_,"plus") -> do
@@ -345,10 +346,10 @@ main = do
 
         -- CTRL + Z/R : undo/redo
         (True, False, "z") -> do
-          applyUndo changes st
+          applyUndo undoStack redoStack st
           widgetQueueDraw canvas
         (True, False, "r") -> do
-          applyRedo changes st
+          applyRedo undoStack redoStack st
           widgetQueueDraw canvas
         -- CTRL + C/V/X : copy/paste/cut
         (True, False, "c") -> do
@@ -357,14 +358,14 @@ main = do
         (True, False, "v") -> do
           es <- readIORef st
           clip <- readIORef clipboard
-          stackUndo changes es
+          stackUndo undoStack redoStack es
           modifyIORef st (pasteClipBoard clip)
           widgetQueueDraw canvas
         (True, False, "x") -> do
           es <- readIORef st
           writeIORef clipboard $ copySelected es
           modifyIORef st (\es -> deleteSelected es)
-          stackUndo changes es
+          stackUndo undoStack redoStack es
           widgetQueueDraw canvas
         _       -> return ()
 
@@ -390,11 +391,11 @@ main = do
     saveGraph (g,gi) window
 
   udo `on` actionActivated $ do
-    applyUndo changes st
+    applyUndo undoStack redoStack st
     widgetQueueDraw canvas
 
   rdo `on` actionActivated $ do
-    applyRedo changes st
+    applyRedo undoStack redoStack st
     widgetQueueDraw canvas
 
   hlp `on` actionActivated $ do
@@ -410,7 +411,7 @@ main = do
       case T.unpack k of
         "Return" -> do
           es <- readIORef st
-          stackUndo changes es
+          stackUndo undoStack redoStack es
           name <- entryGetText entryName :: IO String
           context <- widgetGetPangoContext canvas
           renameSelected st name context
@@ -827,29 +828,41 @@ getStringDims str context = do
   return (w+4, h+4)
 
 -- Undo / Redo -----------------------------------------------------------------
-stackUndo :: IORef ([Graph],[Graph]) -> EditorState -> IO ()
-stackUndo changes es = do
+stackUndo :: IORef [(Graph,GraphicalInfo)] -> IORef [(Graph,GraphicalInfo)] -> EditorState -> IO ()
+stackUndo undo redo es = do
   let g = editorGetGraph es
-  modifyIORef changes (\(u,r) -> (g:u,[]))
+      gi = editorGetGI es
+  modifyIORef undo (\u -> (g,gi):u )
+  modifyIORef redo (\_ -> [])
 
-applyUndo :: IORef ([Graph],[Graph]) -> IORef EditorState -> IO ()
-applyUndo changes st = do
-  ur <- readIORef changes
+applyUndo :: IORef [(Graph,GraphicalInfo)] -> IORef [(Graph,GraphicalInfo)] -> IORef EditorState -> IO ()
+applyUndo undoStack redoStack st = do
   es <- readIORef st
-  let apply ([],r) es = (([],r), es)
-      apply (g:u,r) es = ((u, editorGetGraph es : r), editorSetGraph g es)
-      (nur, nes) = apply ur es
-  writeIORef changes nur
+  undo <- readIORef undoStack
+  redo <- readIORef redoStack
+  let apply [] r es = ([],r, es)
+      apply ((g,gi):u) r es = (u, (eg,egi):r, editorSetGI gi . editorSetGraph g $ es)
+                            where
+                              eg = editorGetGraph es
+                              egi = editorGetGI es
+      (nu, nr, nes) = apply undo redo es
+  writeIORef undoStack nu
+  writeIORef redoStack nr
   writeIORef st nes
 
-applyRedo :: IORef ([Graph],[Graph]) -> IORef EditorState -> IO ()
-applyRedo changes st = do
-  ur <- readIORef changes
+applyRedo :: IORef [(Graph,GraphicalInfo)] -> IORef [(Graph,GraphicalInfo)] -> IORef EditorState -> IO ()
+applyRedo undoStack redoStack st = do
+  undo <- readIORef undoStack
+  redo <- readIORef redoStack
   es <- readIORef st
-  let apply (u,[]) es = ((u,[]), es)
-      apply (u,g:r) es = ((editorGetGraph es : u, r), editorSetGraph g es)
-      (nur, nes) = apply ur es
-  writeIORef changes nur
+  let apply u [] es = (u, [], es)
+      apply u ((g,gi):r) es = ((eg,egi):u, r, editorSetGI gi . editorSetGraph g $ es)
+                            where
+                              eg = editorGetGraph es
+                              egi = editorGetGI es
+      (nu, nr, nes) = apply undo redo es
+  writeIORef undoStack nu
+  writeIORef redoStack nr
   writeIORef st nes
 
 -- Copy / Paste / Cut ----------------------------------------------------------
