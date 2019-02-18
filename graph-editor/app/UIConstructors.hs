@@ -1,12 +1,52 @@
 -- | Esse modulo contem a definição dos widgets da interface do usuario
 module UIConstructors
-( buildMaybeMenubar
+( buildMainWindow
+, buildMaybeMenubar
 , buildPropMenu
 , buildHelpWindow
 , showError
 ) where
 
 import Graphics.UI.Gtk
+
+buildMainWindow maybeMenuBar frameProps = do
+  -- janela principal
+  window <- windowNew
+  set window  [ windowTitle         := "Graph Editor"
+              , windowDefaultWidth  := 640
+              , windowDefaultHeight := 480]
+
+  -- cria uma VBox para separar o editor do menu
+  vBoxMain <- vBoxNew False 0
+  containerAdd window vBoxMain
+
+  -- adiciona o menu
+  case maybeMenuBar of
+    Just x -> boxPackStart vBoxMain x PackNatural 0
+    Nothing -> return ()
+
+  -- cria um HPane para dividir o canvas e o menu de propriedades
+  hPaneAction <- hPanedNew
+  boxPackStart vBoxMain hPaneAction PackGrow 0
+  -- adiciona o menu de propriedades à UI
+  panedPack2 hPaneAction frameProps False True
+
+  -- cria um frame para englobar o canvas
+  frameCanvas <- frameNew
+  set frameCanvas [ frameShadowType := ShadowIn ]
+  -- adiciona o frame do Canvas
+  panedPack1 hPaneAction frameCanvas True True
+  -- cria um canvas em branco
+  canvas <- drawingAreaNew
+  containerAdd frameCanvas canvas
+  widgetSetCanFocus canvas True
+  widgetAddEvents canvas [AllEventsMask]
+  widgetDelEvents canvas [SmoothScrollMask]
+  widgetGrabFocus canvas
+
+  return (window, canvas)
+
+
 
 -- constroi a menu toolbar
 buildMaybeMenubar = do

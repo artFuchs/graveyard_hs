@@ -64,47 +64,20 @@ main = do
 
   -- definição da UI -----------------------------------------------------------
   -- janela de ajuda
+
   helpWindow <- buildHelpWindow
-
-  -- janela principal
-  window <- windowNew
-  set window  [ windowTitle         := "Graph Editor"
-              , windowDefaultWidth  := 640
-              , windowDefaultHeight := 480]
-
-  -- cria uma VBox para separar o editor do menu
-  vBoxMain <- vBoxNew False 0
-  containerAdd window vBoxMain
-
   -- cria o menu
   (maybeMenubar,new,opn,svn,udo,rdo,hlp) <- buildMaybeMenubar
-  case maybeMenubar of
-    Just x -> boxPackStart vBoxMain x PackNatural 0
-    Nothing -> return ()
-
-  -- cria um HPane para dividir o canvas e o menu de propriedade
-  hPaneAction <- hPanedNew
-  boxPackStart vBoxMain hPaneAction PackGrow 0
 
   -- cria o menu de propriedades
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
-  let propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
-      [radioCircle, radioRect, radioQuad] = radioShapes
-      [radioNormal, radioPointed, radioSlashed] = radioStyles
-  panedPack2 hPaneAction frameProps False True
+  let
+    propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
+    [radioCircle, radioRect, radioQuad] = radioShapes
+    [radioNormal, radioPointed, radioSlashed] = radioStyles
 
-  -- cria um frame para englobar o canvas
-  frameCanvas <- frameNew
-  set frameCanvas [ frameShadowType := ShadowIn ]
-  panedPack1 hPaneAction frameCanvas True True
-  -- cria um canvas em branco
-  canvas <- drawingAreaNew
-  widgetSetCanFocus canvas True
-  widgetAddEvents canvas [AllEventsMask]
-  widgetDelEvents canvas [SmoothScrollMask]
-  widgetGrabFocus canvas
-
-  containerAdd frameCanvas canvas
+  -- cria a janela principal, contendo o canvas
+  (window, canvas) <- buildMainWindow maybeMenubar frameProps
 
   -- mostra a GUI
   widgetShowAll window
@@ -367,6 +340,7 @@ main = do
           modifyIORef st (\es -> deleteSelected es)
           stackUndo undoStack redoStack es
           widgetQueueDraw canvas
+        (False,False,"f2") -> widgetGrabFocus entryName
         _       -> return ()
 
     return True
@@ -908,11 +882,11 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 
 -- Tarefas ---------------------------------------------------------------------
--- *Espaçar edges quando entre dois nodos ouver mais de uma aresta e ela estiver centralizada
--- *Editar multiplos grafos no mesmo projetos
+-- *Espaçar edges quando houver mais de uma aresta entre dois nodos e ela estiver centralizada
+-- *Editar multiplos grafos no mesmo projeto
 --   *Criar uma arvore de grafos
 -- *TypeGraph
--- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
+-- *Mudar estrutura do grafo para estrutura usada no verigraph
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
@@ -931,3 +905,4 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Estilos diferentes para as arestas
 -- *Criar uma janela de mensagens de erros para substituir prints
 -- *Mudar para que quando o usuario clique em um nodo, ele não invalide toda a seleção se o nodo for parte da seleção
+-- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
