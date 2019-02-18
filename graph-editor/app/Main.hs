@@ -62,20 +62,17 @@ main = do
   -- inicializa a biblioteca GTK
   initGUI
 
-  -- definição da UI -----------------------------------------------------------
+  -- definição da GUI -----------------------------------------------------------
   -- janela de ajuda
-
   helpWindow <- buildHelpWindow
   -- cria o menu
   (maybeMenubar,new,opn,svn,udo,rdo,hlp) <- buildMaybeMenubar
-
   -- cria o menu de propriedades
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let
     propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
-
   -- cria a janela principal, contendo o canvas
   (window, canvas) <- buildMainWindow maybeMenubar frameProps
 
@@ -127,14 +124,16 @@ main = do
             sEdge = case checkSelectEdge gi (x',y') of
               Nothing -> []
               Just eid -> [fromMaybe nullEdge (find (\e -> edgeGetID e == eid) (graphGetEdges graph))]
-        -- Shift: seleção de multiplos elementos
+        -- adicionar/remover elementos da seleção
         (sNodes,sEdges) <- case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
           -- clicou no espaço em branco, Shift não pressionado
           ([],[], False, _) -> do
             modifyIORef st (editorSetSelected ([],[]))
             writeIORef squareSelection $ Just (x',y',0,0)
             return ([],[])
+          -- clicou no espaço em branco com shift pressionado
           ([],[], _, _) -> return (oldSN, oldSE)
+          -- selecionou nodos ou edges com shift não pressionado -> se não fizer parte da seleção, torna-los a seleção
           (n, [], False, _) -> if n!!0 `elem` oldSN
                                 then return (oldSN,oldSE)
                                 else do modifyIORef st (editorSetSelected (n, []))
@@ -143,11 +142,13 @@ main = do
                                 then return (oldSN,oldSE)
                                 else do modifyIORef st (editorSetSelected ([], e))
                                         return ([],e)
+          -- selecionou nodos ou edges com shift pressionado -> adicionar para seleção
           (n,e,True, False) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
             return (jointSN, jointSE)
+          -- selecionou nodos ou edges com shift e ctrl pressionados -> remover da seleção
           (n,e,True, True) -> do
             let jointSN = delete (sNode!!0) oldSN
                 jointSE = delete (sEdge!!0) oldSE
@@ -531,9 +532,6 @@ updatePropMenu es (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioSt
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
 
-
-
-
 -- salvar grafo ----------------------------------------------------------------
 saveGraph :: (Graph,GraphicalInfo) -> Window -> IO ()
 saveGraph (g,gi) window = do
@@ -593,7 +591,7 @@ loadGraph window = do
       widgetDestroy loadD
       return Nothing
 
--- atualização do desenho do grafo ---------------------------------------------
+-- desenhar grafo no canvas ----------------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
 drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
