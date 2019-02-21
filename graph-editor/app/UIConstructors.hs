@@ -8,6 +8,7 @@ module UIConstructors
 ) where
 
 import Graphics.UI.Gtk
+import qualified Data.Text as T
 
 buildMainWindow maybeMenuBar frameProps = do
   -- janela principal
@@ -52,7 +53,7 @@ buildMainWindow maybeMenuBar frameProps = do
 buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
     new <- actionNew "NEW" "New File" (Just "Just a stub") Nothing
-    opn <- actionNew "OPN" "Open File" (Just "Just a stub") Nothing
+    opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
     svn <- actionNew "SVN" "Save File" (Just "Just a stub") Nothing
     edt <- actionNew "EDT" "Edit" Nothing Nothing
     udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
