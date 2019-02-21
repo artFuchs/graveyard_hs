@@ -18,27 +18,30 @@ import Control.Monad
 renderNode :: NodeGI -> String -> Bool -> PangoContext -> Render ()
 renderNode node content selected context = do
   let (x,y) = position node
-      (r,g,b) = if selected
-                  then (0,0,1)
-                  else fillColor node
-      (rl,gl,bl) = if selected
-                    then (0,1,0)
-                    else lineColor node
+      (r,g,b) = fillColor node
+      (rl,gl,bl) = lineColor node
       (pw,ph) = dims node
 
   setSourceRGB r g b
   case shape node of
-    NCircle -> let radius = (max pw ph)/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl)
-    NRect -> renderRectangle (x, y, pw, ph) (r,g,b) (rl,gl,bl)
-    NQuad -> renderRectangle (x,y, (max pw ph), (max pw ph)) (r,g,b) (rl,gl,bl)
+    NCircle -> let radius = (max pw ph)/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl) selected
+    NRect -> renderRectangle (x, y, pw, ph) (r,g,b) (rl,gl,bl) selected
+    NQuad -> renderRectangle (x,y, (max pw ph), (max pw ph)) (r,g,b) (rl,gl,bl) selected
 
   setSourceRGB rl gl bl
   moveTo (x-(pw/2-2)) (y-(ph/2-2))
   pL <- liftIO $ layoutText context content
   showLayout pL
 
-renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,Double,Double) ->  Render ()
-renderCircle (x,y) radius (r,g,b) (lr,lg,lb) = do
+renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,Double,Double) -> Bool ->  Render ()
+renderCircle (x,y) radius (r,g,b) (lr,lg,lb) selected = do
+  if selected
+    then do
+      setSourceRGB 0 1 0
+      arc x y (radius+3) 0 (2*pi)
+      fill
+    else
+      return ()
   setSourceRGB r g b
   arc x y radius 0 (2*pi)
   fill
@@ -46,8 +49,15 @@ renderCircle (x,y) radius (r,g,b) (lr,lg,lb) = do
   arc x y radius 0 (2*pi)
   stroke
 
-renderRectangle :: (Double,Double,Double,Double) -> (Double,Double,Double) -> (Double,Double,Double) -> Render ()
-renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) = do
+renderRectangle :: (Double,Double,Double,Double) -> (Double,Double,Double) -> (Double,Double,Double) -> Bool ->  Render ()
+renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) selected = do
+  if selected
+    then do
+      setSourceRGB 0 1 0
+      rectangle (x-(w/2+3)) (y-(h/2+3)) (w+3) (h+3)
+      fill
+    else
+      return ()
   setSourceRGB r g b
   rectangle (x-(w/2)) (y-(h/2)) w h
   fill
@@ -103,9 +113,20 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
         NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
       -- cor da aresta
-      (r,g,b) = if selected then (0,1,0) else color edge
+      (r,g,b) = color edge
+
+  if selected
+    then do
+      setLineWidth 4
+      setSourceRGB 0 1 0
+      moveTo x1' y1'
+      lineTo xe ye
+      lineTo x2' y2'
+      stroke
+    else return ()
 
   -- desenha uma linha representando a aresta
+  setLineWidth 2
   setSourceRGB r g b
   case style edge of
     ENormal -> do
@@ -146,9 +167,22 @@ renderLoop edge selected node = do
       p2 = pointAt (a+pi/2) (d/1.5) (f,g)
       p1' = pointAt (a-pi/8) (d/8) (x,y)
       p2' = pointAt (a-pi/2) (d/1.5) (f,g)
-      (rl,gl,bl) = if selected then (0,1,0) else color edge
+      (rl,gl,bl) = color edge
+
+  if selected
+    then do
+      setSourceRGB 0 1 0
+      setLineWidth 4
+      moveTo x y
+      curveTo (fst p1) (snd p1) (fst p2) (snd p2) xe ye
+      moveTo x y
+      curveTo (fst p1') (snd p1') (fst p2') (snd p2') xe ye
+      stroke
+    else return ()
+
   -- desenha uma curva levando ao próprio nodo
   setSourceRGB rl gl bl
+  setLineWidth 2
   case style edge of
     ENormal -> do
       moveTo x y
