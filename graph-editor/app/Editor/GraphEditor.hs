@@ -1,4 +1,4 @@
-module GraphEditor
+module Editor.GraphEditor
 ( startGUI
 )where
 
@@ -10,15 +10,14 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Data.List
 import Data.Maybe
---import qualified Data.Char as C
 import qualified Data.Text as T
 import qualified Control.Exception as E
 import qualified Data.Map as M
-import Graph
-import GraphicalInfo
-import Render
-import Helper
-import UIConstructors
+import Editor.Graph
+import Editor.GraphicalInfo
+import Editor.Render
+import Editor.Helper
+import Editor.UIBuilders
 
 nullEdge = Edge 0 ""
 

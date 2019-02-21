@@ -1,4 +1,4 @@
-module GraphicalInfo
+module Editor.GraphicalInfo
 ( GraphicalInfo (..)
 , NodeShape (..)
 , NodeGI (..)

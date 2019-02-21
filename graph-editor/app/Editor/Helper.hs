@@ -1,5 +1,5 @@
 -- | Módulo contendo funções auxiliares relacionadas com a geometria
-module Helper
+module Editor.Helper
 ( pointDistance
 , pointLineDistance
 , addPoint

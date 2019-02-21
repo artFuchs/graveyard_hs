@@ -1,3 +1,3 @@
-import GraphEditor
+import Editor.GraphEditor
 
 main = startGUI

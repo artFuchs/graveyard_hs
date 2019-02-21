@@ -1,5 +1,5 @@
 -- | módulo contendo funções relacionadas com o rendering do grafo
-module Render
+module Editor.Render
 ( renderNode
 , renderEdge
 )where
@@ -9,8 +9,8 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import qualified Data.Text as T
 import Data.List
-import GraphicalInfo
-import Helper
+import Editor.GraphicalInfo
+import Editor.Helper
 import Control.Monad
 
 

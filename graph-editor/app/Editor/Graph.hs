@@ -1,4 +1,4 @@
-module Graph
+module Editor.Graph
 ( Graph (..)
 , string2graph
 , emptyGraph
@@ -28,7 +28,7 @@ module Graph
 )where
 
 import Data.List
-import Helper
+import Editor.Helper
 
 -- Estruturas de conteudo ------------------------------------------------------
 

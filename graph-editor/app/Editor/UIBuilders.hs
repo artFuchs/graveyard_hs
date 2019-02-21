@@ -1,5 +1,5 @@
 -- | Esse modulo contem a definição dos widgets da interface do usuario
-module UIConstructors
+module Editor.UIBuilders
 ( buildMainWindow
 , buildMaybeMenubar
 , buildPropMenu
