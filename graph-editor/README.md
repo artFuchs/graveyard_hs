@@ -1,5 +1,6 @@
 # Graph Editor
 
-a little graph editor to experiment the GTK bindings from haskell
+A graph editor that's intended to be used in the [verigraph tool](https://github.com/Verites/verigraph) in the future.
 
-utilizing the package gtk3
+The editor in this repository makes use of the module Data.Graphs from the Verigraph source.
+
