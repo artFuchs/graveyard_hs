@@ -10,7 +10,9 @@ extra-deps:
 - pango-0.13.5.0@sha256:8daed8e698a32c16c8dd5036b873b93b196ea4ce3b011ae00cef4768d9c826b2
 - parsec-3.1.13.0@sha256:d56210cf092db6e43024d9e8871c7e05a8e9e36e9aec09356e5bd401ea8f5a0c
 - text-1.2.3.1@sha256:fc9719142e5cdd6f254b3f4831b133d3fad697ae9b54fe26424f0e023c8cc87d
-
-
-
+- parallel-3.2.1.1
 resolver: lts-9.21
+
+ghc-options:
+  '$everything': -threaded
+

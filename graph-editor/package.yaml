@@ -40,6 +40,8 @@ executables:
     - pango
     - text
     - containers
+    - parallel
+    - prettyprinter
 
 tests:
   graph-editor-test:

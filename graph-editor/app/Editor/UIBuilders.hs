@@ -54,7 +54,8 @@ buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
     new <- actionNew "NEW" "New File" (Just "Just a stub") Nothing
     opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
-    svn <- actionNew "SVN" "Save File" (Just "Just a stub") Nothing
+    svn <- actionNew "SVN" "Save File" (Just "Just a stub") (Just stockSave)
+    sva <- actionNew "SVA" "Save File As" (Just "Just a stub") (Just stockSaveAs)
     edt <- actionNew "EDT" "Edit" Nothing Nothing
     udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
     rdo <- actionNew "RDO" "Redo" (Just "Just a stub") Nothing
@@ -62,13 +63,13 @@ buildMaybeMenubar = do
     hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
     agr <- actionGroupNew "AGR"
     mapM_ (actionGroupAddAction agr) [fma,edt,hlp]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,udo,rdo,hlp']
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,udo,rdo,hlp']
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, new, opn, svn, udo, rdo, hlp')
+    return (maybeMenubar, new, opn, svn, sva, udo, rdo, hlp')
 
   where uiStr = "<ui>\
 \                 <menubar>\
@@ -76,6 +77,7 @@ buildMaybeMenubar = do
 \                     <menuitem action=\"NEW\"/>\
 \                     <menuitem action=\"OPN\"/>\
 \                     <menuitem action=\"SVN\"/>\
+\                     <menuitem action=\"SVA\"/>\
 \                   </menu> \
 \                   <menu action=\"EDT\">\
 \                     <menuitem action=\"UDO\"/>\

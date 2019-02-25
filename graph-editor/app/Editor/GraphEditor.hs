@@ -71,7 +71,7 @@ startGUI = do
   -- janela de ajuda
   helpWindow <- buildHelpWindow
   -- cria o menu
-  (maybeMenubar,new,opn,svn,udo,rdo,hlp) <- buildMaybeMenubar
+  (maybeMenubar,new,opn,sva,svn,udo,rdo,hlp) <- buildMaybeMenubar
   -- cria o menu de propriedades
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let
@@ -91,11 +91,12 @@ startGUI = do
   undoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)]) -- pilha de undo
   redoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)]) -- pilha de redo
   movingGI        <- newIORef False -- se o usuario começou a mover algum objeto
-  currentShape     <- newIORef NCircle
-  currentStyle     <- newIORef ENormal
-  currentC     <- newIORef (1,1,1)
-  currentLC <- newIORef (0,0,0)
+  currentShape    <- newIORef NCircle
+  currentStyle    <- newIORef ENormal
+  currentC        <- newIORef (1,1,1)
+  currentLC       <- newIORef (0,0,0)
   clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - (Graph, GraphicalInfo)
+  fileName        <- newIORef (Nothing :: Maybe String) -- arquivo aberto
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
@@ -304,22 +305,25 @@ startGUI = do
           modifyIORef st (\es -> let g = editorGetGraph es
                                  in editorSetSelected (nodeIds g, edgeIds g) es)
           widgetQueueDraw canvas
+
         -- CTRL + N : create a new file
         (True, False, "n") -> do
           modifyIORef st (\es -> (empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
+          writeIORef fileName Nothing
+          set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
+        -- CTRL + SHIFT + S : save file as
+        (True, True, "s") -> saveFileAs st fileName window
         -- CTRL + S : save file
-        (True, False, "s") -> do
-          es <- readIORef st
-          let g = editorGetGraph es
-              gi = editorGetGI es
-          saveGraph (g,gi) window
+        (True, False, "s") -> saveFile st fileName window
         -- CTRL + O : open file
         (True, False, "o") -> do
           mg <- loadGraph window
           case mg of
-            Just (g,gi) -> do
+            Just (g,gi, fn) -> do
               writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
+              writeIORef fileName $ Just fn
+              set window [windowTitle := "Graph Editor - " ++ fn]
               widgetQueueDraw canvas
             _      -> return ()
 
@@ -354,21 +358,23 @@ startGUI = do
   -- tratamento de eventos -- menu toolbar -------------------------------------
   new `on` actionActivated $ do
     modifyIORef st (\es -> (empty, (M.empty, M.empty), ([],[]),1.0,(0.0,0.0)))
+    writeIORef fileName Nothing
+    set window [windowTitle := "Graph Editor"]
     widgetQueueDraw canvas
 
   opn `on` actionActivated $ do
     mg <- loadGraph window
     case mg of
-      Just (g,gi) -> do
+      Just (g,gi,fn) -> do
         writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
+        writeIORef fileName $ Just fn
+        set window [windowTitle := "Graph Editor - " ++ fn]
         widgetQueueDraw canvas
       _      -> return ()
 
-  svn `on` actionActivated $ do
-    es <- readIORef st
-    let g = editorGetGraph es
-        gi = editorGetGI es
-    saveGraph (g,gi) window
+  svn `on` actionActivated $ saveFile st fileName window
+
+  sva `on` actionActivated $ saveFileAs st fileName window
 
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
@@ -546,8 +552,34 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set frameStyle [widgetVisible := True]
 
 -- salvar grafo ----------------------------------------------------------------
-saveGraph :: (Graph String String ,GraphicalInfo) -> Window -> IO ()
-saveGraph (g,gi) window = do
+saveFile :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
+saveFile st fileName window = do
+  es <- readIORef st
+  let g = editorGetGraph es
+      gi = editorGetGI es
+  fn <- readIORef fileName
+  case fn of
+    Just path -> do
+      saveGraph (g,gi) path
+      return ()
+    Nothing -> do
+      saveFileAs st fileName window
+
+saveFileAs :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
+saveFileAs st fileName window = do
+  es <- readIORef st
+  let g = editorGetGraph es
+      gi = editorGetGI es
+  fn <- saveGraphAs (g,gi) window
+  case fn of
+    Nothing -> return ()
+    Just path -> do
+      writeIORef fileName fn
+      set window [windowTitle := "Graph Editor - " ++ path]
+
+
+saveGraphAs :: (Graph String String ,GraphicalInfo) -> Window -> IO (Maybe String)
+saveGraphAs (g,gi) window = do
   saveD <- fileChooserDialogNew
            (Just "Salvar arquivo")
            (Just window)
@@ -560,20 +592,35 @@ saveGraph (g,gi) window = do
     ResponseAccept -> do
       filename <- fileChooserGetFilename saveD
       case filename of
-        Nothing -> widgetDestroy saveD
-        Just path -> do
-          let writeGraph = writeFile path $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
-                                                 , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
-                                                 , gi)
-          tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
-          case tentativa of
-            Left _ -> showError (Just window) "Não foi possível escrever no arquivo"
-            Right _ -> return ()
+        Nothing -> do
           widgetDestroy saveD
-    _  -> widgetDestroy saveD
+          return Nothing
+        Just path -> do
+          tentativa <- saveGraph (g,gi) path
+          case tentativa of
+            True -> do
+              widgetDestroy saveD
+              return $ Just path
+            False -> do
+              widgetDestroy saveD
+              showError (Just window) "Não foi possível escrever no arquivo"
+              return Nothing
+    _  -> do
+      widgetDestroy saveD
+      return Nothing
+
+saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
+saveGraph (g,gi) path = do
+    let writeGraph = writeFile path $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+                                           , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+                                           , gi)
+    tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
+    case tentativa of
+      Left _ -> return False
+      Right _ -> return True
 
 -- abrir grafo -----------------------------------------------------------------
-loadGraph :: Window -> IO (Maybe (Graph String String, GraphicalInfo))
+loadGraph :: Window -> IO (Maybe (Graph String String, GraphicalInfo, String))
 loadGraph window = do
   loadD <- fileChooserDialogNew
            (Just "Abrir Arquivo")
@@ -601,7 +648,7 @@ loadGraph window = do
                   ns = map (\(nid, info) -> Node (NodeId nid) info) rns
                   es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
                   g = fromNodesAndEdges ns es
-              return $ Just $ (g,gi)
+              return $ Just $ (g,gi,path)
     _             -> do
       widgetDestroy loadD
       return Nothing
