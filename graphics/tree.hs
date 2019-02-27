@@ -1,39 +1,71 @@
+-- A simple application to play with the treeView widget
+-- It displays a "book", with the document sections available on the left and
+-- contents of the selected section being displayed at the right
+
 import Graphics.UI.Gtk
 import Data.Tree
 import Control.Monad.IO.Class
 
 main = do
+
+  -- content of the book
+  let intro = Node ("Introduction","This is the introduction of this beautiful book. \
+                                    \\nSelect the chapters in the tree at the left") []
+  let part1 = Node ("Part 1", "The cake")
+                   [ Node ("Chapter 1", "Onde upon a time, there was a girl.") []
+                   , Node ("Chapter 2", "The girl liked cake.") []
+                   , Node ("chapter 3", "The cake was a lie.") []
+                   ]
+  let part2 = Node ("Part 2", "The hot chocolate")
+                   [ Node ("Chapter 1", "Onde upon a time, there was a boy.") []
+                   , Node ("Chapter 2", "The boy liked hot chocolate.") []
+                   , Node ("chapter 3", "The hot chocolate was too hot.") []
+                   ]
+
   initGUI
-
+  -- create the window
   window <- windowNew
-  set window  [ windowTitle         := "Tree test"
-              , windowResizable     := True]
+  set window  [ windowTitle         := "A beautiful book"
+              , windowResizable     := True
+              , windowDefaultWidth  := 500]
 
-  box <- vBoxNew False 0
-  containerAdd window box
+  -- create the mainpaned, an hBox that divides the tree from the content
+  mainpane <- hPanedNew
+  containerAdd window mainpane
 
-  let myTree = Node "games" [Node "Left4Dead" [], Node "Street Fighter" []]
-  let myTree2 = Node "office" [Node "Writer" [], Node "Math" [], Node "Presentation" []]
-  store <- treeStoreNew [myTree, myTree2]
+  -- create the  content area
+  labelbook <- labelNew $ Just ""
+  labelSetLineWrap labelbook True
+  panedPack2 mainpane labelbook True False
 
+  -- create the tree area
+  treebox <- vBoxNew False 0
+  panedPack1 mainpane treebox False False
+
+  treescroll <- scrolledWindowNew Nothing Nothing
+  boxPackStart treebox treescroll PackGrow 4
+
+
+  -- create the treeview
+  store <- treeStoreNew [intro,part1,part2]
   treeview <- treeViewNewWithModel store
   treeViewSetHeadersVisible treeview True
-  boxPackStart box treeview PackGrow 4
+  containerAdd treescroll treeview
 
   col <- treeViewColumnNew
   treeViewColumnSetTitle col "tree"
   renderer <- cellRendererTextNew
   set renderer  [ cellTextEditable := True ]
   cellLayoutPackStart col renderer False
-  cellLayoutSetAttributes col renderer store $ \ind -> [cellText := ind]
+  cellLayoutSetAttributes col renderer store $ \ind -> [cellText := fst ind]
   treeViewAppendColumn treeview col
 
-  addMBtn <- buttonNewWithLabel "Add Menu"
-  boxPackStart box addMBtn PackNatural 0
-  addIBtn <- buttonNewWithLabel "Add Item"
-  boxPackStart box addIBtn PackNatural 0
+  addMBtn <- buttonNewWithLabel "Add Part"
+  boxPackStart treebox addMBtn PackNatural 0
+  addIBtn <- buttonNewWithLabel "Add Chapter"
+  boxPackStart treebox addIBtn PackNatural 0
   removeBtn <- buttonNewWithLabel "Remove Selected"
-  boxPackStart box removeBtn PackNatural 0
+  boxPackStart treebox removeBtn PackNatural 0
 
 
   -- events
@@ -41,13 +73,13 @@ main = do
     liftIO mainQuit
     return False
 
-  renderer `on` edited $ \path newText -> do
-    treeStoreChange store path (\_ -> newText)
+  renderer `on` edited $ \path newName -> do
+    treeStoreChange store path (\(_,text) -> (newName,text))
     return ()
 
   addMBtn `on` buttonActivated $ do
     n <- (treeModelIterNChildren store Nothing)
-    treeStoreInsert store [] n "newMenu"
+    treeStoreInsert store [] n ("newPart","")
 
   addIBtn `on` buttonActivated $ do
     selection <- treeViewGetSelection treeview
@@ -57,7 +89,7 @@ main = do
       Just it -> do
         path <- treeModelGetPath store it
         n <- treeModelIterNChildren store sel
-        treeStoreInsert store path n "newItem"
+        treeStoreInsert store path n ("newChapter","")
     return ()
 
   removeBtn `on` buttonActivated $ do
@@ -70,7 +102,15 @@ main = do
         treeStoreRemove store path
         return ()
 
-
+  treeview `on` cursorChanged $ do
+    selection <- treeViewGetSelection treeview
+    sel <- treeSelectionGetSelected selection
+    case sel of
+      Nothing -> return ()
+      Just it -> do
+        path <- treeModelGetPath store it
+        (_,text) <- treeStoreGetValue store path
+        labelSetText labelbook text
 
 
   -- show things
