@@ -381,14 +381,20 @@ startGUI = do
     widgetQueueDraw canvas
 
   opn `on` actionActivated $ do
-    mg <- loadGraph window
+    mg <- loadProject window
     case mg of
-      Just (g,gi,fn) -> do
-        writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
-        writeIORef fileName $ Just fn
-        set window [windowTitle := "Graph Editor - " ++ fn]
-        widgetQueueDraw canvas
-      _      -> return ()
+      Just (list,fn) -> do
+        if length list > 0
+          then do
+            listStoreClear store
+            forM list (listStoreAppend store)
+            let (name,es) = list!!0
+            writeIORef st es
+            writeIORef fileName $ Just fn
+            set window [windowTitle := "Graph Editor - " ++ fn]
+            widgetQueueDraw canvas
+          else return ()
+      Nothing -> return ()
 
   svn `on` actionActivated $ do
     -- update the current graph to save it alonge the others graphs on the project
@@ -664,6 +670,44 @@ saveProject' model path = do
   case tentativa of
     Left _ -> return False
     Right _ -> return True
+
+-- carregar projeto ------------------------------------------------------------
+loadProject :: Window -> IO (Maybe ([(String, EditorState)], String))
+loadProject window = do
+  loadD <- fileChooserDialogNew
+           (Just "Abrir Arquivo")
+           (Just window)
+           FileChooserActionOpen
+           [("Cancela", ResponseCancel), ("Abre",ResponseAccept)]
+  fileChooserSetDoOverwriteConfirmation loadD True
+  widgetShow loadD
+  response <- dialogRun loadD
+  case response of
+    ResponseAccept -> do
+      filename <- fileChooserGetFilename loadD
+      widgetDestroy loadD
+      case filename of
+        Nothing -> do
+          return Nothing
+        Just path -> do
+          tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
+          case tentativa of
+            Left _ -> do
+              showError (Just window) "Não foi possivel ler o arquivo"
+              return Nothing
+            Right content -> do
+              let contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
+                  genNodes = map (\(nid, info) -> Node (NodeId nid) info)
+                  genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
+                  editorList = map (\(name,readNodes,readEdges,gi) -> let nds = genNodes readNodes
+                                                                          eds = genEdges readEdges
+                                                                          g = fromNodesAndEdges nds eds
+                                                                      in (name, editorSetGI gi . editorSetGraph g $ emptyES) ) contentList
+              return $ Just (editorList, path)
+    _             -> do
+      widgetDestroy loadD
+      return Nothing
+
 
 -- salvar grafo ----------------------------------------------------------------
 saveGraph :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
@@ -1068,13 +1112,12 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 -- Tarefas ---------------------------------------------------------------------
 -- *Espaçar edges quando houver mais de uma aresta entre dois nodos e ela estiver centralizada
--- *Editar multiplos grafos no mesmo projeto
---   *Criar uma arvore de grafos
 -- *TypeGraph
--- *Mudar estrutura do grafo para estrutura usada no verigraph
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
+-- *Editar multiplos grafos no mesmo projeto
+--   *Criar uma arvore de grafos
 
 
 -- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
@@ -1091,3 +1134,4 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Criar uma janela de mensagens de erros para substituir prints
 -- *Mudar para que quando o usuario clique em um nodo, ele não invalide toda a seleção se o nodo for parte da seleção
 -- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
+-- *Mudar estrutura do grafo para estrutura usada no verigraph
