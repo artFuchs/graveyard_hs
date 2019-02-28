@@ -28,6 +28,9 @@ nullEdge = Edge {edgeId = 0, sourceId = 0, targetId = 0, edgeInfo = ""}
 -- (grafo, nodos selecionados, arestas selecionadas, zoom, Pan)
 type EditorState = (Graph String String, GraphicalInfo, ([NodeId],[EdgeId]) , Double, (Double,Double))
 
+emptyES :: EditorState
+emptyES = (empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0))
+
 editorGetGraph :: EditorState -> Graph String String
 editorGetGraph (g,_,_,_,_) = g
 
@@ -71,21 +74,23 @@ startGUI = do
   -- janela de ajuda
   helpWindow <- buildHelpWindow
   -- cria o menu
-  (maybeMenubar,new,opn,sva,svn,udo,rdo,hlp) <- buildMaybeMenubar
+  (maybeMenubar,new,opn,svn,sva,udo,rdo,hlp) <- buildMaybeMenubar
   -- cria o menu de propriedades
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let
     propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
+  -- cria o painel da arvore de grafos
+  (treePanel, treeview, btnNew, btnRmv) <- buildTreePanel
   -- cria a janela principal, contendo o canvas
-  (window, canvas) <- buildMainWindow maybeMenubar frameProps
+  (window, canvas) <- buildMainWindow maybeMenubar frameProps treePanel
 
   -- mostra a GUI
   widgetShowAll window
 
   -- inicializa estado do editor -----------------------------------------------
-  st              <- newIORef (empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0)) -- estado do editor: todas as informações necessárias para desenhar o grafo
+  st              <- newIORef emptyES -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint        <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
   squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
   undoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)]) -- pilha de undo
@@ -97,6 +102,19 @@ startGUI = do
   currentLC       <- newIORef (0,0,0)
   clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - (Graph, GraphicalInfo)
   fileName        <- newIORef (Nothing :: Maybe String) -- arquivo aberto
+  currentGraph    <- newIORef [0]
+
+  -- inicializa um modelo para adicionar à arvore ------------------------------
+  projectCol <- treeViewGetColumn treeview 0
+  store <- listStoreNew [("new", emptyES), ("new1", emptyES)]
+  case projectCol of
+    Nothing -> return ()
+    Just col -> do
+      [renderer] <- cellLayoutGetCells col
+      treeViewSetModel treeview store
+      cellLayoutSetAttributes col (castToCellRendererText renderer) store $ \ind -> [cellText := fst ind]
+
+
 
   -- TRATAMENTO DE EVENTOS -----------------------------------------------------
   -- tratamento de eventos - canvas --------------------------------------------
@@ -313,9 +331,9 @@ startGUI = do
           set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
         -- CTRL + SHIFT + S : save file as
-        (True, True, "s") -> saveFileAs st fileName window
+        (True, True, "s") -> saveGraphAs st fileName window
         -- CTRL + S : save file
-        (True, False, "s") -> saveFile st fileName window
+        (True, False, "s") -> saveGraph st fileName window
         -- CTRL + O : open file
         (True, False, "o") -> do
           mg <- loadGraph window
@@ -372,9 +390,16 @@ startGUI = do
         widgetQueueDraw canvas
       _      -> return ()
 
-  svn `on` actionActivated $ saveFile st fileName window
+  svn `on` actionActivated $ do
+    -- update the current graph to save it alonge the others graphs on the project
+    currentES <- readIORef st
+    [path] <- readIORef currentGraph
+    (name, _)<- listStoreGetValue store path
+    listStoreSetValue store path (name,currentES)
+    -- save the project
+    saveProject store fileName window
 
-  sva `on` actionActivated $ saveFileAs st fileName window
+  sva `on` actionActivated $ saveGraphAs st fileName window
 
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
@@ -470,8 +495,60 @@ startGUI = do
     writeIORef currentStyle ESlashed
     widgetQueueDraw canvas
 
+  -- Tratamento de eventos - arvore de grafos ----------------------------------
+  treeview `on` cursorChanged $ do
+    [currentPath] <- readIORef currentGraph
+    selection <- treeViewGetSelection treeview
+    sel <- treeSelectionGetSelected selection
+    case sel of
+      Nothing -> return ()
+      Just it -> do
+        -- update the current graph in the tree
+        currentES <- readIORef st
+        (name, _)<- listStoreGetValue store currentPath
+        listStoreSetValue store currentPath (name,currentES)
+        -- load the selected graph from the tree
+        [path] <- treeModelGetPath store it
+        writeIORef currentGraph [path]
+        (_,newEs) <- listStoreGetValue store path
+        writeIORef st newEs
+        widgetQueueDraw canvas
 
-  -- tratamento de eventos - janela principal ---------------------------------
+  btnNew `on` buttonActivated $ do
+    listStoreAppend store ("new",emptyES)
+    return ()
+
+  btnRmv `on` buttonActivated $ do
+    selection <- treeViewGetSelection treeview
+    sel <- treeSelectionGetSelected selection
+    case sel of
+      Nothing -> return ()
+      Just it -> do
+        size <- listStoreGetSize store
+        [path] <- treeModelGetPath store it
+        case (size>1, path==size-1) of
+          (True, True) -> do
+            treeViewSetCursor treeview [path-1] Nothing
+            listStoreRemove store path
+          (True, False) -> do
+            listStoreRemove store path
+            treeViewSetCursor treeview [path] Nothing
+          (False, True) -> do
+            listStoreSetValue store 0 ("new",emptyES)
+            writeIORef st emptyES
+          _ -> return ()
+
+        widgetQueueDraw canvas
+
+
+
+
+
+
+
+
+
+  -- tratamento de eventos - janela principal ----------------------------------
   window `on` deleteEvent $ do
     liftIO mainQuit
     return False
@@ -551,26 +628,67 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
 
+
+-- salvar projeto --------------------------------------------------------------
+saveProject :: ListStore (String, EditorState)-> IORef (Maybe String) -> Window -> IO ()
+saveProject model fileName window = do
+  fn <- readIORef fileName
+  case fn of
+    Just path -> do
+      tentativa <- saveProject' model path
+      case tentativa of
+        True -> return ()
+        False -> do
+          showError (Just window) "Não foi possível salvar o projeto"
+          return ()
+    Nothing -> do
+      tentativa <- saveProject' model "dummy"
+      case tentativa of
+        True -> return ()
+        False -> do
+          showError (Just window) "Não foi possível salvar o dummy"
+          return ()
+
+
+saveProject' :: ListStore (String, EditorState) -> String -> IO Bool
+saveProject' model path = do
+  editorList <- listStoreToList model
+  let getWhatMatters = (\(name, es) -> (name, editorGetGraph es, editorGetGI es))
+      whatMatters = map getWhatMatters editorList
+      contents = map (\(name, g, gi) -> ( name
+                                        , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+                                        , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+                                        , gi )) whatMatters
+      writeProject = writeFile path $ show contents
+  tentativa <- E.try (writeProject)  :: IO (Either E.IOException ())
+  case tentativa of
+    Left _ -> return False
+    Right _ -> return True
+
 -- salvar grafo ----------------------------------------------------------------
-saveFile :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
-saveFile st fileName window = do
+saveGraph :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
+saveGraph st fileName window = do
   es <- readIORef st
   let g = editorGetGraph es
       gi = editorGetGI es
   fn <- readIORef fileName
   case fn of
     Just path -> do
-      saveGraph (g,gi) path
-      return ()
+      tentativa <- saveGraph' (g,gi) path
+      case tentativa of
+        True -> return ()
+        False -> do
+          showError (Just window) "Não foi possível escrever no arquivo"
+          return ()
     Nothing -> do
-      saveFileAs st fileName window
+      saveGraphAs st fileName window
 
-saveFileAs :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
-saveFileAs st fileName window = do
+saveGraphAs :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
+saveGraphAs st fileName window = do
   es <- readIORef st
   let g = editorGetGraph es
       gi = editorGetGI es
-  fn <- saveGraphAs (g,gi) window
+  fn <- saveGraphAs' (g,gi) window
   case fn of
     Nothing -> return ()
     Just path -> do
@@ -578,8 +696,8 @@ saveFileAs st fileName window = do
       set window [windowTitle := "Graph Editor - " ++ path]
 
 
-saveGraphAs :: (Graph String String ,GraphicalInfo) -> Window -> IO (Maybe String)
-saveGraphAs (g,gi) window = do
+saveGraphAs' :: (Graph String String ,GraphicalInfo) -> Window -> IO (Maybe String)
+saveGraphAs' (g,gi) window = do
   saveD <- fileChooserDialogNew
            (Just "Salvar arquivo")
            (Just window)
@@ -596,7 +714,7 @@ saveGraphAs (g,gi) window = do
           widgetDestroy saveD
           return Nothing
         Just path -> do
-          tentativa <- saveGraph (g,gi) path
+          tentativa <- saveGraph' (g,gi) path
           case tentativa of
             True -> do
               widgetDestroy saveD
@@ -609,8 +727,8 @@ saveGraphAs (g,gi) window = do
       widgetDestroy saveD
       return Nothing
 
-saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
-saveGraph (g,gi) path = do
+saveGraph' :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
+saveGraph' (g,gi) path = do
     let writeGraph = writeFile path $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
                                            , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
                                            , gi)

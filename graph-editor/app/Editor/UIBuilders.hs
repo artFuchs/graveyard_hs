@@ -3,6 +3,7 @@ module Editor.UIBuilders
 ( buildMainWindow
 , buildMaybeMenubar
 , buildPropMenu
+, buildTreePanel
 , buildHelpWindow
 , showError
 ) where
@@ -10,7 +11,7 @@ module Editor.UIBuilders
 import Graphics.UI.Gtk
 import qualified Data.Text as T
 
-buildMainWindow maybeMenuBar frameProps = do
+buildMainWindow maybeMenuBar frameProps treePanel = do
   -- janela principal
   window <- windowNew
   set window  [ windowTitle         := "Graph Editor"
@@ -26,10 +27,14 @@ buildMainWindow maybeMenuBar frameProps = do
     Just x -> boxPackStart vBoxMain x PackNatural 0
     Nothing -> return ()
 
+  -- cria um HPane para dividir a arvore de grafos e o editor
+  hPaneTree <- hPanedNew
+  boxPackStart vBoxMain hPaneTree PackGrow 0
+  panedPack1 hPaneTree treePanel False True
+
   -- cria um HPane para dividir o canvas e o menu de propriedades
   hPaneAction <- hPanedNew
-  boxPackStart vBoxMain hPaneAction PackGrow 0
-  -- adiciona o menu de propriedades à UI
+  panedPack2 hPaneTree hPaneAction True False
   panedPack2 hPaneAction frameProps False True
 
   -- cria um frame para englobar o canvas
@@ -166,6 +171,27 @@ buildPropMenu = do
   let radioStyles = [radioNormal, radioPointed, radioSlashed]
 
   return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))
+
+buildTreePanel = do
+  vboxTree <- vBoxNew False 0
+  treeview <- treeViewNew
+  boxPackStart vboxTree treeview PackGrow 0
+  treeViewSetHeadersVisible treeview True
+  col <- treeViewColumnNew
+  treeViewAppendColumn treeview col
+  treeViewColumnSetTitle col "project"
+  renderer <- cellRendererTextNew
+  cellLayoutPackStart col renderer False
+
+  btnNew <- buttonNewWithLabel "New Graph"
+  boxPackStart vboxTree btnNew PackNatural 0
+
+  btnRmv <- buttonNewWithLabel "Remove Graph"
+  boxPackStart vboxTree btnRmv PackNatural 0
+
+  return (vboxTree, treeview, btnNew, btnRmv)
+
+
 
 buildHelpWindow :: IO Window
 buildHelpWindow = do
