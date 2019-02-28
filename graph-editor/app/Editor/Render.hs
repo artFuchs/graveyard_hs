@@ -54,7 +54,7 @@ renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) selected = do
   if selected
     then do
       setSourceRGB 0 1 0
-      rectangle (x-(w/2+3)) (y-(h/2+3)) (w+3) (h+3)
+      rectangle (x-(w/2+3)) (y-(h/2+3)) (w+6) (h+6)
       fill
     else
       return ()
