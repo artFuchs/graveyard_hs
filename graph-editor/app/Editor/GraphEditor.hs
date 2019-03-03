@@ -74,7 +74,7 @@ startGUI = do
   -- janela de ajuda
   helpWindow <- buildHelpWindow
   -- cria o menu
-  (maybeMenubar,new,opn,svn,sva,udo,rdo,hlp) <- buildMaybeMenubar
+  (maybeMenubar,new,opn,svn,sva,opg,svg,udo,rdo,hlp) <- buildMaybeMenubar
   -- cria o menu de propriedades
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let
@@ -82,7 +82,7 @@ startGUI = do
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
   -- cria o painel da arvore de grafos
-  (treePanel, treeview, btnNew, btnRmv) <- buildTreePanel
+  (treePanel, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
   -- cria a janela principal, contendo o canvas
   (window, canvas) <- buildMainWindow maybeMenubar frameProps treePanel
 
@@ -105,14 +105,13 @@ startGUI = do
   currentGraph    <- newIORef [0]
 
   -- inicializa um modelo para adicionar à arvore ------------------------------
+  store <- listStoreNew [("new", emptyES)]
   projectCol <- treeViewGetColumn treeview 0
-  store <- listStoreNew [("new", emptyES), ("new1", emptyES)]
   case projectCol of
     Nothing -> return ()
     Just col -> do
-      [renderer] <- cellLayoutGetCells col
-      treeViewSetModel treeview store
-      cellLayoutSetAttributes col (castToCellRendererText renderer) store $ \ind -> [cellText := fst ind]
+      treeViewSetModel treeview (Just store)
+      cellLayoutSetAttributes col treeRenderer store $ \ind -> [cellText := fst ind]
 
 
 
@@ -327,6 +326,8 @@ startGUI = do
         -- CTRL + N : create a new file
         (True, False, "n") -> do
           modifyIORef st (\es -> (empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
+          listStoreClear store
+          listStoreAppend store ("new",emptyES)
           writeIORef fileName Nothing
           set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
@@ -338,10 +339,8 @@ startGUI = do
         (True, False, "o") -> do
           mg <- loadGraph window
           case mg of
-            Just (g,gi, fn) -> do
+            Just (g,gi) -> do
               writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
-              writeIORef fileName $ Just fn
-              set window [windowTitle := "Graph Editor - " ++ fn]
               widgetQueueDraw canvas
             _      -> return ()
 
@@ -377,6 +376,8 @@ startGUI = do
   new `on` actionActivated $ do
     modifyIORef st (\es -> (empty, (M.empty, M.empty), ([],[]),1.0,(0.0,0.0)))
     writeIORef fileName Nothing
+    listStoreClear store
+    listStoreAppend store ("new", emptyES)
     set window [windowTitle := "Graph Editor"]
     widgetQueueDraw canvas
 
@@ -397,15 +398,28 @@ startGUI = do
       Nothing -> return ()
 
   svn `on` actionActivated $ do
-    -- update the current graph to save it alonge the others graphs on the project
     currentES <- readIORef st
     [path] <- readIORef currentGraph
     (name, _)<- listStoreGetValue store path
     listStoreSetValue store path (name,currentES)
-    -- save the project
     saveProject store fileName window
 
-  sva `on` actionActivated $ saveGraphAs st fileName window
+  sva `on` actionActivated $ do
+    currentES <- readIORef st
+    [path] <- readIORef currentGraph
+    (name, _)<- listStoreGetValue store path
+    listStoreSetValue store path (name,currentES)
+    saveProjectAs store fileName window
+
+  opg `on`actionActivated $ do
+    mg <- loadGraph window
+    case mg of
+      Just (g,gi) -> do
+        writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
+        widgetQueueDraw canvas
+      _      -> return ()
+
+  svg `on` actionActivated $ saveGraphAs st fileName window
 
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
@@ -647,14 +661,38 @@ saveProject model fileName window = do
         False -> do
           showError (Just window) "Não foi possível salvar o projeto"
           return ()
-    Nothing -> do
-      tentativa <- saveProject' model "dummy"
-      case tentativa of
-        True -> return ()
-        False -> do
-          showError (Just window) "Não foi possível salvar o dummy"
-          return ()
+    Nothing -> saveProjectAs model fileName window
 
+
+saveProjectAs :: ListStore (String, EditorState) -> IORef (Maybe String) -> Window -> IO ()
+saveProjectAs model fileName window = do
+  saveD <- createSaveDialog window
+  response <- dialogRun saveD
+  fn <- case response of
+    ResponseAccept -> do
+      filename <- fileChooserGetFilename saveD
+      case filename of
+        Nothing -> do
+          widgetDestroy saveD
+          return Nothing
+        Just path -> do
+          tentativa <- saveProject' model path
+          case tentativa of
+            True -> do
+              widgetDestroy saveD
+              return $ Just path
+            False -> do
+              widgetDestroy saveD
+              showError (Just window) "Não foi possível escrever no arquivo"
+              return Nothing
+    _  -> do
+      widgetDestroy saveD
+      return Nothing
+  case fn of
+    Nothing -> return ()
+    Just path -> do
+      writeIORef fileName fn
+      set window [windowTitle := "Graph Editor - " ++ path]
 
 saveProject' :: ListStore (String, EditorState) -> String -> IO Bool
 saveProject' model path = do
@@ -724,8 +762,7 @@ saveGraph st fileName window = do
         False -> do
           showError (Just window) "Não foi possível escrever no arquivo"
           return ()
-    Nothing -> do
-      saveGraphAs st fileName window
+    Nothing -> saveGraphAs st fileName window
 
 saveGraphAs :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
 saveGraphAs st fileName window = do
@@ -739,9 +776,8 @@ saveGraphAs st fileName window = do
       writeIORef fileName fn
       set window [windowTitle := "Graph Editor - " ++ path]
 
-
-saveGraphAs' :: (Graph String String ,GraphicalInfo) -> Window -> IO (Maybe String)
-saveGraphAs' (g,gi) window = do
+createSaveDialog :: Window -> IO FileChooserDialog
+createSaveDialog window = do
   saveD <- fileChooserDialogNew
            (Just "Salvar arquivo")
            (Just window)
@@ -749,6 +785,11 @@ saveGraphAs' (g,gi) window = do
            [("Cancela",ResponseCancel),("Salva",ResponseAccept)]
   fileChooserSetDoOverwriteConfirmation saveD True
   widgetShow saveD
+  return saveD
+
+saveGraphAs' :: (Graph String String ,GraphicalInfo) -> Window -> IO (Maybe String)
+saveGraphAs' (g,gi) window = do
+  saveD <- createSaveDialog window
   response <- dialogRun saveD
   case response of
     ResponseAccept -> do
@@ -782,7 +823,7 @@ saveGraph' (g,gi) path = do
       Right _ -> return True
 
 -- abrir grafo -----------------------------------------------------------------
-loadGraph :: Window -> IO (Maybe (Graph String String, GraphicalInfo, String))
+loadGraph :: Window -> IO (Maybe (Graph String String, GraphicalInfo))
 loadGraph window = do
   loadD <- fileChooserDialogNew
            (Just "Abrir Arquivo")
@@ -810,7 +851,7 @@ loadGraph window = do
                   ns = map (\(nid, info) -> Node (NodeId nid) info) rns
                   es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
                   g = fromNodesAndEdges ns es
-              return $ Just $ (g,gi,path)
+              return $ Just $ (g,gi)
     _             -> do
       widgetDestroy loadD
       return Nothing

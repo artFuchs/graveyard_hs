@@ -57,10 +57,12 @@ buildMainWindow maybeMenuBar frameProps treePanel = do
 -- constroi a menu toolbar
 buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
-    new <- actionNew "NEW" "New File" (Just "Just a stub") Nothing
-    opn <- actionNew "OPN" "Open File" (Just "Just a stub") (Just stockOpen)
-    svn <- actionNew "SVN" "Save File" (Just "Just a stub") (Just stockSave)
-    sva <- actionNew "SVA" "Save File As" (Just "Just a stub") (Just stockSaveAs)
+    new <- actionNew "NEW" "New Project" (Just "Just a stub") Nothing
+    opn <- actionNew "OPN" "Open Project" (Just "Just a stub") (Just stockOpen)
+    svn <- actionNew "SVN" "Save Project" (Just "Just a stub") (Just stockSave)
+    sva <- actionNew "SVA" "Save Project As" (Just "Just a stub") (Just stockSaveAs)
+    opg <- actionNew "OPG" "Open Graph" (Just "Just a stub") Nothing
+    svg <- actionNew "SVG" "Save Graph" (Just "Just a stub") Nothing
     edt <- actionNew "EDT" "Edit" Nothing Nothing
     udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
     rdo <- actionNew "RDO" "Redo" (Just "Just a stub") Nothing
@@ -68,13 +70,13 @@ buildMaybeMenubar = do
     hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
     agr <- actionGroupNew "AGR"
     mapM_ (actionGroupAddAction agr) [fma,edt,hlp]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,udo,rdo,hlp']
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,opg,svg,udo,rdo,hlp']
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, new, opn, svn, sva, udo, rdo, hlp')
+    return (maybeMenubar, new, opn, svn, sva, opg, svg, udo, rdo, hlp')
 
   where uiStr = "<ui>\
 \                 <menubar>\
@@ -83,6 +85,9 @@ buildMaybeMenubar = do
 \                     <menuitem action=\"OPN\"/>\
 \                     <menuitem action=\"SVN\"/>\
 \                     <menuitem action=\"SVA\"/>\
+\                     <separator/>\
+\                     <menuitem action=\"SVG\"/>\
+\                     <menuitem action=\"OPG\"/>\
 \                   </menu> \
 \                   <menu action=\"EDT\">\
 \                     <menuitem action=\"UDO\"/>\
@@ -177,9 +182,11 @@ buildTreePanel = do
   treeview <- treeViewNew
   boxPackStart vboxTree treeview PackGrow 0
   treeViewSetHeadersVisible treeview True
+
   col <- treeViewColumnNew
-  treeViewAppendColumn treeview col
   treeViewColumnSetTitle col "project"
+  treeViewAppendColumn treeview col
+
   renderer <- cellRendererTextNew
   cellLayoutPackStart col renderer False
 
@@ -189,7 +196,7 @@ buildTreePanel = do
   btnRmv <- buttonNewWithLabel "Remove Graph"
   boxPackStart vboxTree btnRmv PackNatural 0
 
-  return (vboxTree, treeview, btnNew, btnRmv)
+  return (vboxTree, treeview, renderer, btnNew, btnRmv)
 
 
 
