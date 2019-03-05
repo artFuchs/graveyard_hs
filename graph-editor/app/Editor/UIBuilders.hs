@@ -190,6 +190,7 @@ buildTreePanel = do
 
   renderer <- cellRendererTextNew
   cellLayoutPackStart col renderer False
+  set renderer [cellTextEditable := True]
 
   btnNew <- buttonNewWithLabel "New Graph"
   boxPackStart vboxTree btnNew PackNatural 0

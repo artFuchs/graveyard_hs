@@ -536,16 +536,19 @@ startGUI = do
     case sel of
       Nothing -> return ()
       Just it -> do
-        -- update the current graph in the tree
-        currentES <- readIORef st
-        (name, _)<- listStoreGetValue store currentPath
-        listStoreSetValue store currentPath (name,currentES)
-        -- load the selected graph from the tree
         [path] <- treeModelGetPath store it
-        writeIORef currentGraph [path]
-        (_,newEs) <- listStoreGetValue store path
-        writeIORef st newEs
-        widgetQueueDraw canvas
+        if currentPath == path
+          then return ()
+          else do
+            -- update the current graph in the tree
+            currentES <- readIORef st
+            (name, _) <- listStoreGetValue store currentPath
+            listStoreSetValue store currentPath (name,currentES)
+            -- load the selected graph from the tree
+            writeIORef currentGraph [path]
+            (_,newEs) <- listStoreGetValue store path
+            writeIORef st newEs
+            widgetQueueDraw canvas
 
   btnNew `on` buttonActivated $ do
     listStoreAppend store ("new",emptyES)
@@ -572,6 +575,11 @@ startGUI = do
           _ -> return ()
 
         widgetQueueDraw canvas
+
+  treeRenderer `on` edited $ \[path] newName -> do
+    (oldName, val) <- listStoreGetValue store path
+    listStoreSetValue store path (newName, val)
+
 
 
 
@@ -1087,10 +1095,9 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
 -- *Editar multiplos grafos no mesmo projeto
---   *Criar uma arvore de grafos
+--   *Consertar Undo/Redo
 
-
--- Feito (Acho melhor parar de deletar da lista de Tarefas) --------------------
+-- Feito -----------------------------------------------------------------------
 -- *Melhorar menu de Propriedades
 --  *3 aparencias diferentes para nodos, edges e nodos+edges
 -- *Corrigir Zoom para ajustar o Pan quando ele for modificado
@@ -1105,3 +1112,5 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Mudar para que quando o usuario clique em um nodo, ele não invalide toda a seleção se o nodo for parte da seleção
 -- *Fazer com que duplo-clique em um nodo ou aresta ou pressionando F2 com nodos/arestas selecionados, o dialogo nome seja focado
 -- *Mudar estrutura do grafo para estrutura usada no verigraph
+-- *Editar multiplos grafos no mesmo projeto
+--   *Criar uma arvore de grafos
