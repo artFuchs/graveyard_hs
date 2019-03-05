@@ -6,6 +6,7 @@ module Editor.UIBuilders
 , buildTreePanel
 , buildHelpWindow
 , showError
+, createSaveDialog
 ) where
 
 import Graphics.UI.Gtk
@@ -230,3 +231,14 @@ showError window msg = do
   dialogRun dlgE
   widgetDestroy dlgE
   return ()
+
+createSaveDialog :: Window -> IO FileChooserDialog
+createSaveDialog window = do
+  saveD <- fileChooserDialogNew
+           (Just "Salvar arquivo")
+           (Just window)
+           FileChooserActionSave
+           [("Cancela",ResponseCancel),("Salva",ResponseAccept)]
+  fileChooserSetDoOverwriteConfirmation saveD True
+  widgetShow saveD
+  return saveD

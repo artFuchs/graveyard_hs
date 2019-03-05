@@ -332,17 +332,25 @@ startGUI = do
           set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
         -- CTRL + SHIFT + S : save file as
-        (True, True, "s") -> saveGraphAs st fileName window
+        (True, True, "s") -> saveFileAs store saveProject fileName window True
         -- CTRL + S : save file
-        (True, False, "s") -> saveGraph st fileName window
+        (True, False, "s") -> saveFile store saveProject fileName window True
         -- CTRL + O : open file
         (True, False, "o") -> do
-          mg <- loadGraph window
+          mg <- loadFile window loadProject
           case mg of
-            Just (g,gi) -> do
-              writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
-              widgetQueueDraw canvas
-            _      -> return ()
+            Just (list,fn) -> do
+              if not (null list)
+                then do
+                  listStoreClear store
+                  forM list (listStoreAppend store)
+                  let (name,es) = list!!0
+                  writeIORef st es
+                  writeIORef fileName $ Just fn
+                  set window [windowTitle := "Graph Editor - " ++ fn]
+                  widgetQueueDraw canvas
+                else return ()
+            _ -> return ()
 
         -- CTRL + Z/R : undo/redo
         (True, False, "z") -> do
@@ -374,15 +382,16 @@ startGUI = do
 
   -- tratamento de eventos -- menu toolbar -------------------------------------
   new `on` actionActivated $ do
-    modifyIORef st (\es -> (empty, (M.empty, M.empty), ([],[]),1.0,(0.0,0.0)))
     writeIORef fileName Nothing
+    treeViewSetCursor treeview [0] Nothing
     listStoreClear store
     listStoreAppend store ("new", emptyES)
+    modifyIORef st (\es -> (empty, (M.empty, M.empty), ([],[]),1.0,(0.0,0.0)))
     set window [windowTitle := "Graph Editor"]
     widgetQueueDraw canvas
 
   opn `on` actionActivated $ do
-    mg <- loadProject window
+    mg <- loadFile window loadProject
     case mg of
       Just (list,fn) -> do
         if length list > 0
@@ -402,24 +411,28 @@ startGUI = do
     [path] <- readIORef currentGraph
     (name, _)<- listStoreGetValue store path
     listStoreSetValue store path (name,currentES)
-    saveProject store fileName window
+    saveFile store saveProject fileName window True
 
   sva `on` actionActivated $ do
     currentES <- readIORef st
     [path] <- readIORef currentGraph
     (name, _)<- listStoreGetValue store path
     listStoreSetValue store path (name,currentES)
-    saveProjectAs store fileName window
+    saveFileAs store saveProject fileName window True
 
   opg `on`actionActivated $ do
-    mg <- loadGraph window
+    mg <- loadFile window loadGraph
     case mg of
-      Just (g,gi) -> do
+      Just ((g,gi),_) -> do
         writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
         widgetQueueDraw canvas
       _      -> return ()
 
-  svg `on` actionActivated $ saveGraphAs st fileName window
+  svg `on` actionActivated $ do
+    es <- readIORef st
+    let g  = editorGetGraph es
+        gi = editorGetGI es
+    saveFileAs (g,gi) saveGraph' fileName window False
 
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
@@ -648,24 +661,21 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
 
-
--- salvar projeto --------------------------------------------------------------
-saveProject :: ListStore (String, EditorState)-> IORef (Maybe String) -> Window -> IO ()
-saveProject model fileName window = do
+-- save function ---------------------------------------------------------------
+saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO ()
+saveFile x saveF fileName window changeFN = do
   fn <- readIORef fileName
   case fn of
     Just path -> do
-      tentativa <- saveProject' model path
+      tentativa <- saveF x path
       case tentativa of
         True -> return ()
-        False -> do
-          showError (Just window) "Não foi possível salvar o projeto"
-          return ()
-    Nothing -> saveProjectAs model fileName window
+        False -> showError (Just window) "Não foi possivel salvar o arquivo"
+    Nothing -> saveFileAs x saveF fileName window changeFN
 
 
-saveProjectAs :: ListStore (String, EditorState) -> IORef (Maybe String) -> Window -> IO ()
-saveProjectAs model fileName window = do
+saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO ()
+saveFileAs x saveF fileName window changeFN = do
   saveD <- createSaveDialog window
   response <- dialogRun saveD
   fn <- case response of
@@ -676,7 +686,7 @@ saveProjectAs model fileName window = do
           widgetDestroy saveD
           return Nothing
         Just path -> do
-          tentativa <- saveProject' model path
+          tentativa <- saveF x path
           case tentativa of
             True -> do
               widgetDestroy saveD
@@ -688,14 +698,15 @@ saveProjectAs model fileName window = do
     _  -> do
       widgetDestroy saveD
       return Nothing
-  case fn of
-    Nothing -> return ()
-    Just path -> do
-      writeIORef fileName fn
-      set window [windowTitle := "Graph Editor - " ++ path]
+  case (changeFN, fn) of
+    (True, Just path) -> writeIORef fileName (Just path)
+    _ -> return ()
 
-saveProject' :: ListStore (String, EditorState) -> String -> IO Bool
-saveProject' model path = do
+
+
+-- salvar projeto --------------------------------------------------------------
+saveProject :: ListStore (String, EditorState) -> String -> IO Bool
+saveProject model path = do
   editorList <- listStoreToList model
   let getWhatMatters = (\(name, es) -> (name, editorGetGraph es, editorGetGI es))
       whatMatters = map getWhatMatters editorList
@@ -709,9 +720,9 @@ saveProject' model path = do
     Left _ -> return False
     Right _ -> return True
 
--- carregar projeto ------------------------------------------------------------
-loadProject :: Window -> IO (Maybe ([(String, EditorState)], String))
-loadProject window = do
+-- load function ---------------------------------------------------------------
+loadFile :: Window -> (String -> a) -> IO (Maybe (a,String))
+loadFile window loadF = do
   loadD <- fileChooserDialogNew
            (Just "Abrir Arquivo")
            (Just window)
@@ -733,84 +744,27 @@ loadProject window = do
             Left _ -> do
               showError (Just window) "Não foi possivel ler o arquivo"
               return Nothing
-            Right content -> do
-              let contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
-                  genNodes = map (\(nid, info) -> Node (NodeId nid) info)
-                  genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
-                  editorList = map (\(name,readNodes,readEdges,gi) -> let nds = genNodes readNodes
-                                                                          eds = genEdges readEdges
-                                                                          g = fromNodesAndEdges nds eds
-                                                                      in (name, editorSetGI gi . editorSetGraph g $ emptyES) ) contentList
-              return $ Just (editorList, path)
+            Right content -> return $ Just (loadF content, path)
     _             -> do
       widgetDestroy loadD
       return Nothing
 
 
+-- carregar projeto ------------------------------------------------------------
+loadProject :: String -> [(String, EditorState)]
+loadProject content = editorList
+  where
+    contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
+    genNodes = map (\(nid, info) -> Node (NodeId nid) info)
+    genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
+    editorList = map (\(name,readNodes,readEdges,gi) -> let nds = genNodes readNodes
+                                                            eds = genEdges readEdges
+                                                            g = fromNodesAndEdges nds eds
+                                                        in (name, editorSetGI gi . editorSetGraph g $ emptyES) ) contentList
+
+
 -- salvar grafo ----------------------------------------------------------------
-saveGraph :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
-saveGraph st fileName window = do
-  es <- readIORef st
-  let g = editorGetGraph es
-      gi = editorGetGI es
-  fn <- readIORef fileName
-  case fn of
-    Just path -> do
-      tentativa <- saveGraph' (g,gi) path
-      case tentativa of
-        True -> return ()
-        False -> do
-          showError (Just window) "Não foi possível escrever no arquivo"
-          return ()
-    Nothing -> saveGraphAs st fileName window
 
-saveGraphAs :: IORef EditorState -> IORef (Maybe String) -> Window -> IO ()
-saveGraphAs st fileName window = do
-  es <- readIORef st
-  let g = editorGetGraph es
-      gi = editorGetGI es
-  fn <- saveGraphAs' (g,gi) window
-  case fn of
-    Nothing -> return ()
-    Just path -> do
-      writeIORef fileName fn
-      set window [windowTitle := "Graph Editor - " ++ path]
-
-createSaveDialog :: Window -> IO FileChooserDialog
-createSaveDialog window = do
-  saveD <- fileChooserDialogNew
-           (Just "Salvar arquivo")
-           (Just window)
-           FileChooserActionSave
-           [("Cancela",ResponseCancel),("Salva",ResponseAccept)]
-  fileChooserSetDoOverwriteConfirmation saveD True
-  widgetShow saveD
-  return saveD
-
-saveGraphAs' :: (Graph String String ,GraphicalInfo) -> Window -> IO (Maybe String)
-saveGraphAs' (g,gi) window = do
-  saveD <- createSaveDialog window
-  response <- dialogRun saveD
-  case response of
-    ResponseAccept -> do
-      filename <- fileChooserGetFilename saveD
-      case filename of
-        Nothing -> do
-          widgetDestroy saveD
-          return Nothing
-        Just path -> do
-          tentativa <- saveGraph' (g,gi) path
-          case tentativa of
-            True -> do
-              widgetDestroy saveD
-              return $ Just path
-            False -> do
-              widgetDestroy saveD
-              showError (Just window) "Não foi possível escrever no arquivo"
-              return Nothing
-    _  -> do
-      widgetDestroy saveD
-      return Nothing
 
 saveGraph' :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
 saveGraph' (g,gi) path = do
@@ -823,38 +777,13 @@ saveGraph' (g,gi) path = do
       Right _ -> return True
 
 -- abrir grafo -----------------------------------------------------------------
-loadGraph :: Window -> IO (Maybe (Graph String String, GraphicalInfo))
-loadGraph window = do
-  loadD <- fileChooserDialogNew
-           (Just "Abrir Arquivo")
-           (Just window)
-           FileChooserActionOpen
-           [("Cancela", ResponseCancel), ("Abre",ResponseAccept)]
-  fileChooserSetDoOverwriteConfirmation loadD True
-  widgetShow loadD
-  response <- dialogRun loadD
-  case response of
-    ResponseAccept -> do
-      filename <- fileChooserGetFilename loadD
-      widgetDestroy loadD
-      case filename of
-        Nothing -> do
-          return Nothing
-        Just path -> do
-          tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
-          case tentativa of
-            Left _ -> do
-              showError (Just window) "Não foi possivel ler o arquivo"
-              return Nothing
-            Right content -> do
-              let (rns,res,gi) = read content :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
-                  ns = map (\(nid, info) -> Node (NodeId nid) info) rns
-                  es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
-                  g = fromNodesAndEdges ns es
-              return $ Just $ (g,gi)
-    _             -> do
-      widgetDestroy loadD
-      return Nothing
+loadGraph :: String -> (Graph String String,GraphicalInfo)
+loadGraph contents = (g,gi)
+  where
+    (rns,res,gi) = read contents :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
+    ns = map (\(nid, info) -> Node (NodeId nid) info) rns
+    es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
+    g = fromNodesAndEdges ns es
 
 -- desenhar grafo no canvas ----------------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
