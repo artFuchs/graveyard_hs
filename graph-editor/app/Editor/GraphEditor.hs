@@ -61,7 +61,6 @@ editorGetPan (_,_,_,_,p) = p
 editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
 
-
 getNodeGI nid giM = fromMaybe newNodeGI $ M.lookup nid giM
 getEdgeGI eid giM = fromMaybe newEdgeGI $ M.lookup eid giM
 
@@ -105,13 +104,13 @@ startGUI = do
   currentGraph    <- newIORef [0]
 
   -- inicializa um modelo para adicionar à arvore ------------------------------
-  store <- listStoreNew [("new", emptyES)]
+  store <- listStoreNew [("new", emptyES, [], [])]
   projectCol <- treeViewGetColumn treeview 0
   case projectCol of
     Nothing -> return ()
     Just col -> do
       treeViewSetModel treeview (Just store)
-      cellLayoutSetAttributes col treeRenderer store $ \ind -> [cellText := fst ind]
+      cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_) -> [cellText := name]
 
 
 
@@ -327,8 +326,10 @@ startGUI = do
         (True, False, "n") -> do
           modifyIORef st (\es -> (empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
           listStoreClear store
-          listStoreAppend store ("new",emptyES)
+          listStoreAppend store ("new",emptyES,[], [])
           writeIORef fileName Nothing
+          writeIORef undoStack []
+          writeIORef redoStack []
           set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
         -- CTRL + SHIFT + S : save file as
@@ -343,10 +344,13 @@ startGUI = do
               if not (null list)
                 then do
                   listStoreClear store
-                  forM list (listStoreAppend store)
+                  let plist = map (\(n,e) -> (n,e,[],[])) list
+                  forM plist (listStoreAppend store)
                   let (name,es) = list!!0
                   writeIORef st es
                   writeIORef fileName $ Just fn
+                  writeIORef undoStack []
+                  writeIORef redoStack []
                   set window [windowTitle := "Graph Editor - " ++ fn]
                   widgetQueueDraw canvas
                 else return ()
@@ -385,8 +389,10 @@ startGUI = do
     writeIORef fileName Nothing
     treeViewSetCursor treeview [0] Nothing
     listStoreClear store
-    listStoreAppend store ("new", emptyES)
-    modifyIORef st (\es -> (empty, (M.empty, M.empty), ([],[]),1.0,(0.0,0.0)))
+    listStoreAppend store ("new", emptyES, [], [])
+    writeIORef st emptyES
+    writeIORef undoStack []
+    writeIORef redoStack []
     set window [windowTitle := "Graph Editor"]
     widgetQueueDraw canvas
 
@@ -397,10 +403,13 @@ startGUI = do
         if length list > 0
           then do
             listStoreClear store
-            forM list (listStoreAppend store)
+            let plist = map (\(n,e) -> (n,e,[],[])) list
+            forM plist (listStoreAppend store)
             let (name,es) = list!!0
             writeIORef st es
             writeIORef fileName $ Just fn
+            writeIORef undoStack []
+            writeIORef redoStack []
             set window [windowTitle := "Graph Editor - " ++ fn]
             widgetQueueDraw canvas
           else return ()
@@ -408,16 +417,20 @@ startGUI = do
 
   svn `on` actionActivated $ do
     currentES <- readIORef st
+    undo <- readIORef undoStack
+    redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _)<- listStoreGetValue store path
-    listStoreSetValue store path (name,currentES)
+    (name, _, _, _)<- listStoreGetValue store path
+    listStoreSetValue store path (name, currentES, undo, redo)
     saveFile store saveProject fileName window True
 
   sva `on` actionActivated $ do
     currentES <- readIORef st
+    undo <- readIORef undoStack
+    redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _)<- listStoreGetValue store path
-    listStoreSetValue store path (name,currentES)
+    (name, _, _, _)<- listStoreGetValue store path
+    listStoreSetValue store path (name, currentES, undo, redo)
     saveFileAs store saveProject fileName window True
 
   opg `on`actionActivated $ do
@@ -530,28 +543,33 @@ startGUI = do
 
   -- Tratamento de eventos - arvore de grafos ----------------------------------
   treeview `on` cursorChanged $ do
-    [currentPath] <- readIORef currentGraph
     selection <- treeViewGetSelection treeview
     sel <- treeSelectionGetSelected selection
     case sel of
       Nothing -> return ()
       Just it -> do
         [path] <- treeModelGetPath store it
+        [currentPath] <- readIORef currentGraph
         if currentPath == path
           then return ()
           else do
             -- update the current graph in the tree
             currentES <- readIORef st
-            (name, _) <- listStoreGetValue store currentPath
-            listStoreSetValue store currentPath (name,currentES)
+            u <- readIORef undoStack
+            r <- readIORef redoStack
+            (name, _, _, _) <- listStoreGetValue store currentPath
+            listStoreSetValue store currentPath (name,currentES, u, r)
             -- load the selected graph from the tree
-            writeIORef currentGraph [path]
-            (_,newEs) <- listStoreGetValue store path
+            (_,newEs, newU, newR) <- listStoreGetValue store path
             writeIORef st newEs
+            writeIORef undoStack newU
+            writeIORef redoStack newR
+            writeIORef currentGraph [path]
+            -- update canvas
             widgetQueueDraw canvas
 
   btnNew `on` buttonActivated $ do
-    listStoreAppend store ("new",emptyES)
+    listStoreAppend store ("new",emptyES,[],[])
     return ()
 
   btnRmv `on` buttonActivated $ do
@@ -570,24 +588,15 @@ startGUI = do
             listStoreRemove store path
             treeViewSetCursor treeview [path] Nothing
           (False, True) -> do
-            listStoreSetValue store 0 ("new",emptyES)
+            listStoreSetValue store 0 ("new",emptyES,[],[])
             writeIORef st emptyES
           _ -> return ()
 
         widgetQueueDraw canvas
 
   treeRenderer `on` edited $ \[path] newName -> do
-    (oldName, val) <- listStoreGetValue store path
-    listStoreSetValue store path (newName, val)
-
-
-
-
-
-
-
-
-
+    (oldName, val, u, r) <- listStoreGetValue store path
+    listStoreSetValue store path (newName, val, u, r)
 
   -- tratamento de eventos - janela principal ----------------------------------
   window `on` deleteEvent $ do
@@ -713,10 +722,10 @@ saveFileAs x saveF fileName window changeFN = do
 
 
 -- salvar projeto --------------------------------------------------------------
-saveProject :: ListStore (String, EditorState) -> String -> IO Bool
+saveProject :: ListStore (String, EditorState, [(Graph String String ,GraphicalInfo)], [(Graph String String ,GraphicalInfo)]) -> String -> IO Bool
 saveProject model path = do
   editorList <- listStoreToList model
-  let getWhatMatters = (\(name, es) -> (name, editorGetGraph es, editorGetGI es))
+  let getWhatMatters = (\(name, es, _, _) -> (name, editorGetGraph es, editorGetGI es))
       whatMatters = map getWhatMatters editorList
       contents = map (\(name, g, gi) -> ( name
                                         , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
@@ -1094,8 +1103,7 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
--- *Editar multiplos grafos no mesmo projeto
---   *Consertar Undo/Redo
+
 
 -- Feito -----------------------------------------------------------------------
 -- *Melhorar menu de Propriedades
@@ -1114,3 +1122,4 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 -- *Mudar estrutura do grafo para estrutura usada no verigraph
 -- *Editar multiplos grafos no mesmo projeto
 --   *Criar uma arvore de grafos
+--   *Consertar Undo/Redo
