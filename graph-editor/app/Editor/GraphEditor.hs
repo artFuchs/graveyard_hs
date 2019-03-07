@@ -333,29 +333,11 @@ startGUI = do
           set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
         -- CTRL + SHIFT + S : save file as
-        (True, True, "s") -> saveFileAs store saveProject fileName window True
+        (True, True, "s") -> actionActivate sva
         -- CTRL + S : save file
-        (True, False, "s") -> saveFile store saveProject fileName window True
+        (True, False, "s") -> actionActivate svn
         -- CTRL + O : open file
-        (True, False, "o") -> do
-          mg <- loadFile window loadProject
-          case mg of
-            Just (list,fn) -> do
-              if not (null list)
-                then do
-                  listStoreClear store
-                  let plist = map (\(n,e) -> (n,e,[],[])) list
-                  forM plist (listStoreAppend store)
-                  let (name,es) = list!!0
-                  writeIORef st es
-                  writeIORef fileName $ Just fn
-                  writeIORef undoStack []
-                  writeIORef redoStack []
-                  set window [windowTitle := "Graph Editor - " ++ fn]
-                  widgetQueueDraw canvas
-                else return ()
-            _ -> return ()
-
+        (True, False, "o") -> actionActivate opn
         -- CTRL + Z/R : undo/redo
         (True, False, "z") -> do
           applyUndo undoStack redoStack st
@@ -1103,6 +1085,7 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
+
 
 
 -- Feito -----------------------------------------------------------------------
