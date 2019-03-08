@@ -140,6 +140,7 @@ startGUI = do
       writeIORef oldPoint (x',y')
       widgetGrabFocus canvas
     case (b, click == DoubleClick) of
+      -- double click with left button : rename selection
       (LeftButton, True) -> do
         let (n,e) = editorGetSelected es
         if null n && null e
@@ -296,7 +297,7 @@ startGUI = do
       _ -> return ()
     return True
 
-  -- teclado
+  -- keyboard
   canvas `on` keyPressEvent $ do
     k <- eventKeyName
     ms <- eventModifierAll
@@ -372,12 +373,14 @@ startGUI = do
           modifyIORef st (\es -> deleteSelected es)
           stackUndo undoStack redoStack es
           widgetQueueDraw canvas
+        -- F2 - rename selection
         (False,False,"f2") -> widgetGrabFocus entryName
         _       -> return ()
 
     return True
 
-  -- tratamento de eventos -- menu toolbar -------------------------------------
+  -- event bindings for the menu toolbar ---------------------------------------
+  -- new project action activated
   new `on` actionActivated $ do
     writeIORef fileName Nothing
     treeViewSetCursor treeview [0] Nothing
@@ -389,6 +392,7 @@ startGUI = do
     set window [windowTitle := "Graph Editor"]
     widgetQueueDraw canvas
 
+  -- open project
   opn `on` actionActivated $ do
     mg <- loadFile window loadProject
     case mg of
@@ -408,6 +412,7 @@ startGUI = do
           else return ()
       Nothing -> return ()
 
+  -- save project
   svn `on` actionActivated $ do
     currentES <- readIORef st
     undo <- readIORef undoStack
@@ -417,6 +422,7 @@ startGUI = do
     listStoreSetValue store path (name, currentES, undo, redo)
     saveFile store saveProject fileName window True
 
+  -- save project as
   sva `on` actionActivated $ do
     currentES <- readIORef st
     undo <- readIORef undoStack
@@ -426,6 +432,7 @@ startGUI = do
     listStoreSetValue store path (name, currentES, undo, redo)
     saveFileAs store saveProject fileName window True
 
+  -- open graph
   opg `on`actionActivated $ do
     mg <- loadFile window loadGraph
     case mg of
@@ -434,30 +441,34 @@ startGUI = do
         widgetQueueDraw canvas
       _      -> return ()
 
+  -- save graph
   svg `on` actionActivated $ do
     es <- readIORef st
     let g  = editorGetGraph es
         gi = editorGetGI es
-    saveFileAs (g,gi) saveGraph' fileName window False
+    saveFileAs (g,gi) saveGraph fileName window False
 
+  -- undo
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
     widgetQueueDraw canvas
 
+  -- redo
   rdo `on` actionActivated $ do
     applyRedo undoStack redoStack st
     widgetQueueDraw canvas
 
+  -- help
   hlp `on` actionActivated $ do
     widgetShowAll helpWindow
 
-    return ()
 
-
-  -- tratamento de eventos -- menu de propriedades -----------------------------
+  -- event bindings -- inspector panel -----------------------------------------
+  -- pressed a key when editing the entryName
   entryName `on` keyPressEvent $ do
     k <- eventKeyName
     liftIO $ do
+      -- if it's Return, then change the name of the selected elements
       case T.unpack k of
         "Return" -> do
           es <- readIORef st
@@ -469,6 +480,9 @@ startGUI = do
         _       -> return ()
     return False
 
+  -- select a fill color or line color
+  -- change the selection fill color or line color and
+  -- set the current fill or line color as the selected color
   onColorSet colorBtn $ do
     Color r g b <- colorButtonGetColor colorBtn
     es <- readIORef st
@@ -480,9 +494,7 @@ startGUI = do
                                               in M.insert nid gi giMap)
         newngiM = foldl changeColor ngiM ns
     modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
-    if null ns
-      then writeIORef currentC col
-      else return ()
+    writeIORef currentC col
     widgetQueueDraw canvas
 
   onColorSet lineColorBtn $ do
@@ -499,11 +511,11 @@ startGUI = do
                                             in M.insert eid gi giMap)
         newegiM = foldl changeELC egiM edgs
     modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
-    if null ns && null edgs
-      then writeIORef currentLC color
-      else return ()
+    writeIORef currentLC color
     widgetQueueDraw canvas
 
+  -- toogle the radio buttons for node shapes
+  -- change the shape of the selected nodes and set the current shape for new nodes
   radioCircle `on` toggled $ do
     modifyIORef st (\es -> changeNodeShape es NCircle)
     writeIORef currentShape NCircle
@@ -519,6 +531,8 @@ startGUI = do
     writeIORef currentShape NQuad
     widgetQueueDraw canvas
 
+  -- toogle the radio buttons for edge styles
+  -- change the style of the selected edges and set the current style for new edges
   radioNormal `on` toggled $ do
     modifyIORef st (\es -> changeEdgeStyle es ENormal)
     writeIORef currentStyle ENormal
@@ -534,7 +548,8 @@ startGUI = do
     writeIORef currentStyle ESlashed
     widgetQueueDraw canvas
 
-  -- Tratamento de eventos - arvore de grafos ----------------------------------
+  -- event bindings for the graphs' tree ---------------------------------------
+  -- changed the selected graph
   treeview `on` cursorChanged $ do
     selection <- treeViewGetSelection treeview
     sel <- treeSelectionGetSelected selection
@@ -561,10 +576,12 @@ startGUI = do
             -- update canvas
             widgetQueueDraw canvas
 
+  -- pressed the 'new' button
   btnNew `on` buttonActivated $ do
     listStoreAppend store ("new",emptyES,[],[])
     return ()
 
+  -- pressed the 'remove' button
   btnRmv `on` buttonActivated $ do
     selection <- treeViewGetSelection treeview
     sel <- treeSelectionGetSelected selection
@@ -587,21 +604,26 @@ startGUI = do
 
         widgetQueueDraw canvas
 
+  -- edited a graph name
   treeRenderer `on` edited $ \[path] newName -> do
     (oldName, val, u, r) <- listStoreGetValue store path
     listStoreSetValue store path (newName, val, u, r)
 
-  -- tratamento de eventos - janela principal ----------------------------------
+  -- event bindings for the main window ----------------------------------------
+  -- when click in the close button, the application must close
   window `on` deleteEvent $ do
     liftIO mainQuit
     return False
 
+  -- run the preogram ----------------------------------------------------------
   mainGUI
 
 
-
+--------------------------------------------------------------------------------
 -- Callbacks -------------------------------------------------------------------
--- atualização do menu de propriedades -----------------------------------------
+--------------------------------------------------------------------------------
+
+-- update the inspector --------------------------------------------------------
 updatePropMenu :: IORef EditorState -> IORef (Double,Double,Double) -> IORef (Double,Double,Double) -> (Entry, Entry, ColorButton, ColorButton, [RadioButton], [RadioButton]) -> (HBox, Frame, Frame)-> IO ()
 updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
   est <- readIORef st
@@ -671,7 +693,7 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
 
--- save function ---------------------------------------------------------------
+-- general save function -------------------------------------------------------
 saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO ()
 saveFile x saveF fileName window changeFN = do
   fn <- readIORef fileName
@@ -712,9 +734,8 @@ saveFileAs x saveF fileName window changeFN = do
     (True, Just path) -> writeIORef fileName (Just path)
     _ -> return ()
 
-
-
--- salvar projeto --------------------------------------------------------------
+-- auxiliar save functions -----------------------------------------------------
+-- save project
 saveProject :: ListStore (String, EditorState, [(Graph String String ,GraphicalInfo)], [(Graph String String ,GraphicalInfo)]) -> String -> IO Bool
 saveProject model path = do
   editorList <- listStoreToList model
@@ -729,6 +750,18 @@ saveProject model path = do
   case tentativa of
     Left _ -> return False
     Right _ -> return True
+
+-- save graph
+saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
+saveGraph (g,gi) path = do
+    let writeGraph = writeFile path $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+                                           , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+                                           , gi)
+    tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
+    case tentativa of
+      Left _ -> return False
+      Right _ -> return True
+
 
 -- load function ---------------------------------------------------------------
 loadFile :: Window -> (String -> a) -> IO (Maybe (a,String))
@@ -759,34 +792,23 @@ loadFile window loadF = do
       widgetDestroy loadD
       return Nothing
 
-
--- carregar projeto ------------------------------------------------------------
+-- auxiliar load functions -----------------------------------------------------
+-- load project
 loadProject :: String -> [(String, EditorState)]
 loadProject content = editorList
   where
     contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
     genNodes = map (\(nid, info) -> Node (NodeId nid) info)
     genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
-    editorList = map (\(name,readNodes,readEdges,gi) -> let nds = genNodes readNodes
-                                                            eds = genEdges readEdges
-                                                            g = fromNodesAndEdges nds eds
-                                                        in (name, editorSetGI gi . editorSetGraph g $ emptyES) ) contentList
+    genProj = map (\(name,readNodes,readEdges,gi) ->
+                      let nds = genNodes readNodes
+                          eds = genEdges readEdges
+                          g = fromNodesAndEdges nds eds
+                      in (name, editorSetGI gi . editorSetGraph g $ emptyES) )
+    editorList = genProj contentList
 
 
--- salvar grafo ----------------------------------------------------------------
-
-
-saveGraph' :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
-saveGraph' (g,gi) path = do
-    let writeGraph = writeFile path $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
-                                           , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
-                                           , gi)
-    tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
-    case tentativa of
-      Left _ -> return False
-      Right _ -> return True
-
--- abrir grafo -----------------------------------------------------------------
+-- load graph
 loadGraph :: String -> (Graph String String,GraphicalInfo)
 loadGraph contents = (g,gi)
   where
@@ -795,14 +817,15 @@ loadGraph contents = (g,gi)
     es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
     g = fromNodesAndEdges ns es
 
--- desenhar grafo no canvas ----------------------------------------------------
+
+-- draw a graph in the canvas --------------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
 drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
   scale z z
   translate px py
 
-  -- desenha as arestas
+  -- draw the edges
   forM (edges g) (\e -> do
     let dstN = M.lookup (fromEnum . targetId $ e) nGI
         srcN = M.lookup (fromEnum . sourceId $ e) nGI
@@ -812,7 +835,7 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
       (Just gi, Just src, Just dst) -> renderEdge gi (edgeInfo e) selected src dst context
       _ -> return ())
 
-  -- desenha os nodos
+  -- draw the nodes
   forM (nodes g) (\n -> do
     let ngi = M.lookup (fromEnum . nodeId $ n) nGI
         selected = (nodeId n) `elem` (sNodes)
@@ -821,7 +844,7 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
       Just gi -> renderNode gi info selected context
       Nothing -> return ())
 
-  -- desenha a selectionBox
+  -- draw the selectionBox
   case sq of
     Just (x,y,w,h) -> do
       rectangle x y w h
@@ -834,8 +857,8 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   return ()
 
 
--- operações de interação ------------------------------------------------------
--- verifica se o usuario selecionou algum nodo
+-- interaction ------------------------------------------------------
+-- check if the user selected a node
 checkSelectNode:: GraphicalInfo -> (Double,Double) -> Maybe NodeId
 checkSelectNode (nodesG,_) (x,y) = case find (\n -> isSelected (snd n)) $ (M.toList nodesG) of
                                     Nothing -> Nothing
@@ -848,78 +871,18 @@ checkSelectNode (nodesG,_) (x,y) = case find (\n -> isSelected (snd n)) $ (M.toL
                               NRect -> pointInsideRectangle (x,y) (nx,ny,w,h)
                               NQuad -> pointInsideRectangle (x,y) (nx,ny,l,l) )
 
--- verifica se o usuario selecionou alguma aresta
+-- check if the user selected a edge
 checkSelectEdge:: GraphicalInfo -> (Double,Double) -> Maybe EdgeId
 checkSelectEdge (_,edgesG) (x,y) = case find (\e -> isSelected (snd e)) $ (M.toList edgesG) of
                             Nothing -> Nothing
                             Just (k,a) -> Just $ EdgeId k
   where isSelected = (\e -> pointDistance (x,y) (cPosition e) < 5)
 
--- move os nodos selecionados
-moveNodes:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
-moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
-  where
-      (sNodes, sEdges) = editorGetSelected es
-      graph = editorGetGraph es
-      (ngiM,egiM) = editorGetGI es
-      (deltaX, deltaY) = (xnew-xold, ynew-yold)
-      -- move os nodos
-      moveN = \giMap (NodeId nid) -> let gi = getNodeGI nid giMap
-                                         (ox, oy) = position gi
-                                     in M.insert nid (nodeGiSetPosition (ox+deltaX,oy+deltaY) gi) giMap
-      movedNGIs = foldl moveN ngiM sNodes
-      -- move as arestas que estão entre os nodos movidos
-      moveE = \giMap edge -> let
-                                a = sourceId edge
-                                b = targetId edge
-                                getPos = \(NodeId nid) -> position . getNodeGI nid $ movedNGIs
-                                aPos = getPos a
-                                bPos = getPos b
-                                eid = fromEnum $ edgeId edge
-                                gi = getEdgeGI eid egiM
-                                (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
-                             in case (edgeId edge `elem` sEdges, a == b, any (`elem` sNodes) [a,b], centered gi) of
-                                (False, True, True, _) -> M.insert eid (edgeGiSetPosition (xd,yd) gi) giMap
-                                (False, False, True, True) -> M.insert eid (edgeGiSetPosition (midPoint aPos bPos) gi) giMap
-                                _ -> giMap
-      movedEGIs = foldl moveE egiM (edges graph)
-
--- move as arestas selecionadas
-moveEdges:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
-moveEdges es (xold,yold) (xnew,ynew) = editorSetGI (ngi,newegi) es
-  where graph = editorGetGraph es
-        (sNodes,sEdges) = editorGetSelected es
-        (deltaX, deltaY) = (xnew-xold,ynew-yold)
-        (ngi,egi) = editorGetGI es
-        moveE = (\egiM eid -> case lookupEdge eid graph of
-          Just edge -> let  gi = getEdgeGI (fromEnum $ eid) egi
-                            (xe, ye) = cPosition gi
-                            newPos = (xe+deltaX, ye+deltaY)
-                            srcPos = position . getNodeGI (fromEnum $ sourceId edge) $ ngi
-                            dstPos = position . getNodeGI (fromEnum $ targetId edge) $ ngi
-                            mustCenter = pointLineDistance newPos srcPos dstPos < 10
-                       in M.insert (fromEnum eid) (edgeGiSetCentered mustCenter . edgeGiSetPosition newPos $ gi) egiM
-          Nothing -> egiM)
-        newegi = foldl moveE egi sEdges
-
--- ajusta a posição das edges selecionadas caso a propriedade centered seja True
-adjustEdges:: EditorState -> EditorState
-adjustEdges es = editorSetGI (ngiM,newEgiM) es
-  where graph = editorGetGraph es
-        (ngiM,egiM) = editorGetGI es
-        adjust = (\giM eid -> case lookupEdge eid graph of
-          Just edge ->  let
-                          srcPos = position $ getNodeGI (fromEnum $ sourceId edge) ngiM
-                          dstPos = position $ getNodeGI (fromEnum $ targetId edge) ngiM
-                          gi = getEdgeGI (fromEnum eid) egiM
-                        in if centered gi
-                          then M.insert (fromEnum eid) (edgeGiSetPosition (midPoint srcPos dstPos) gi) giM
-                          else giM)
-        newEgiM = foldl adjust egiM (snd . editorGetSelected $ es)
 
 
 
--- create operations -----------------------------------------------------------
+
+-- create/delete operations ----------------------------------------------------
 -- create a new node with it's default GraphicalInfo
 createNode:: IORef EditorState -> (Double,Double) -> PangoContext -> NodeShape -> (Double,Double,Double) -> (Double,Double,Double) -> IO ()
 createNode st pos context nshape color lColor = do
@@ -951,9 +914,6 @@ createEdges es dstNode estyle ecolor = editorSetGraph newGraph . editorSetGI (ng
                                 in (ng, M.insert (fromEnum eid) negi giM))
 
 
-
-
--- deleta os nodos e arestas selecionados no grafo
 deleteSelected:: EditorState -> EditorState
 deleteSelected es = editorSetSelected ([],[]) . editorSetGI (newngiM, newegiM) . editorSetGraph newGraph $ es
   where graph = editorGetGraph es
@@ -964,7 +924,69 @@ deleteSelected es = editorSetSelected ([],[]) . editorSetGI (newngiM, newegiM) .
         graph' = foldl (\g n -> removeNode n g) graph nids
         newGraph = foldl (\g e -> removeEdge e g) graph' eids
 
--- renomeia os itens selecionados
+
+-- Graphical Info manipulation -------------------------------------------------
+moveNodes:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
+moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
+  where
+      (sNodes, sEdges) = editorGetSelected es
+      graph = editorGetGraph es
+      (ngiM,egiM) = editorGetGI es
+      (deltaX, deltaY) = (xnew-xold, ynew-yold)
+      -- move os nodos
+      moveN = \giMap (NodeId nid) -> let gi = getNodeGI nid giMap
+                                         (ox, oy) = position gi
+                                     in M.insert nid (nodeGiSetPosition (ox+deltaX,oy+deltaY) gi) giMap
+      movedNGIs = foldl moveN ngiM sNodes
+      -- move as arestas que estão entre os nodos movidos
+      moveE = \giMap edge -> let
+                                a = sourceId edge
+                                b = targetId edge
+                                getPos = \(NodeId nid) -> position . getNodeGI nid $ movedNGIs
+                                aPos = getPos a
+                                bPos = getPos b
+                                eid = fromEnum $ edgeId edge
+                                gi = getEdgeGI eid egiM
+                                (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
+                             in case (edgeId edge `elem` sEdges, a == b, any (`elem` sNodes) [a,b], centered gi) of
+                                (False, True, True, _) -> M.insert eid (edgeGiSetPosition (xd,yd) gi) giMap
+                                (False, False, True, True) -> M.insert eid (edgeGiSetPosition (midPoint aPos bPos) gi) giMap
+                                _ -> giMap
+      movedEGIs = foldl moveE egiM (edges graph)
+
+moveEdges:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
+moveEdges es (xold,yold) (xnew,ynew) = editorSetGI (ngi,newegi) es
+  where graph = editorGetGraph es
+        (sNodes,sEdges) = editorGetSelected es
+        (deltaX, deltaY) = (xnew-xold,ynew-yold)
+        (ngi,egi) = editorGetGI es
+        moveE = (\egiM eid -> case lookupEdge eid graph of
+          Just edge -> let  gi = getEdgeGI (fromEnum $ eid) egi
+                            (xe, ye) = cPosition gi
+                            newPos = (xe+deltaX, ye+deltaY)
+                            srcPos = position . getNodeGI (fromEnum $ sourceId edge) $ ngi
+                            dstPos = position . getNodeGI (fromEnum $ targetId edge) $ ngi
+                            mustCenter = pointLineDistance newPos srcPos dstPos < 10
+                       in M.insert (fromEnum eid) (edgeGiSetCentered mustCenter . edgeGiSetPosition newPos $ gi) egiM
+          Nothing -> egiM)
+        newegi = foldl moveE egi sEdges
+
+-- adjust the selected edges positions if the propriety centered is True
+adjustEdges:: EditorState -> EditorState
+adjustEdges es = editorSetGI (ngiM,newEgiM) es
+  where graph = editorGetGraph es
+        (ngiM,egiM) = editorGetGI es
+        adjust = (\giM eid -> case lookupEdge eid graph of
+          Just edge ->  let
+                          srcPos = position $ getNodeGI (fromEnum $ sourceId edge) ngiM
+                          dstPos = position $ getNodeGI (fromEnum $ targetId edge) ngiM
+                          gi = getEdgeGI (fromEnum eid) egiM
+                        in if centered gi
+                          then M.insert (fromEnum eid) (edgeGiSetPosition (midPoint srcPos dstPos) gi) giM
+                          else giM)
+        newEgiM = foldl adjust egiM (snd . editorGetSelected $ es)
+
+-- rename the selected itens
 renameSelected:: IORef EditorState -> String -> PangoContext -> IO()
 renameSelected state name context = do
   es <- readIORef state
@@ -978,7 +1000,7 @@ renameSelected state name context = do
       newEs   = editorSetGI (newNgiM,egiM) . editorSetGraph newGraph $ es
   writeIORef state newEs
 
--- muda a forma de um nodo
+-- change the selected nodes shape
 changeNodeShape :: EditorState -> NodeShape -> EditorState
 changeNodeShape es s = editorSetGI (newNgiM, egiM) es
   where
@@ -986,7 +1008,7 @@ changeNodeShape es s = editorSetGI (newNgiM, egiM) es
       (ngiM, egiM) = editorGetGI es
       newNgiM = M.mapWithKey (\k gi -> if NodeId k `elem` nids then nodeGiSetShape s gi else gi) ngiM
 
--- muda o estilo das edges selecionadas
+-- change the selected edges style
 changeEdgeStyle :: EditorState -> EdgeStyle -> EditorState
 changeEdgeStyle es s = editorSetGI (ngiM, newEgiM) es
   where
@@ -995,14 +1017,15 @@ changeEdgeStyle es s = editorSetGI (ngiM, newEgiM) es
     newEgiM = M.mapWithKey (\k gi -> if EdgeId k `elem` eids then edgeGiSetStyle s gi else gi) egiM
 
 
--- função auxiliar para createNode e renameSelected
--- dado um texto, adquire o tamanho da bounding box do texto para renderiza-lo
--- utiliza a biblioteca pango para isso
+-- auxiliar function used by createNode and renameSelected
+-- given a text, compute the size of it's bounding box
+-- uses the pango lib
 getStringDims :: String -> PangoContext -> IO (Double, Double)
 getStringDims str context = do
   pL <- layoutText context str
   (_, PangoRectangle _ _ w h) <- layoutGetExtents pL
   return (w+4, h+4)
+
 
 -- Undo / Redo -----------------------------------------------------------------
 stackUndo :: IORef [(Graph String String, GraphicalInfo)] -> IORef [(Graph String String, GraphicalInfo)] -> EditorState -> IO ()
@@ -1042,6 +1065,7 @@ applyRedo undoStack redoStack st = do
   writeIORef redoStack nr
   writeIORef st nes
 
+
 -- Copy / Paste / Cut ----------------------------------------------------------
 copySelected :: EditorState -> (Graph String String, GraphicalInfo)
 copySelected  es = (cg,(ngiM',egiM'))
@@ -1067,6 +1091,7 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
     cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
     (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
 
+-- union between two (Graph, GRaphicalInfo) tuples
 diagrUnion :: (Graph String String, GraphicalInfo) -> (Graph String String, GraphicalInfo) -> (Graph String String, GraphicalInfo)
 diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
   where
