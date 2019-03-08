@@ -24,7 +24,7 @@ import Editor.UIBuilders
 -- (graph, GraphicalInfo, elected nodes and edges, zoom, pan)
 type EditorState = (Graph String String, GraphicalInfo, ([NodeId],[EdgeId]) , Double, (Double,Double))
 
--- basic contructor
+-- constructor
 emptyES :: EditorState
 emptyES = (empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0))
 
@@ -182,7 +182,7 @@ startGUI = do
           _ -> return ()
         widgetQueueDraw canvas
         updatePropMenu st currentC currentLC propWidgets propBoxes
-      -- clique com o botão direito: cria nodos e insere edges entre nodos
+      -- right button click: create nodes and insert edges
       (RightButton, _) -> liftIO $ do
         let g = editorGetGraph es
             gi = editorGetGI es
@@ -190,18 +190,18 @@ startGUI = do
         context <- widgetGetPangoContext canvas
         stackUndo undoStack redoStack es
         case (Control `elem` ms, dstNode) of
-          -- nenhum nodo foi selecionado, criar nodo
+          -- no selected node: create node
           (False, Nothing) -> do
             shape <- readIORef currentShape
             c <- readIORef currentC
             lc <- readIORef currentLC
             createNode st (x',y') context shape c lc
-          -- um nodo foi selecionado, criar edges levando a esse nodo
+          -- one node selected: create edges targeting this node
           (False, Just nid) -> do
             estyle <- readIORef currentStyle
             color <- readIORef currentLC
             modifyIORef st (\es -> createEdges es nid estyle color)
-          -- ctrl pressionado, emulação do botão do meio do mouse
+          -- ctrl pressed: middle mouse button emulation
           (True,_) -> return ()
         widgetQueueDraw canvas
         updatePropMenu st currentC currentLC propWidgets propBoxes
@@ -209,7 +209,7 @@ startGUI = do
 
     return True
 
-  -- movimento do mouse
+  -- mouse motion on canvas
   canvas `on` motionNotifyEvent $ do
     ms <- eventModifierAll
     (x,y) <- eventCoordinates
@@ -222,10 +222,12 @@ startGUI = do
         (px,py) = editorGetPan es
         (x',y') = (x/z - px, y/z - py)
     case (leftButton, middleButton, sNodes, sEdges) of
+      -- if left button is pressed and no node is selected, update square selection
       (True, False, [], []) -> liftIO $ do
         modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x'-a,y'-b))
         sq <- readIORef squareSelection
         widgetQueueDraw canvas
+      -- if left button is pressed with some elements selected, then move then
       (True, False, n, e) -> liftIO $ do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
@@ -237,6 +239,7 @@ startGUI = do
             stackUndo undoStack redoStack es
           else return ()
         widgetQueueDraw canvas
+      -- if middle button is pressed, then move the view
       (False ,True, _, _) -> liftIO $ do
         let (dx,dy) = (x'-ox,y'-oy)
         modifyIORef st (editorSetPan (px+dx, py+dy))
@@ -244,7 +247,7 @@ startGUI = do
       (_,_,_,_) -> return ()
     return True
 
-  -- soltar botão do mouse
+  -- mouse button release on canvas
   canvas `on` buttonReleaseEvent $ do
     b <- eventButton
     case b of
@@ -254,6 +257,8 @@ startGUI = do
         sq <- readIORef squareSelection
         let (n,e) = editorGetSelected es
         case (editorGetSelected es,sq) of
+          -- if release the left button when there's a square selection,
+          -- select the elements that are inside the selection
           (([],[]), Just (x,y,w,h)) -> do
             let graph = editorGetGraph es
                 (ngiM, egiM) = editorGetGI es
@@ -274,14 +279,17 @@ startGUI = do
       widgetQueueDraw canvas
     return True
 
-  -- roda do mouse
+  -- mouse whell scroll on canvas
   canvas `on` scrollEvent $ do
     d <- eventScrollDirection
     ms <- eventModifierAll
     case (Control `elem` ms, d) of
+      -- when control is pressed,
+      -- if the direction is up, then zoom in
       (True, ScrollUp)  -> liftIO $ do
         modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
         widgetQueueDraw canvas
+      -- if the direction is down, then zoom out
       (True, ScrollDown) -> liftIO $ do
         modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.6 then editorSetZoom (editorGetZoom es * 0.9) es else es)
         widgetQueueDraw canvas
