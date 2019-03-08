@@ -9,7 +9,6 @@ import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Data.List
-import Data.Maybe
 import qualified Data.Text as T
 import qualified Control.Exception as E
 import qualified Data.Map as M
@@ -20,17 +19,16 @@ import Editor.Render
 import Editor.Helper
 import Editor.UIBuilders
 
-nullNode = Node {nodeId = 0, nodeInfo = ""}
-nullEdge = Edge {edgeId = 0, sourceId = 0, targetId = 0, edgeInfo = ""}
-
--- | estado do editor de grafos
---   contém todas as informações necssárias para desenhar o grafo
--- (grafo, nodos selecionados, arestas selecionadas, zoom, Pan)
+-- | Graph Editor State
+-- A tuple containing all the informations needed to draw the graph in the canvas
+-- (graph, GraphicalInfo, elected nodes and edges, zoom, pan)
 type EditorState = (Graph String String, GraphicalInfo, ([NodeId],[EdgeId]) , Double, (Double,Double))
 
+-- basic contructor
 emptyES :: EditorState
 emptyES = (empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0))
 
+-- getters and setters
 editorGetGraph :: EditorState -> Graph String String
 editorGetGraph (g,_,_,_,_) = g
 
@@ -61,34 +59,40 @@ editorGetPan (_,_,_,_,p) = p
 editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
 
-getNodeGI nid giM = fromMaybe newNodeGI $ M.lookup nid giM
-getEdgeGI eid giM = fromMaybe newEdgeGI $ M.lookup eid giM
 
+
+--------------------------------------------------------------------------------
+-- MODULE FUNCTIONS ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- startGUI
+-- creates the Graphical User Interface using the UIBuilders module and do the bindings
 startGUI :: IO()
 startGUI = do
-  -- inicializa a biblioteca GTK
+  -- init GTK
   initGUI
 
-  -- definição da GUI -----------------------------------------------------------
-  -- janela de ajuda
+  -- GUI definition ------------------------------------------------------------
+  -- help window ---------------------------------------------------------------
   helpWindow <- buildHelpWindow
-  -- cria o menu
+
+  -- main window ---------------------------------------------------------------
+  -- creates the menu bar
   (maybeMenubar,new,opn,svn,sva,opg,svg,udo,rdo,hlp) <- buildMaybeMenubar
-  -- cria o menu de propriedades
+  -- creates the inspector panel on the right
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let
     propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
-  -- cria o painel da arvore de grafos
+  -- creates the tree panel on the left
   (treePanel, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
-  -- cria a janela principal, contendo o canvas
+  -- creates the main window, containing the canvas and the built panels
   (window, canvas) <- buildMainWindow maybeMenubar frameProps treePanel
-
-  -- mostra a GUI
+  -- shows the main window
   widgetShowAll window
 
-  -- inicializa estado do editor -----------------------------------------------
+  -- init the editor variables  ------------------------------------------------
   st              <- newIORef emptyES -- estado do editor: todas as informações necessárias para desenhar o grafo
   oldPoint        <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
   squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
@@ -103,7 +107,7 @@ startGUI = do
   fileName        <- newIORef (Nothing :: Maybe String) -- arquivo aberto
   currentGraph    <- newIORef [0]
 
-  -- inicializa um modelo para adicionar à arvore ------------------------------
+  -- init an model to display in the tree panel --------------------------------
   store <- listStoreNew [("new", emptyES, [], [])]
   projectCol <- treeViewGetColumn treeview 0
   case projectCol of
@@ -114,15 +118,15 @@ startGUI = do
 
 
 
-  -- TRATAMENTO DE EVENTOS -----------------------------------------------------
-  -- tratamento de eventos - canvas --------------------------------------------
-  -- evento de desenho
+  -- EVENT BINDINGS ------------------------------------------------------------
+  -- event bindings for the canvas ---------------------------------------------
+  -- drawing event
   canvas `on` draw $ do
     es <- liftIO $ readIORef st
     sq <- liftIO $ readIORef squareSelection
     drawGraph es sq canvas
 
-  -- clique do mouse
+  -- mouse button pressed on canvas
   canvas `on` buttonPressEvent $ do
     b <- eventButton
     (x,y) <- eventCoordinates
@@ -136,8 +140,12 @@ startGUI = do
       writeIORef oldPoint (x',y')
       widgetGrabFocus canvas
     case (b, click == DoubleClick) of
-      (LeftButton, True) -> liftIO $ widgetGrabFocus entryName
-      -- clique com o botão esquerdo: seleciona nodos e edges
+      (LeftButton, True) -> do
+        let (n,e) = editorGetSelected es
+        if null n && null e
+          then return ()
+          else liftIO $ widgetGrabFocus entryName
+      -- left button: select nodes and edges
       (LeftButton, False)  -> liftIO $ do
         let (oldSN,oldSE) = editorGetSelected es
             graph = editorGetGraph es
@@ -148,35 +156,30 @@ startGUI = do
             sEdge = case checkSelectEdge gi (x',y') of
               Nothing -> []
               Just eid -> [eid]
-        -- adicionar/remover elementos da seleção
-        (sNodes,sEdges) <- case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
-          -- clicou no espaço em branco, Shift não pressionado
-          ([],[], False, _) -> do
+        -- add/remove elements of selection
+        case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
+          -- clicked in blank space with Shift not pressed
+          ([], [], False, _) -> do
             modifyIORef st (editorSetSelected ([],[]))
             writeIORef squareSelection $ Just (x',y',0,0)
-            return ([],[])
-          -- selecionou nodos ou edges com shift não pressionado -> se não fizer parte da seleção, torna-los a seleção
-          (n, [], False, _) -> if n!!0 `elem` oldSN
-                                then return (oldSN,oldSE)
-                                else do modifyIORef st (editorSetSelected (n, []))
-                                        return (n,[])
-          ([],e,False, _) -> if e!!0 `elem` oldSE
-                                then return (oldSN,oldSE)
-                                else do modifyIORef st (editorSetSelected ([], e))
-                                        return ([],e)
-          -- selecionou nodos ou edges com shift pressionado -> adicionar para seleção
-          (n,e,True, False) -> do
+          -- selected nodes or edges with shift pressed:
+          (n, e, False, _) -> do
+            let nS = if null n then False else n!!0 `elem` oldSN
+                eS = if null e then False else e!!0 `elem` oldSE
+            if nS || eS
+              then return ()
+              else modifyIORef st (editorSetSelected (n, e))
+          -- selected nodes or edges with Shift pressed -> add to selection
+          (n, e, True, False) -> do
             let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
                 jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-            return (jointSN, jointSE)
-          -- selecionou nodos ou edges com shift e ctrl pressionados -> remover da seleção
-          (n,e,True, True) -> do
-            let jointSN = delete (sNode!!0) oldSN
-                jointSE = delete (sEdge!!0) oldSE
+          -- selected nodes or edges with Shift + Ctrl pressed -> remove from selection
+          (n, e, True, True) -> do
+            let jointSN = if null n then oldSN else delete (n!!0) oldSN
+                jointSE = if null e then oldSE else delete (e!!0) oldSE
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-            return (jointSN, jointSE)
-          _ -> return (oldSN, oldSE)
+          _ -> return ()
         widgetQueueDraw canvas
         updatePropMenu st currentC currentLC propWidgets propBoxes
       -- clique com o botão direito: cria nodos e insere edges entre nodos
@@ -908,8 +911,8 @@ adjustEdges es = editorSetGI (ngiM,newEgiM) es
 
 
 
--- operações básicas sobre o grafo no estado -----------------------------------
--- cria um novo nodo e insere no grafo
+-- create operations -----------------------------------------------------------
+-- create a new node with it's default GraphicalInfo
 createNode:: IORef EditorState -> (Double,Double) -> PangoContext -> NodeShape -> (Double,Double,Double) -> (Double,Double,Double) -> IO ()
 createNode st pos context nshape color lColor = do
   es <- readIORef st
@@ -922,7 +925,7 @@ createNode st pos context nshape color lColor = do
       newGIM = (M.insert (fromEnum nid) newNgi $ fst (editorGetGI es), snd (editorGetGI es))
   writeIORef st $ editorSetGI newGIM . editorSetGraph newGraph . editorSetSelected ([nid], []) $ es
 
--- cria e insere uma nova edge no grafo
+-- create edges between the selected nodes and a target node
 createEdges:: EditorState -> NodeId -> EdgeStyle -> (Double,Double,Double) -> EditorState
 createEdges es dstNode estyle ecolor = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected ([dstNode],[]) $ es
   where selectedNodes = fst $ editorGetSelected es

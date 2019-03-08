@@ -4,6 +4,8 @@ module Editor.GraphicalInfo
 , NodeGI (..)
 , EdgeStyle (..)
 , EdgeGI (..)
+, getNodeGI
+, getEdgeGI
 , newNodeGI
 , newEdgeGI
 , nodeGiSetPosition
@@ -18,8 +20,15 @@ module Editor.GraphicalInfo
 )where
 
 import qualified Data.Map as M
+import Data.Maybe
 
 type GraphicalInfo = (M.Map Int NodeGI, M.Map Int EdgeGI)
+
+getNodeGI :: Int -> M.Map Int NodeGI -> NodeGI
+getNodeGI nid giM = fromMaybe newNodeGI $ M.lookup nid giM
+
+getEdgeGI :: Int -> M.Map Int EdgeGI -> EdgeGI
+getEdgeGI eid giM = fromMaybe newEdgeGI $ M.lookup eid giM
 
 -- estrutura auxiliar - define a forma de um nodo
 data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
