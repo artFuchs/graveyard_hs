@@ -199,17 +199,6 @@ renderLoop edge selected node = do
   -- desenha um arco para mostrar o ponto de controle
   arc f g 2 0 (2*pi)
   fill
-  -- desenha dois arcos para mostrar
-  setSourceRGB 1 0 0
-  arc (fst p1) (snd p1) 2 0 (2*pi)
-  fill
-  arc (fst p2) (snd p2) 2 0 (2*pi)
-  fill
-  setSourceRGB 0 0 1
-  arc (fst p1') (snd p1') 2 0 (2*pi)
-  fill
-  arc (fst p2') (snd p2') 2 0 (2*pi)
-  fill
 
 
 -- Retorna o ponto de intersecção de uma linha com um retangulo

@@ -64,20 +64,28 @@ buildMaybeMenubar = do
     sva <- actionNew "SVA" "Save Project As" (Just "Just a stub") (Just stockSaveAs)
     opg <- actionNew "OPG" "Open Graph" (Just "Just a stub") Nothing
     svg <- actionNew "SVG" "Save Graph" (Just "Just a stub") Nothing
+
     edt <- actionNew "EDT" "Edit" Nothing Nothing
     udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
     rdo <- actionNew "RDO" "Redo" (Just "Just a stub") Nothing
+    cpy <- actionNew "CPY" "Copy" (Just "Just a stub") Nothing
+    pst <- actionNew "PST" "Paste" (Just "Just a stub") Nothing
+    cut <- actionNew "CUT" "Cut" (Just "Just a stub") Nothing
+    sla <- actionNew "SLA" "Select All" (Just "Just a stub") Nothing
+    sle <- actionNew "SLE" "Select Edges" (Just "Just a stub") Nothing
+    sln <- actionNew "SLN" "Select Nodes" (Just "Just a stub") Nothing
+
     hlp <- actionNew "HLP" "Help" (Just "Just a stub") Nothing
     hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
     agr <- actionGroupNew "AGR"
     mapM_ (actionGroupAddAction agr) [fma,edt,hlp]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,opg,svg,udo,rdo,hlp']
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,hlp']
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, new, opn, svn, sva, opg, svg, udo, rdo, hlp')
+    return (maybeMenubar, new, opn, svn, sva, opg, svg, udo, rdo, cpy, pst, cut, sla, sle, sln, hlp')
 
   where uiStr = "<ui>\
 \                 <menubar>\
@@ -93,6 +101,13 @@ buildMaybeMenubar = do
 \                   <menu action=\"EDT\">\
 \                     <menuitem action=\"UDO\"/>\
 \                     <menuitem action=\"RDO\"/>\
+\                     <separator/>\
+\                     <menuitem action=\"CPY\"/>\
+\                     <menuitem action=\"PST\"/>\
+\                     <menuitem action=\"CUT\"/>\
+\                     <menuitem action=\"SLA\"/>\
+\                     <menuitem action=\"SLE\"/>\
+\                     <menuitem action=\"SLN\"/>\
 \                   </menu>\
 \                   <menu action=\"HLP\">\
 \                     <menuitem action=\"HLP'\"/>\

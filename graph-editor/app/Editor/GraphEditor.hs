@@ -78,7 +78,7 @@ startGUI = do
 
   -- main window ---------------------------------------------------------------
   -- creates the menu bar
-  (maybeMenubar,new,opn,svn,sva,opg,svg,udo,rdo,hlp) <- buildMaybeMenubar
+  (maybeMenubar,new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,hlp) <- buildMaybeMenubar
   -- creates the inspector panel on the right
   (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
   let
@@ -358,21 +358,9 @@ startGUI = do
           applyRedo undoStack redoStack st
           widgetQueueDraw canvas
         -- CTRL + C/V/X : copy/paste/cut
-        (True, False, "c") -> do
-          es <- readIORef st
-          writeIORef clipboard $ copySelected es
-        (True, False, "v") -> do
-          es <- readIORef st
-          clip <- readIORef clipboard
-          stackUndo undoStack redoStack es
-          modifyIORef st (pasteClipBoard clip)
-          widgetQueueDraw canvas
-        (True, False, "x") -> do
-          es <- readIORef st
-          writeIORef clipboard $ copySelected es
-          modifyIORef st (\es -> deleteSelected es)
-          stackUndo undoStack redoStack es
-          widgetQueueDraw canvas
+        (True, False, "c") -> actionActivate cpy
+        (True, False, "v") -> actionActivate pst
+        (True, False, "x") -> actionActivate cut
         -- F2 - rename selection
         (False,False,"f2") -> widgetGrabFocus entryName
         _       -> return ()
@@ -457,6 +445,57 @@ startGUI = do
   rdo `on` actionActivated $ do
     applyRedo undoStack redoStack st
     widgetQueueDraw canvas
+
+  -- copy
+  cpy `on` actionActivated $ do
+    es <- readIORef st
+    writeIORef clipboard $ copySelected es
+
+  -- paste
+  pst `on` actionActivated $ do
+    es <- readIORef st
+    clip <- readIORef clipboard
+    stackUndo undoStack redoStack es
+    modifyIORef st (pasteClipBoard clip)
+    widgetQueueDraw canvas
+
+  -- cut
+  cut `on` actionActivated $ do
+    es <- readIORef st
+    writeIORef clipboard $ copySelected es
+    modifyIORef st (\es -> deleteSelected es)
+    stackUndo undoStack redoStack es
+    widgetQueueDraw canvas
+
+  -- select all
+  sla `on` actionActivated $ do
+    modifyIORef st (\es -> let g = editorGetGraph es
+                           in editorSetSelected (nodeIds g, edgeIds g) es)
+    widgetQueueDraw canvas
+
+  -- select edges
+  sle `on` actionActivated $ do
+    es <- readIORef st
+    let selected = editorGetSelected es
+        g = editorGetGraph es
+    case selected of
+      ([],[]) -> writeIORef st $ editorSetSelected ([], edgeIds g) es
+      ([], e) -> return ()
+      (n,e) -> writeIORef st $ editorSetSelected ([],e) es
+    widgetQueueDraw canvas
+
+  -- select nodes
+  sln `on` actionActivated $ do
+    es <- readIORef st
+    let selected = editorGetSelected es
+        g = editorGetGraph es
+    case selected of
+      ([],[]) -> writeIORef st $ editorSetSelected (nodeIds g, []) es
+      (n, []) -> return ()
+      (n,e) -> writeIORef st $ editorSetSelected (n,[]) es
+    widgetQueueDraw canvas
+
+
 
   -- help
   hlp `on` actionActivated $ do
@@ -754,9 +793,11 @@ saveProject model path = do
 -- save graph
 saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
 saveGraph (g,gi) path = do
-    let writeGraph = writeFile path $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+    let path' = if (tails path)!!(length path-3) == ".gr" then path else path ++ ".gr"
+        writeGraph = writeFile path' $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
                                            , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
                                            , gi)
+
     tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
     case tentativa of
       Left _ -> return False
@@ -787,7 +828,7 @@ loadFile window loadF = do
             Left _ -> do
               showError (Just window) "Não foi possivel ler o arquivo"
               return Nothing
-            Right content -> return $ Just (loadF content, path)
+            Right content -> return $ Just (loadF content,path)
     _             -> do
       widgetDestroy loadD
       return Nothing
