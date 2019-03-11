@@ -106,6 +106,7 @@ startGUI = do
   clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - (Graph, GraphicalInfo)
   fileName        <- newIORef (Nothing :: Maybe String) -- arquivo aberto
   currentGraph    <- newIORef [0]
+  changedProject    <- newIORef False -- se houve alguma mudança em algum grafo, essa flag deve ser atualizada para true
 
   -- init an model to display in the tree panel --------------------------------
   store <- listStoreNew [("new", emptyES, [], [])]
@@ -197,11 +198,15 @@ startGUI = do
             c <- readIORef currentC
             lc <- readIORef currentLC
             createNode st (x',y') context shape c lc
+            writeIORef changedProject True
+            indicateChanges window True
           -- one node selected: create edges targeting this node
           (False, Just nid) -> do
             estyle <- readIORef currentStyle
             color <- readIORef currentLC
             modifyIORef st (\es -> createEdges es nid estyle color)
+            writeIORef changedProject True
+            indicateChanges window True
           -- ctrl pressed: middle mouse button emulation
           (True,_) -> return ()
         widgetQueueDraw canvas
@@ -228,11 +233,13 @@ startGUI = do
         modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x'-a,y'-b))
         sq <- readIORef squareSelection
         widgetQueueDraw canvas
-      -- if left button is pressed with some elements selected, then move then
+      -- if left button is pressed with some elements selected, then move them
       (True, False, n, e) -> liftIO $ do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
+        writeIORef changedProject True
+        indicateChanges window True
         mv <- readIORef movingGI
         if not mv
           then do
@@ -280,7 +287,7 @@ startGUI = do
       widgetQueueDraw canvas
     return True
 
-  -- mouse whell scroll on canvas
+  -- mouse wheel scroll on canvas
   canvas `on` scrollEvent $ do
     d <- eventScrollDirection
     ms <- eventModifierAll
@@ -310,6 +317,8 @@ startGUI = do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
           stackUndo undoStack redoStack es
+          writeIORef changedProject True
+          indicateChanges window True
           widgetQueueDraw canvas
         -- CTRL + <+>/<->/<=> : zoom controls
         (True,_,"plus") -> do
@@ -339,6 +348,7 @@ startGUI = do
           modifyIORef st (\es -> (empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
           listStoreClear store
           listStoreAppend store ("new",emptyES,[], [])
+          writeIORef changedProject False
           writeIORef fileName Nothing
           writeIORef undoStack []
           writeIORef redoStack []
@@ -409,6 +419,9 @@ startGUI = do
     (name, _, _, _)<- listStoreGetValue store path
     listStoreSetValue store path (name, currentES, undo, redo)
     saveFile store saveProject fileName window True
+    writeIORef changedProject False
+    indicateChanges window False
+
 
   -- save project as
   sva `on` actionActivated $ do
@@ -416,9 +429,11 @@ startGUI = do
     undo <- readIORef undoStack
     redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _, _, _)<- listStoreGetValue store path
+    (name, _, _, _) <- listStoreGetValue store path
     listStoreSetValue store path (name, currentES, undo, redo)
     saveFileAs store saveProject fileName window True
+    writeIORef changedProject False
+    indicateChanges window False
 
   -- open graph
   opg `on`actionActivated $ do
@@ -426,6 +441,8 @@ startGUI = do
     case mg of
       Just ((g,gi),_) -> do
         writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
+        writeIORef changedProject True
+        indicateChanges window True
         widgetQueueDraw canvas
       _      -> return ()
 
@@ -439,11 +456,15 @@ startGUI = do
   -- undo
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
+    writeIORef changedProject True
+    indicateChanges window True
     widgetQueueDraw canvas
 
   -- redo
   rdo `on` actionActivated $ do
     applyRedo undoStack redoStack st
+    writeIORef changedProject True
+    indicateChanges window True
     widgetQueueDraw canvas
 
   -- copy
@@ -456,6 +477,8 @@ startGUI = do
     es <- readIORef st
     clip <- readIORef clipboard
     stackUndo undoStack redoStack es
+    writeIORef changedProject True
+    indicateChanges window True
     modifyIORef st (pasteClipBoard clip)
     widgetQueueDraw canvas
 
@@ -465,6 +488,8 @@ startGUI = do
     writeIORef clipboard $ copySelected es
     modifyIORef st (\es -> deleteSelected es)
     stackUndo undoStack redoStack es
+    writeIORef changedProject True
+    indicateChanges window True
     widgetQueueDraw canvas
 
   -- select all
@@ -495,8 +520,6 @@ startGUI = do
       (n,e) -> writeIORef st $ editorSetSelected (n,[]) es
     widgetQueueDraw canvas
 
-
-
   -- help
   hlp `on` actionActivated $ do
     widgetShowAll helpWindow
@@ -512,6 +535,8 @@ startGUI = do
         "Return" -> do
           es <- readIORef st
           stackUndo undoStack redoStack es
+          writeIORef changedProject True
+          indicateChanges window True
           name <- entryGetText entryName :: IO String
           context <- widgetGetPangoContext canvas
           renameSelected st name context
@@ -525,67 +550,131 @@ startGUI = do
   onColorSet colorBtn $ do
     Color r g b <- colorButtonGetColor colorBtn
     es <- readIORef st
-    let col = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
-        graph = editorGetGraph es
-        (ns,edgs) = editorGetSelected es
-        (ngiM, egiM) = editorGetGI es
-        changeColor = (\giMap (NodeId nid) -> let gi = nodeGiSetColor col $ getNodeGI nid ngiM
-                                              in M.insert nid gi giMap)
-        newngiM = foldl changeColor ngiM ns
-    modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
-    writeIORef currentC col
-    widgetQueueDraw canvas
+    let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
+        (nds,edgs) = editorGetSelected es
+    writeIORef currentC color
+    if null nds
+      then return ()
+      else do
+        let (ngiM, egiM) = editorGetGI es
+            newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetColor color ngi else ngi) ngiM
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
+        widgetQueueDraw canvas
 
   onColorSet lineColorBtn $ do
     Color r g b <- colorButtonGetColor lineColorBtn
     es <- readIORef st
     let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
-        graph = editorGetGraph es
-        (ns,edgs) = editorGetSelected es
-        (ngiM, egiM) = editorGetGI es
-        changeNLC = (\giMap (NodeId nid) -> let gi = nodeGiSetLineColor color $ getNodeGI nid ngiM
-                                            in M.insert nid gi giMap)
-        newngiM = foldl changeNLC ngiM ns
-        changeELC = (\giMap (EdgeId eid) -> let gi = edgeGiSetColor color $ getEdgeGI eid egiM
-                                            in M.insert eid gi giMap)
-        newegiM = foldl changeELC egiM edgs
-    modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
+        (nds,edgs) = editorGetSelected es
     writeIORef currentLC color
-    widgetQueueDraw canvas
+    if null nds && null edgs
+      then return ()
+      else do
+        let (ngiM, egiM) = editorGetGI es
+            newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetLineColor color ngi else ngi) ngiM
+            newegiM = M.mapWithKey (\k egi -> if EdgeId k `elem` edgs then edgeGiSetColor color egi else egi) egiM
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
+        widgetQueueDraw canvas
 
   -- toogle the radio buttons for node shapes
   -- change the shape of the selected nodes and set the current shape for new nodes
   radioCircle `on` toggled $ do
-    modifyIORef st (\es -> changeNodeShape es NCircle)
     writeIORef currentShape NCircle
-    widgetQueueDraw canvas
+    es <- readIORef st
+    active <- toggleButtonGetActive radioCircle
+    let nds = fst $ editorGetSelected es
+        giM = fst $ editorGetGI es
+    if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NCircle) giM)
+      then return ()
+      else do
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> changeNodeShape es NCircle)
+        widgetQueueDraw canvas
 
   radioRect `on` toggled $ do
-    modifyIORef st (\es -> changeNodeShape es NRect)
     writeIORef currentShape NRect
-    widgetQueueDraw canvas
+    es <- readIORef st
+    active <- toggleButtonGetActive radioRect
+    let nds = fst $ editorGetSelected es
+        giM = fst $ editorGetGI es
+    if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NRect) giM)
+      then return ()
+      else do
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> changeNodeShape es NRect)
+        widgetQueueDraw canvas
 
   radioQuad `on` toggled $ do
-    modifyIORef st (\es -> changeNodeShape es NQuad)
     writeIORef currentShape NQuad
-    widgetQueueDraw canvas
+    es <- readIORef st
+    active <- toggleButtonGetActive radioQuad
+    let nds = fst $ editorGetSelected es
+        giM = fst $ editorGetGI es
+    if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NQuad) giM)
+      then return ()
+      else do
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> changeNodeShape es NQuad)
+        widgetQueueDraw canvas
 
   -- toogle the radio buttons for edge styles
   -- change the style of the selected edges and set the current style for new edges
   radioNormal `on` toggled $ do
-    modifyIORef st (\es -> changeEdgeStyle es ENormal)
     writeIORef currentStyle ENormal
-    widgetQueueDraw canvas
+    es <- readIORef st
+    active <- toggleButtonGetActive radioNormal
+    let edgs = snd $ editorGetSelected es
+        giM = snd $ editorGetGI es
+    if not active || M.null (M.filterWithKey (\k gi -> EdgeId k `elem` edgs && style gi /= ENormal) giM)
+      then return ()
+      else do
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> changeEdgeStyle es ENormal)
+        widgetQueueDraw canvas
 
   radioPointed `on` toggled $ do
-    modifyIORef st (\es -> changeEdgeStyle es EPointed)
     writeIORef currentStyle EPointed
-    widgetQueueDraw canvas
+    es <- readIORef st
+    active <- toggleButtonGetActive radioPointed
+    let edgs = snd $ editorGetSelected es
+        giM = snd $ editorGetGI es
+    if not active || M.null (M.filterWithKey (\k gi -> EdgeId k `elem` edgs && style gi /= EPointed) giM)
+      then return ()
+      else do
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> changeEdgeStyle es EPointed)
+        widgetQueueDraw canvas
 
   radioSlashed `on` toggled $ do
-    modifyIORef st (\es -> changeEdgeStyle es ESlashed)
     writeIORef currentStyle ESlashed
-    widgetQueueDraw canvas
+    es <- readIORef st
+    active <- toggleButtonGetActive radioSlashed
+    let edgs = snd $ editorGetSelected es
+        giM = snd $ editorGetGI es
+    if not active || M.null (M.filterWithKey (\k gi -> EdgeId k `elem` edgs && style gi /= ESlashed) giM)
+      then return ()
+      else do
+        stackUndo undoStack redoStack es
+        writeIORef changedProject True
+        indicateChanges window True
+        modifyIORef st (\es -> changeEdgeStyle es ESlashed)
+        widgetQueueDraw canvas
 
   -- event bindings for the graphs' tree ---------------------------------------
   -- changed the selected graph
@@ -1152,7 +1241,19 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
     ngiM3 = M.union ngiM1 ngiM2'
     egiM3 = M.union egiM1 egiM2'
 
+-- change window name to indicate if the project was modified
+indicateChanges :: Window -> Bool -> IO ()
+indicateChanges window True = do
+  title <- get window windowTitle
+  if title!!0 == '*'
+    then return ()
+    else set window [windowTitle := '*':title]
 
+indicateChanges window False = do
+  i:title <- get window windowTitle
+  if i == '*'
+    then set window [windowTitle := title]
+    else return ()
 
 
 
