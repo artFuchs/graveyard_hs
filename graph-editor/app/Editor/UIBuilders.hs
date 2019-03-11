@@ -7,6 +7,7 @@ module Editor.UIBuilders
 , buildHelpWindow
 , showError
 , createSaveDialog
+, createCloseDialog
 ) where
 
 import Graphics.UI.Gtk
@@ -258,3 +259,14 @@ createSaveDialog window = do
   fileChooserSetDoOverwriteConfirmation saveD True
   widgetShow saveD
   return saveD
+
+createCloseDialog :: Maybe Window -> String -> IO ResponseId
+createCloseDialog window msg = do
+  dlgC <- messageDialogNew window  [DialogDestroyWithParent] MessageWarning ButtonsNone msg
+  dialogAddButton dlgC "Salvar" ResponseYes
+  dialogAddButton dlgC "Não Salvar" ResponseNo
+  dialogAddButton dlgC "Cancelar" ResponseCancel
+  widgetShow dlgC
+  response <- dialogRun dlgC
+  widgetDestroy dlgC
+  return response

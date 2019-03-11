@@ -740,8 +740,19 @@ startGUI = do
   -- event bindings for the main window ----------------------------------------
   -- when click in the close button, the application must close
   window `on` deleteEvent $ do
-    liftIO mainQuit
-    return False
+    changes <- liftIO $ readIORef changedProject
+    response <- liftIO $ if changes
+      then createCloseDialog (Just window) "O projeto foi modificado, deseja salvar?"
+      else return ResponseNo
+    case response of
+      ResponseNo -> do
+        liftIO mainQuit
+        return False
+      ResponseYes -> liftIO $ do
+        actionActivate svn
+        mainQuit
+        return False
+      ResponseCancel -> return True
 
   -- run the preogram ----------------------------------------------------------
   mainGUI
