@@ -418,9 +418,12 @@ startGUI = do
     [path] <- readIORef currentGraph
     (name, _, _, _)<- listStoreGetValue store path
     listStoreSetValue store path (name, currentES, undo, redo)
-    saveFile store saveProject fileName window True
-    writeIORef changedProject False
-    indicateChanges window False
+    saved <- saveFile store saveProject fileName window True
+    if saved
+      then do
+        writeIORef changedProject False
+        indicateChanges window False
+      else return ()
 
 
   -- save project as
@@ -431,9 +434,12 @@ startGUI = do
     [path] <- readIORef currentGraph
     (name, _, _, _) <- listStoreGetValue store path
     listStoreSetValue store path (name, currentES, undo, redo)
-    saveFileAs store saveProject fileName window True
-    writeIORef changedProject False
-    indicateChanges window False
+    saved <- saveFileAs store saveProject fileName window True
+    if saved
+      then do
+        writeIORef changedProject False
+        indicateChanges window False
+      else return ()
 
   -- open graph
   opg `on`actionActivated $ do
@@ -452,6 +458,7 @@ startGUI = do
     let g  = editorGetGraph es
         gi = editorGetGI es
     saveFileAs (g,gi) saveGraph fileName window False
+    return ()
 
   -- undo
   udo `on` actionActivated $ do
@@ -749,9 +756,16 @@ startGUI = do
         liftIO mainQuit
         return False
       ResponseYes -> liftIO $ do
-        actionActivate svn
-        mainQuit
-        return False
+        currentES <- readIORef st
+        [path] <- readIORef currentGraph
+        (name, _, _, _)<- listStoreGetValue store path
+        listStoreSetValue store path (name, currentES, [], [])
+        saved <- saveFile store saveProject fileName window True
+        if saved
+          then do
+            mainQuit
+            return False
+          else return True
       ResponseCancel -> return True
 
   -- run the preogram ----------------------------------------------------------
@@ -833,19 +847,21 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set frameStyle [widgetVisible := True]
 
 -- general save function -------------------------------------------------------
-saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO ()
+saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO Bool
 saveFile x saveF fileName window changeFN = do
   fn <- readIORef fileName
   case fn of
     Just path -> do
       tentativa <- saveF x path
       case tentativa of
-        True -> return ()
-        False -> showError (Just window) "Não foi possivel salvar o arquivo"
+        True -> return True
+        False -> do
+          showError (Just window) $ "Não foi possível escrever no arquivo " ++ path
+          return False
     Nothing -> saveFileAs x saveF fileName window changeFN
 
 
-saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO ()
+saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO Bool
 saveFileAs x saveF fileName window changeFN = do
   saveD <- createSaveDialog window
   response <- dialogRun saveD
@@ -864,14 +880,16 @@ saveFileAs x saveF fileName window changeFN = do
               return $ Just path
             False -> do
               widgetDestroy saveD
-              showError (Just window) "Não foi possível escrever no arquivo"
+              showError (Just window) $ "Não foi possível escrever no arquivo " ++ path
               return Nothing
     _  -> do
       widgetDestroy saveD
       return Nothing
   case (changeFN, fn) of
-    (True, Just path) -> writeIORef fileName (Just path)
-    _ -> return ()
+    (True, Just path) -> do
+      writeIORef fileName (Just path)
+      return True
+    _ -> return False
 
 -- auxiliar save functions -----------------------------------------------------
 -- save project
