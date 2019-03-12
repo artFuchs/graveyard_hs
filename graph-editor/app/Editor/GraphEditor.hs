@@ -93,20 +93,20 @@ startGUI = do
   widgetShowAll window
 
   -- init the editor variables  ------------------------------------------------
-  st              <- newIORef emptyES -- estado do editor: todas as informações necessárias para desenhar o grafo
-  oldPoint        <- newIORef (0.0,0.0) -- ultimo ponto em que o botão do mouse foi pressionado
-  squareSelection <- newIORef Nothing -- estado da caixa de seleção - Maybe (x,y,w,h)
-  undoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)]) -- pilha de undo
-  redoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)]) -- pilha de redo
-  movingGI        <- newIORef False -- se o usuario começou a mover algum objeto
-  currentShape    <- newIORef NCircle
-  currentStyle    <- newIORef ENormal
-  currentC        <- newIORef (1,1,1)
-  currentLC       <- newIORef (0,0,0)
+  st              <- newIORef emptyES -- editor state: all the necessary info to draw the graph
+  oldPoint        <- newIORef (0.0,0.0) -- last point where a mouse button was pressed
+  squareSelection <- newIORef Nothing -- selection box : Maybe (x,y,w,h)
+  undoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)])
+  redoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)])
+  movingGI        <- newIORef False -- if the user started moving some object - necessary to add a position to the undoStack
+  currentShape    <- newIORef NCircle -- the shape that all new nodes must have
+  currentStyle    <- newIORef ENormal -- the style that all new edges must have
+  currentC        <- newIORef (1,1,1) -- the color to init new nodes
+  currentLC       <- newIORef (0,0,0) -- the color to init new edges and the line and text of new nodes
   clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - (Graph, GraphicalInfo)
-  fileName        <- newIORef (Nothing :: Maybe String) -- arquivo aberto
-  currentGraph    <- newIORef [0]
-  changedProject    <- newIORef False -- se houve alguma mudança em algum grafo, essa flag deve ser atualizada para true
+  fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
+  currentGraph    <- newIORef [0] -- current graph being edited
+  changedProject    <- newIORef False -- set this flag as True when the graph is changed somehow
 
   -- init an model to display in the tree panel --------------------------------
   store <- listStoreNew [("new", emptyES, [], [])]
