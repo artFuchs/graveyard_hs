@@ -73,6 +73,17 @@ main = do
     liftIO mainQuit
     return False
 
+  renderer `on` editingStarted $ \widget path -> do
+    let entry = castToEntry widget
+    entry `on` entryPopulatePopup $ \menu -> do
+      items <- containerGetChildren menu
+      containerRemove menu (items!!(length items -1))
+      menuItem <- menuItemNewWithLabel "Do nothing"
+      menuShellAppend menu menuItem
+      widgetShowAll menu
+      return ()
+    return ()
+
   renderer `on` edited $ \path newName -> do
     treeStoreChange store path (\(_,text) -> (newName,text))
     return ()
