@@ -744,6 +744,16 @@ startGUI = do
     (oldName, val, u, r) <- listStoreGetValue store path
     listStoreSetValue store path (newName, val, u, r)
 
+  -- remove menuItem "insert Emoji" cause it causes the program to crash
+  treeRenderer `on` editingStarted $ \widget path -> do
+    let entry = castToEntry widget
+    entry `on` entryPopulatePopup $ \menu -> do
+      items <- containerGetChildren menu
+      containerRemove menu (items!!(length items -1))
+      widgetShowAll menu
+    return ()
+
+
   -- event bindings for the main window ----------------------------------------
   -- when click in the close button, the application must close
   window `on` deleteEvent $ do
@@ -1354,3 +1364,4 @@ indicateChanges window False = do
 -- *Editar multiplos grafos no mesmo projeto
 --   *Criar uma arvore de grafos
 --   *Consertar Undo/Redo
+-- *Removida a opção "Insert Emoji" do menu da treeView, porque a ativação estava fazendo o programa encerrar.
