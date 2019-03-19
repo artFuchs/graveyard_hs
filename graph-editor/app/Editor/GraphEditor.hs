@@ -118,8 +118,6 @@ startGUI = do
       treeViewSetModel treeview (Just store)
       cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_) -> [cellText := name]
 
-
-
   -- EVENT BINDINGS ------------------------------------------------------------
   -- event bindings for the canvas ---------------------------------------------
   -- drawing event
@@ -1073,17 +1071,17 @@ createNode st pos context nshape color lColor = do
 
 -- create edges between the selected nodes and a target node
 createEdges:: EditorState -> NodeId -> EdgeStyle -> (Double,Double,Double) -> EditorState
-createEdges es dstNode estyle ecolor = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected ([dstNode],[]) $ es
+createEdges es dstNode estyle ecolor = editorSetGraph newGraph . editorSetGI (ngiM, newegiM) . editorSetSelected ([],createdEdges) $ es
   where selectedNodes = fst $ editorGetSelected es
         graph = editorGetGraph es
         (ngiM,egiM) = editorGetGI es
-        (newGraph, newegiM) = foldl create (graph, egiM) selectedNodes
-        create = (\(g,giM) nid -> let
+        (newGraph, newegiM, createdEdges) = foldl create (graph, egiM, []) selectedNodes
+        create = (\(g,giM,eids) nid -> let
                                     eid = head $ newEdges g
                                     ng = insertEdgeWithPayload eid nid dstNode "" g
                                     (newPos,center) = if (dstNode == nid) then (newLoopPos nid (g,(ngiM,egiM)),False) else newEdgePos nid dstNode (g,(ngiM,egiM))
                                     negi = EdgeGI {cPosition = newPos, color = ecolor, centered = center, style = estyle}
-                                  in (ng, M.insert (fromEnum eid) negi giM))
+                                  in (ng, M.insert (fromEnum eid) negi giM, eid:eids))
 
 deleteSelected:: EditorState -> EditorState
 deleteSelected es = editorSetSelected ([],[]) . editorSetGI (newngiM, newegiM) . editorSetGraph newGraph $ es
