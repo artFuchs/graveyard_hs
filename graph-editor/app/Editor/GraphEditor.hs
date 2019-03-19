@@ -9,6 +9,7 @@ import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Data.List
+import Data.Maybe
 import qualified Data.Text as T
 import qualified Control.Exception as E
 import qualified Data.Map as M
@@ -181,7 +182,6 @@ startGUI = do
             let jointSN = if null n then oldSN else delete (n!!0) oldSN
                 jointSE = if null e then oldSE else delete (e!!0) oldSE
             modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-          _ -> return ()
         widgetQueueDraw canvas
         updatePropMenu st currentC currentLC propWidgets propBoxes
       -- right button click: create nodes and insert edges
@@ -445,8 +445,13 @@ startGUI = do
   opg `on`actionActivated $ do
     mg <- loadFile window loadGraph
     case mg of
-      Just ((g,gi),_) -> do
-        writeIORef st (g,gi,([],[]),1.0,(0.0,0.0))
+      Just ((g,gi),path) -> do
+        let splitAtToken str tkn = splitAt (1 + (fromMaybe (-1) $ findIndex (==tkn) str)) str
+            getLastPart str = let splited = (splitAtToken str '/') in if fst splited == "" then str else getLastPart (snd splited)
+            getName str = if (tails str)!!(length str - 3) == ".gr" then take (length str - 3) str else str
+        listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[])
+        size <- listStoreGetSize store
+        treeViewSetCursor treeview [size-1] Nothing
         writeIORef changedProject True
         indicateChanges window True
         widgetQueueDraw canvas
@@ -1338,13 +1343,10 @@ indicateChanges window False = do
 
 
 -- Tarefas ---------------------------------------------------------------------
--- *Espaçar edges quando houver mais de uma aresta entre dois nodos e ela estiver centralizada
 -- *TypeGraph
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
-
-
 
 -- Feito -----------------------------------------------------------------------
 -- *Melhorar menu de Propriedades
@@ -1364,4 +1366,5 @@ indicateChanges window False = do
 -- *Editar multiplos grafos no mesmo projeto
 --   *Criar uma arvore de grafos
 --   *Consertar Undo/Redo
+-- *Espaçar edges quando houver mais de uma aresta entre dois nodos e ela estiver centralizada
 -- *Removida a opção "Insert Emoji" do menu da treeView, porque a ativação estava fazendo o programa encerrar.
