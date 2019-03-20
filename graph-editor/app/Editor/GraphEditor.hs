@@ -2,10 +2,10 @@ module Editor.GraphEditor
 ( startGUI
 )where
 
+import Graphics.UI.Gtk hiding (rectangle)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
-import Graphics.UI.Gtk hiding (rectangle)
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Data.List
@@ -13,13 +13,16 @@ import Data.Maybe
 import qualified Data.Text as T
 import qualified Control.Exception as E
 import qualified Data.Map as M
-import Data.Graphs hiding (null)
+import Data.Graphs hiding (null, empty)
 import qualified Data.Graphs as G
 import Editor.GraphicalInfo
 import Editor.Render
 import Editor.Helper
 import Editor.UIBuilders
 
+--------------------------------------------------------------------------------
+-- MODULE STRUCTURES -----------------------------------------------------------
+--------------------------------------------------------------------------------
 -- | Graph Editor State
 -- A tuple containing all the informations needed to draw the graph in the canvas
 -- (graph, GraphicalInfo, elected nodes and edges, zoom, pan)
@@ -27,7 +30,7 @@ type EditorState = (Graph String String, GraphicalInfo, ([NodeId],[EdgeId]) , Do
 
 -- constructor
 emptyES :: EditorState
-emptyES = (empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0))
+emptyES = (G.empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0))
 
 -- getters and setters
 editorGetGraph :: EditorState -> Graph String String
@@ -60,9 +63,13 @@ editorGetPan (_,_,_,_,p) = p
 editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
 
-
+-- |Diagraph
+-- A pair containing a graph and it's graphical information
 type DiaGraph = (Graph String String ,GraphicalInfo)
 
+-- |GraphStore
+-- A tuple representing what is stored in each node of the tree in the treeview
+-- It contains the informations: name, editor state, undo stack, redo stack and color to draw the cell
 type GraphStore = (String, EditorState, [DiaGraph], [DiaGraph], String)
 graphStoreName (n,es,u,r,col) = n
 graphStoreEditor (n,es,u,r,col) = es
@@ -111,7 +118,7 @@ startGUI = do
   currentStyle    <- newIORef ENormal -- the style that all new edges must have
   currentC        <- newIORef (1,1,1) -- the color to init new nodes
   currentLC       <- newIORef (0,0,0) -- the color to init new edges and the line and text of new nodes
-  clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - DiaGraph
+  clipboard       <- newIORef (G.empty, (M.empty, M.empty)) -- clipboard - DiaGraph
   fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
   currentGraph    <- newIORef [0] -- current graph being edited
   changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
@@ -348,7 +355,7 @@ startGUI = do
 
         -- CTRL + N : create a new file
         (True, False, "n") -> do
-          modifyIORef st (\es -> (empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
+          modifyIORef st (\es -> (G.empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
           listStoreClear store
           listStoreAppend store ("new",emptyES,[], [], "white")
           writeIORef changedProject False
@@ -420,8 +427,7 @@ startGUI = do
                       writeIORef changedGraph (take size (repeat False))
                       list <- listStoreToList store
                       writeIORef lastSavedState (map (\gs -> let es = graphStoreEditor gs in (editorGetGraph es, editorGetGI es)) list)
-                      listStoreClear store
-                      sequence $ map (listStoreAppend store) $ map (\(n,e,u,r,_) -> (n,e,u,r,"white")) list
+                      forM [0..(size-1)] $ \i -> let (n,e,u,r,_) = list!!i in listStoreSetValue store i (n,e,u,r,"white")
                       indicateProjChanged window False
                       updateSavedState lastSavedState store
 
@@ -486,7 +492,7 @@ startGUI = do
     [path] <- readIORef currentGraph
     es <- readIORef st
     let (g,gi) = (editorGetGraph es, editorGetGI es)
-        x = if length sst > path then sst!!path else (empty,(M.empty,M.empty))
+        x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
     setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     widgetQueueDraw canvas
 
@@ -498,7 +504,7 @@ startGUI = do
     [path] <- readIORef currentGraph
     es <- readIORef st
     let (g,gi) = (editorGetGraph es, editorGetGI es)
-        x = if length sst > path then sst!!path else (empty,(M.empty,M.empty))
+        x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
     setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     widgetQueueDraw canvas
 
@@ -731,7 +737,7 @@ startGUI = do
   -- pressed the 'new' button
   btnNew `on` buttonActivated $ do
     listStoreAppend store ("new",emptyES,[],[],"green")
-    modifyIORef lastSavedState (\sst -> sst ++ [(empty, (M.empty, M.empty))])
+    modifyIORef lastSavedState (\sst -> sst ++ [(G.empty, (M.empty, M.empty))])
     return ()
 
   -- pressed the 'remove' button
