@@ -61,7 +61,7 @@ editorSetPan :: (Double,Double) -> EditorState -> EditorState
 editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
 
 
-
+type DiaGraph = (Graph String String ,GraphicalInfo)
 --------------------------------------------------------------------------------
 -- MODULE FUNCTIONS ------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -104,10 +104,12 @@ startGUI = do
   currentStyle    <- newIORef ENormal -- the style that all new edges must have
   currentC        <- newIORef (1,1,1) -- the color to init new nodes
   currentLC       <- newIORef (0,0,0) -- the color to init new edges and the line and text of new nodes
-  clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - (Graph, GraphicalInfo)
+  clipboard       <- newIORef (empty, (M.empty, M.empty)) -- clipboard - DiaGraph
   fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
   currentGraph    <- newIORef [0] -- current graph being edited
-  changedProject    <- newIORef False -- set this flag as True when the graph is changed somehow
+  changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
+  changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the path specified by 'currentGraph' to True
+  lastSavedState  <- newIORef ([(empty, (M.empty, M.empty))] :: [DiaGraph])
 
   -- init an model to display in the tree panel --------------------------------
   store <- listStoreNew [("new", emptyES, [], [])]
@@ -196,15 +198,13 @@ startGUI = do
             c <- readIORef currentC
             lc <- readIORef currentLC
             createNode st (x',y') context shape c lc
-            writeIORef changedProject True
-            indicateChanges window True
+            setChangeFlags window changedProject changedGraph currentGraph True
           -- one node selected: create edges targeting this node
           (False, Just nid) -> do
             estyle <- readIORef currentStyle
             color <- readIORef currentLC
             modifyIORef st (\es -> createEdges es nid estyle color)
-            writeIORef changedProject True
-            indicateChanges window True
+            setChangeFlags window changedProject changedGraph currentGraph True
           -- ctrl pressed: middle mouse button emulation
           (True,_) -> return ()
         widgetQueueDraw canvas
@@ -236,8 +236,7 @@ startGUI = do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         mv <- readIORef movingGI
         if not mv
           then do
@@ -315,8 +314,7 @@ startGUI = do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
           stackUndo undoStack redoStack es
-          writeIORef changedProject True
-          indicateChanges window True
+          setChangeFlags window changedProject changedGraph currentGraph True
           widgetQueueDraw canvas
         -- CTRL + <+>/<->/<=> : zoom controls
         (True,_,"plus") -> do
@@ -359,12 +357,8 @@ startGUI = do
         -- CTRL + O : open file
         (True, False, "o") -> actionActivate opn
         -- CTRL + Z/R : undo/redo
-        (True, False, "z") -> do
-          applyUndo undoStack redoStack st
-          widgetQueueDraw canvas
-        (True, False, "r") -> do
-          applyRedo undoStack redoStack st
-          widgetQueueDraw canvas
+        (True, False, "z") -> actionActivate udo
+        (True, False, "r") -> actionActivate rdo
         -- CTRL + C/V/X : copy/paste/cut
         (True, False, "c") -> actionActivate cpy
         (True, False, "v") -> actionActivate pst
@@ -419,8 +413,11 @@ startGUI = do
     saved <- saveFile store saveProject fileName window True
     if saved
       then do
+        size <- listStoreGetSize store
         writeIORef changedProject False
+        writeIORef changedGraph (take size (repeat False))
         indicateChanges window False
+        updateSavedState lastSavedState store
       else return ()
 
 
@@ -435,8 +432,11 @@ startGUI = do
     saved <- saveFileAs store saveProject fileName window True
     if saved
       then do
+        size <- listStoreGetSize store
         writeIORef changedProject False
+        writeIORef changedGraph (take size (repeat False))
         indicateChanges window False
+        updateSavedState lastSavedState store
       else return ()
 
   -- open graph
@@ -450,6 +450,7 @@ startGUI = do
         listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[])
         size <- listStoreGetSize store
         treeViewSetCursor treeview [size-1] Nothing
+        modifyIORef changedGraph (\xs -> xs ++ [True])
         writeIORef changedProject True
         indicateChanges window True
         widgetQueueDraw canvas
@@ -466,15 +467,25 @@ startGUI = do
   -- undo
   udo `on` actionActivated $ do
     applyUndo undoStack redoStack st
-    writeIORef changedProject True
-    indicateChanges window True
+    -- indicate changes
+    sst <- readIORef lastSavedState
+    [path] <- readIORef currentGraph
+    es <- readIORef st
+    let (g,gi) = (editorGetGraph es, editorGetGI es)
+        x = if length sst > path then sst!!path else (empty,(M.empty,M.empty))
+    setChangeFlags window changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     widgetQueueDraw canvas
 
   -- redo
   rdo `on` actionActivated $ do
     applyRedo undoStack redoStack st
-    writeIORef changedProject True
-    indicateChanges window True
+    -- indicate changes
+    sst <- readIORef lastSavedState
+    [path] <- readIORef currentGraph
+    es <- readIORef st
+    let (g,gi) = (editorGetGraph es, editorGetGI es)
+        x = if length sst > path then sst!!path else (empty,(M.empty,M.empty))
+    setChangeFlags window changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     widgetQueueDraw canvas
 
   -- copy
@@ -487,8 +498,7 @@ startGUI = do
     es <- readIORef st
     clip <- readIORef clipboard
     stackUndo undoStack redoStack es
-    writeIORef changedProject True
-    indicateChanges window True
+    setChangeFlags window changedProject changedGraph currentGraph True
     modifyIORef st (pasteClipBoard clip)
     widgetQueueDraw canvas
 
@@ -498,8 +508,7 @@ startGUI = do
     writeIORef clipboard $ copySelected es
     modifyIORef st (\es -> deleteSelected es)
     stackUndo undoStack redoStack es
-    writeIORef changedProject True
-    indicateChanges window True
+    setChangeFlags window changedProject changedGraph currentGraph True
     widgetQueueDraw canvas
 
   -- select all
@@ -545,8 +554,7 @@ startGUI = do
         "Return" -> do
           es <- readIORef st
           stackUndo undoStack redoStack es
-          writeIORef changedProject True
-          indicateChanges window True
+          setChangeFlags window changedProject changedGraph currentGraph True
           name <- entryGetText entryName :: IO String
           context <- widgetGetPangoContext canvas
           renameSelected st name context
@@ -569,8 +577,7 @@ startGUI = do
         let (ngiM, egiM) = editorGetGI es
             newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetColor color ngi else ngi) ngiM
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
         widgetQueueDraw canvas
 
@@ -587,8 +594,7 @@ startGUI = do
             newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetLineColor color ngi else ngi) ngiM
             newegiM = M.mapWithKey (\k egi -> if EdgeId k `elem` edgs then edgeGiSetColor color egi else egi) egiM
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
         widgetQueueDraw canvas
 
@@ -604,8 +610,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NCircle)
         widgetQueueDraw canvas
 
@@ -619,8 +624,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NRect)
         widgetQueueDraw canvas
 
@@ -634,8 +638,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NQuad)
         widgetQueueDraw canvas
 
@@ -651,8 +654,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ENormal)
         widgetQueueDraw canvas
 
@@ -666,8 +668,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es EPointed)
         widgetQueueDraw canvas
 
@@ -681,8 +682,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        writeIORef changedProject True
-        indicateChanges window True
+        setChangeFlags window changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ESlashed)
         widgetQueueDraw canvas
 
@@ -717,6 +717,8 @@ startGUI = do
   -- pressed the 'new' button
   btnNew `on` buttonActivated $ do
     listStoreAppend store ("new",emptyES,[],[])
+    modifyIORef lastSavedState (\sst -> sst ++ [(empty, (M.empty, M.empty))])
+    setChangeFlags window changedProject changedGraph currentGraph True
     return ()
 
   -- pressed the 'remove' button
@@ -906,7 +908,7 @@ saveFileAs x saveF fileName window changeFN = do
 
 -- auxiliar save functions -----------------------------------------------------
 -- save project
-saveProject :: ListStore (String, EditorState, [(Graph String String ,GraphicalInfo)], [(Graph String String ,GraphicalInfo)]) -> String -> IO Bool
+saveProject :: ListStore (String, EditorState, [DiaGraph], [DiaGraph]) -> String -> IO Bool
 saveProject model path = do
   editorList <- listStoreToList model
   let getWhatMatters = (\(name, es, _, _) -> (name, editorGetGraph es, editorGetGI es))
@@ -1280,7 +1282,7 @@ applyRedo undoStack redoStack st = do
 
 
 -- Copy / Paste / Cut ----------------------------------------------------------
-copySelected :: EditorState -> (Graph String String, GraphicalInfo)
+copySelected :: EditorState -> DiaGraph
 copySelected  es = (cg,(ngiM',egiM'))
   where
     (nids,eids) = editorGetSelected es
@@ -1292,7 +1294,7 @@ copySelected  es = (cg,(ngiM',egiM'))
     ngiM' = M.filterWithKey (\k _ -> NodeId k `elem` nids) ngiM
     egiM' = M.filterWithKey (\k _ -> EdgeId k `elem` eids) egiM
 
-pasteClipBoard :: (Graph String String, GraphicalInfo) -> EditorState -> EditorState
+pasteClipBoard :: DiaGraph -> EditorState -> EditorState
 pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . editorSetGraph newGraph . editorSetSelected ([], [])$ es
   where
     graph = editorGetGraph es
@@ -1304,8 +1306,8 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
     cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
     (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
 
--- union between two (Graph, GRaphicalInfo) tuples
-diagrUnion :: (Graph String String, GraphicalInfo) -> (Graph String String, GraphicalInfo) -> (Graph String String, GraphicalInfo)
+-- union between two DiaGraphs
+diagrUnion :: DiaGraph -> DiaGraph -> DiaGraph
 diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
   where
     ns2 = nodes g2
@@ -1338,13 +1340,45 @@ indicateChanges window False = do
     then set window [windowTitle := title]
     else return ()
 
+setChangeFlags :: Window -> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
+setChangeFlags window changedProject changedGraph currentPath True = do
+  [path] <- readIORef currentPath
+  modifyIORef changedGraph (\xs -> take path xs ++ [True] ++ drop (path+1) xs)
+  writeIORef changedProject True
+  indicateChanges window True
 
+setChangeFlags window changedProject changedGraph currentPath False = do
+  [path] <- readIORef currentPath
+  cg <- readIORef changedGraph
+  let cg' = take path cg ++ [False] ++ drop (path+1) cg
+      projRestored = and cg'
+  writeIORef changedGraph cg'
+  writeIORef changedProject projRestored
+  indicateChanges window projRestored
+
+-- change updatedState
+updateSavedState :: IORef [DiaGraph] -> ListStore (String, EditorState, [DiaGraph], [DiaGraph]) -> IO ()
+updateSavedState sst store = do
+  list <- listStoreToList store
+  let newSavedState = map (\(_,es,_,_) -> (editorGetGraph es, editorGetGI es)) list
+  writeIORef sst newSavedState
+
+isDiaGraphEqual :: DiaGraph -> DiaGraph -> Bool
+isDiaGraphEqual (g1,gi1) (g2,gi2) = nodesEq && edgesEq && nodesGiEq && edgesGiEq
+  where
+    nodesEq = sameLength (nodes g1) (nodes g2) && all (\(x,y) -> nodeId x == nodeId y && nodeInfo x == nodeInfo y) (zip (nodes g1) (nodes g2))
+    edgesEq = sameLength (edges g1) (edges g2) && all (\(x,y) -> edgeId x == edgeId y && sourceId x == sourceId y && targetId x == targetId y && edgeInfo x == edgeInfo y) (zip (edges g1) (edges g2))
+    nodesGiEq = sameLength (M.elems $ fst gi1) (M.elems $ fst gi2) && all (\(x,y) -> x == y) (zip (M.elems $ fst gi1) (M.elems $ fst gi2))
+    edgesGiEq = sameLength (M.elems $ snd gi1) (M.elems $ snd gi2) && all (\(x,y) -> x == y) (zip (M.elems $ snd gi1) (M.elems $ snd gi2))
+    sameLength l1 l2 = length l1 == length l2
 
 -- Tarefas ---------------------------------------------------------------------
 -- *TypeGraph
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
+-- *Indicar em qual grafo está a mudança do projeto
+-- *Usar
 
 -- Feito -----------------------------------------------------------------------
 -- *Melhorar menu de Propriedades
