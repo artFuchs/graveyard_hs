@@ -62,6 +62,13 @@ editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
 
 
 type DiaGraph = (Graph String String ,GraphicalInfo)
+
+type GraphStore = (String, EditorState, [DiaGraph], [DiaGraph], String)
+graphStoreName (n,es,u,r,col) = n
+graphStoreEditor (n,es,u,r,col) = es
+graphStoreUndo (n,es,u,r,col) = u
+graphStoreRedo (n,es,u,r,col) = r
+graphStoreColor (n,es,u,r,col) = col
 --------------------------------------------------------------------------------
 -- MODULE FUNCTIONS ------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -108,17 +115,17 @@ startGUI = do
   fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
   currentGraph    <- newIORef [0] -- current graph being edited
   changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
-  changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the path specified by 'currentGraph' to True
-  lastSavedState  <- newIORef ([(empty, (M.empty, M.empty))] :: [DiaGraph])
+  changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the 'currentGraph' to True
+  lastSavedState  <- newIORef ([] :: [DiaGraph])
 
   -- init an model to display in the tree panel --------------------------------
-  store <- listStoreNew [("new", emptyES, [], [])]
+  store <- listStoreNew [("new", emptyES, [], [], "white")]
   projectCol <- treeViewGetColumn treeview 0
   case projectCol of
     Nothing -> return ()
     Just col -> do
       treeViewSetModel treeview (Just store)
-      cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_) -> [cellText := name]
+      cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_,color) -> [cellText := name, cellTextBackground := color]
 
   -- EVENT BINDINGS ------------------------------------------------------------
   -- event bindings for the canvas ---------------------------------------------
@@ -198,13 +205,13 @@ startGUI = do
             c <- readIORef currentC
             lc <- readIORef currentLC
             createNode st (x',y') context shape c lc
-            setChangeFlags window changedProject changedGraph currentGraph True
+            setChangeFlags window store changedProject changedGraph currentGraph True
           -- one node selected: create edges targeting this node
           (False, Just nid) -> do
             estyle <- readIORef currentStyle
             color <- readIORef currentLC
             modifyIORef st (\es -> createEdges es nid estyle color)
-            setChangeFlags window changedProject changedGraph currentGraph True
+            setChangeFlags window store changedProject changedGraph currentGraph True
           -- ctrl pressed: middle mouse button emulation
           (True,_) -> return ()
         widgetQueueDraw canvas
@@ -236,7 +243,7 @@ startGUI = do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         mv <- readIORef movingGI
         if not mv
           then do
@@ -314,7 +321,7 @@ startGUI = do
           es <- readIORef st
           modifyIORef st (\es -> deleteSelected es)
           stackUndo undoStack redoStack es
-          setChangeFlags window changedProject changedGraph currentGraph True
+          setChangeFlags window store changedProject changedGraph currentGraph True
           widgetQueueDraw canvas
         -- CTRL + <+>/<->/<=> : zoom controls
         (True,_,"plus") -> do
@@ -343,7 +350,7 @@ startGUI = do
         (True, False, "n") -> do
           modifyIORef st (\es -> (empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
           listStoreClear store
-          listStoreAppend store ("new",emptyES,[], [])
+          listStoreAppend store ("new",emptyES,[], [], "white")
           writeIORef changedProject False
           writeIORef fileName Nothing
           writeIORef undoStack []
@@ -375,10 +382,13 @@ startGUI = do
     writeIORef fileName Nothing
     treeViewSetCursor treeview [0] Nothing
     listStoreClear store
-    listStoreAppend store ("new", emptyES, [], [])
+    listStoreAppend store ("new", emptyES, [], [], "white")
     writeIORef st emptyES
     writeIORef undoStack []
     writeIORef redoStack []
+    writeIORef lastSavedState []
+    writeIORef changedProject False
+    writeIORef changedGraph [False]
     set window [windowTitle := "Graph Editor"]
     widgetQueueDraw canvas
 
@@ -390,17 +400,31 @@ startGUI = do
         if length list > 0
           then do
             listStoreClear store
-            let plist = map (\(n,e) -> (n,e,[],[])) list
+            let plist = map (\(n,e) -> (n,e,[],[],"white")) list
             forM plist (listStoreAppend store)
             let (name,es) = list!!0
             writeIORef st es
             writeIORef fileName $ Just fn
             writeIORef undoStack []
             writeIORef redoStack []
+            writeIORef changedProject False
+            writeIORef changedGraph [False]
             set window [windowTitle := "Graph Editor - " ++ fn]
             widgetQueueDraw canvas
           else return ()
       Nothing -> return ()
+
+  -- auxiliar function to clean the flags after saving
+  let afterSave = do  size <- listStoreGetSize store
+                      writeIORef changedProject False
+                      writeIORef changedGraph (take size (repeat False))
+                      list <- listStoreToList store
+                      writeIORef lastSavedState (map (\gs -> let es = graphStoreEditor gs in (editorGetGraph es, editorGetGI es)) list)
+                      listStoreClear store
+                      sequence $ map (listStoreAppend store) $ map (\(n,e,u,r,_) -> (n,e,u,r,"white")) list
+                      indicateProjChanged window False
+                      updateSavedState lastSavedState store
+
 
   -- save project
   svn `on` actionActivated $ do
@@ -408,16 +432,11 @@ startGUI = do
     undo <- readIORef undoStack
     redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _, _, _)<- listStoreGetValue store path
-    listStoreSetValue store path (name, currentES, undo, redo)
+    (name, _, _, _, c) <- listStoreGetValue store path
+    listStoreSetValue store path (name, currentES, undo, redo, c)
     saved <- saveFile store saveProject fileName window True
     if saved
-      then do
-        size <- listStoreGetSize store
-        writeIORef changedProject False
-        writeIORef changedGraph (take size (repeat False))
-        indicateChanges window False
-        updateSavedState lastSavedState store
+      then afterSave
       else return ()
 
 
@@ -427,16 +446,11 @@ startGUI = do
     undo <- readIORef undoStack
     redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _, _, _) <- listStoreGetValue store path
-    listStoreSetValue store path (name, currentES, undo, redo)
+    (name, _, _, _, c) <- listStoreGetValue store path
+    listStoreSetValue store path (name, currentES, undo, redo, c)
     saved <- saveFileAs store saveProject fileName window True
     if saved
-      then do
-        size <- listStoreGetSize store
-        writeIORef changedProject False
-        writeIORef changedGraph (take size (repeat False))
-        indicateChanges window False
-        updateSavedState lastSavedState store
+      then afterSave
       else return ()
 
   -- open graph
@@ -447,12 +461,12 @@ startGUI = do
         let splitAtToken str tkn = splitAt (1 + (fromMaybe (-1) $ findIndex (==tkn) str)) str
             getLastPart str = let splited = (splitAtToken str '/') in if fst splited == "" then str else getLastPart (snd splited)
             getName str = if (tails str)!!(length str - 3) == ".gr" then take (length str - 3) str else str
-        listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[])
+        listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[],"green")
         size <- listStoreGetSize store
         treeViewSetCursor treeview [size-1] Nothing
         modifyIORef changedGraph (\xs -> xs ++ [True])
         writeIORef changedProject True
-        indicateChanges window True
+        indicateProjChanged window True
         widgetQueueDraw canvas
       _      -> return ()
 
@@ -473,7 +487,7 @@ startGUI = do
     es <- readIORef st
     let (g,gi) = (editorGetGraph es, editorGetGI es)
         x = if length sst > path then sst!!path else (empty,(M.empty,M.empty))
-    setChangeFlags window changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
+    setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     widgetQueueDraw canvas
 
   -- redo
@@ -485,7 +499,7 @@ startGUI = do
     es <- readIORef st
     let (g,gi) = (editorGetGraph es, editorGetGI es)
         x = if length sst > path then sst!!path else (empty,(M.empty,M.empty))
-    setChangeFlags window changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
+    setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     widgetQueueDraw canvas
 
   -- copy
@@ -498,7 +512,7 @@ startGUI = do
     es <- readIORef st
     clip <- readIORef clipboard
     stackUndo undoStack redoStack es
-    setChangeFlags window changedProject changedGraph currentGraph True
+    setChangeFlags window store changedProject changedGraph currentGraph True
     modifyIORef st (pasteClipBoard clip)
     widgetQueueDraw canvas
 
@@ -508,7 +522,7 @@ startGUI = do
     writeIORef clipboard $ copySelected es
     modifyIORef st (\es -> deleteSelected es)
     stackUndo undoStack redoStack es
-    setChangeFlags window changedProject changedGraph currentGraph True
+    setChangeFlags window store changedProject changedGraph currentGraph True
     widgetQueueDraw canvas
 
   -- select all
@@ -554,7 +568,7 @@ startGUI = do
         "Return" -> do
           es <- readIORef st
           stackUndo undoStack redoStack es
-          setChangeFlags window changedProject changedGraph currentGraph True
+          setChangeFlags window store changedProject changedGraph currentGraph True
           name <- entryGetText entryName :: IO String
           context <- widgetGetPangoContext canvas
           renameSelected st name context
@@ -577,7 +591,7 @@ startGUI = do
         let (ngiM, egiM) = editorGetGI es
             newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetColor color ngi else ngi) ngiM
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
         widgetQueueDraw canvas
 
@@ -594,7 +608,7 @@ startGUI = do
             newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetLineColor color ngi else ngi) ngiM
             newegiM = M.mapWithKey (\k egi -> if EdgeId k `elem` edgs then edgeGiSetColor color egi else egi) egiM
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
         widgetQueueDraw canvas
 
@@ -610,7 +624,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NCircle)
         widgetQueueDraw canvas
 
@@ -624,7 +638,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NRect)
         widgetQueueDraw canvas
 
@@ -638,7 +652,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NQuad)
         widgetQueueDraw canvas
 
@@ -654,7 +668,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ENormal)
         widgetQueueDraw canvas
 
@@ -668,7 +682,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es EPointed)
         widgetQueueDraw canvas
 
@@ -682,7 +696,7 @@ startGUI = do
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window changedProject changedGraph currentGraph True
+        setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ESlashed)
         widgetQueueDraw canvas
 
@@ -703,10 +717,10 @@ startGUI = do
             currentES <- readIORef st
             u <- readIORef undoStack
             r <- readIORef redoStack
-            (name, _, _, _) <- listStoreGetValue store currentPath
-            listStoreSetValue store currentPath (name,currentES, u, r)
+            (name, _, _, _, color) <- listStoreGetValue store currentPath
+            listStoreSetValue store currentPath (name,currentES, u, r, color)
             -- load the selected graph from the tree
-            (_,newEs, newU, newR) <- listStoreGetValue store path
+            (_,newEs, newU, newR, _) <- listStoreGetValue store path
             writeIORef st newEs
             writeIORef undoStack newU
             writeIORef redoStack newR
@@ -716,9 +730,8 @@ startGUI = do
 
   -- pressed the 'new' button
   btnNew `on` buttonActivated $ do
-    listStoreAppend store ("new",emptyES,[],[])
+    listStoreAppend store ("new",emptyES,[],[],"green")
     modifyIORef lastSavedState (\sst -> sst ++ [(empty, (M.empty, M.empty))])
-    setChangeFlags window changedProject changedGraph currentGraph True
     return ()
 
   -- pressed the 'remove' button
@@ -734,11 +747,14 @@ startGUI = do
           (True, True) -> do
             treeViewSetCursor treeview [path-1] Nothing
             listStoreRemove store path
+            modifyIORef changedGraph (\cg -> take path cg)
           (True, False) -> do
             listStoreRemove store path
             treeViewSetCursor treeview [path] Nothing
+            modifyIORef changedGraph (\cg -> take path cg ++ drop (path+1) cg)
           (False, True) -> do
-            listStoreSetValue store 0 ("new",emptyES,[],[])
+            listStoreSetValue store 0 ("new",emptyES,[],[],"green")
+            writeIORef changedGraph [False]
             writeIORef st emptyES
           _ -> return ()
 
@@ -746,8 +762,10 @@ startGUI = do
 
   -- edited a graph name
   treeRenderer `on` edited $ \[path] newName -> do
-    (oldName, val, u, r) <- listStoreGetValue store path
-    listStoreSetValue store path (newName, val, u, r)
+    (oldName, val, u, r, color) <- listStoreGetValue store path
+    listStoreSetValue store path (newName, val, u, r, color)
+    writeIORef changedProject True
+    indicateProjChanged window True
 
   -- remove menuItem "insert Emoji" cause it causes the program to crash
   treeRenderer `on` editingStarted $ \widget path -> do
@@ -773,8 +791,8 @@ startGUI = do
       ResponseYes -> liftIO $ do
         currentES <- readIORef st
         [path] <- readIORef currentGraph
-        (name, _, _, _)<- listStoreGetValue store path
-        listStoreSetValue store path (name, currentES, [], [])
+        (name, _, _, _, color)<- listStoreGetValue store path
+        listStoreSetValue store path (name, currentES, [], [], color)
         saved <- saveFile store saveProject fileName window True
         if saved
           then do
@@ -908,10 +926,10 @@ saveFileAs x saveF fileName window changeFN = do
 
 -- auxiliar save functions -----------------------------------------------------
 -- save project
-saveProject :: ListStore (String, EditorState, [DiaGraph], [DiaGraph]) -> String -> IO Bool
+saveProject :: ListStore GraphStore -> String -> IO Bool
 saveProject model path = do
   editorList <- listStoreToList model
-  let getWhatMatters = (\(name, es, _, _) -> (name, editorGetGraph es, editorGetGI es))
+  let getWhatMatters = (\(name, es, _, _, _) -> (name, editorGetGraph es, editorGetGI es))
       whatMatters = map getWhatMatters editorList
       contents = map (\(name, g, gi) -> ( name
                                         , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
@@ -1327,40 +1345,53 @@ diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
     egiM3 = M.union egiM1 egiM2'
 
 -- change window name to indicate if the project was modified
-indicateChanges :: Window -> Bool -> IO ()
-indicateChanges window True = do
+indicateProjChanged :: Window -> Bool -> IO ()
+indicateProjChanged window True = do
   title <- get window windowTitle
   if title!!0 == '*'
     then return ()
     else set window [windowTitle := '*':title]
 
-indicateChanges window False = do
+indicateProjChanged window False = do
   i:title <- get window windowTitle
   if i == '*'
     then set window [windowTitle := title]
     else return ()
 
-setChangeFlags :: Window -> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
-setChangeFlags window changedProject changedGraph currentPath True = do
+indicateGraphChanged :: ListStore GraphStore -> Int -> Bool -> IO ()
+indicateGraphChanged store path True = do
+  (n,e,u,r,_) <- listStoreGetValue store path
+  listStoreSetValue store path (n,e,u,r,"yellow")
+
+indicateGraphChanged store path False = do
+  (n,e,u,r,_) <- listStoreGetValue store path
+  listStoreSetValue store path (n,e,u,r,"white")
+
+
+-- change the flags that inform if the graphs and project were changed and inform the graphs
+setChangeFlags :: Window -> ListStore GraphStore -> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
+setChangeFlags window store changedProject changedGraph currentPath True = do
   [path] <- readIORef currentPath
   modifyIORef changedGraph (\xs -> take path xs ++ [True] ++ drop (path+1) xs)
   writeIORef changedProject True
-  indicateChanges window True
+  indicateProjChanged window True
+  indicateGraphChanged store path True
 
-setChangeFlags window changedProject changedGraph currentPath False = do
+setChangeFlags window store changedProject changedGraph currentPath False = do
   [path] <- readIORef currentPath
   cg <- readIORef changedGraph
   let cg' = take path cg ++ [False] ++ drop (path+1) cg
       projRestored = and cg'
   writeIORef changedGraph cg'
   writeIORef changedProject projRestored
-  indicateChanges window projRestored
+  indicateProjChanged window projRestored
+  indicateGraphChanged store path False
 
 -- change updatedState
-updateSavedState :: IORef [DiaGraph] -> ListStore (String, EditorState, [DiaGraph], [DiaGraph]) -> IO ()
+updateSavedState :: IORef [DiaGraph] -> ListStore GraphStore -> IO ()
 updateSavedState sst store = do
   list <- listStoreToList store
-  let newSavedState = map (\(_,es,_,_) -> (editorGetGraph es, editorGetGI es)) list
+  let newSavedState = map (\(_,es,_,_,_) -> (editorGetGraph es, editorGetGI es)) list
   writeIORef sst newSavedState
 
 isDiaGraphEqual :: DiaGraph -> DiaGraph -> Bool
