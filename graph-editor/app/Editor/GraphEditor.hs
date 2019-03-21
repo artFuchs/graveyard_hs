@@ -19,54 +19,12 @@ import Editor.GraphicalInfo
 import Editor.Render
 import Editor.Helper
 import Editor.UIBuilders
-
+import Editor.DiaGraph hiding (empty)
+import qualified Editor.DiaGraph as DG
+import Editor.EditorState
 --------------------------------------------------------------------------------
 -- MODULE STRUCTURES -----------------------------------------------------------
 --------------------------------------------------------------------------------
--- | Graph Editor State
--- A tuple containing all the informations needed to draw the graph in the canvas
--- (graph, GraphicalInfo, elected nodes and edges, zoom, pan)
-type EditorState = (Graph String String, GraphicalInfo, ([NodeId],[EdgeId]) , Double, (Double,Double))
-
--- constructor
-emptyES :: EditorState
-emptyES = (G.empty, (M.empty, M.empty), ([], []), 1.0, (0.0,0.0))
-
--- getters and setters
-editorGetGraph :: EditorState -> Graph String String
-editorGetGraph (g,_,_,_,_) = g
-
-editorSetGraph :: Graph String String-> EditorState -> EditorState
-editorSetGraph g (_,gi,s,z,p) = (g,gi,s,z,p)
-
-editorGetGI :: EditorState -> GraphicalInfo
-editorGetGI (_,gi,_,_,_) = gi
-
-editorSetGI :: GraphicalInfo -> EditorState -> EditorState
-editorSetGI gi (g,_,s,z,p) = (g,gi,s,z,p)
-
-editorGetSelected :: EditorState -> ([NodeId], [EdgeId])
-editorGetSelected (_,_,s,_,_) = s
-
-editorSetSelected :: ([NodeId], [EdgeId]) -> EditorState -> EditorState
-editorSetSelected s (g,gi,_,z,p) = (g,gi,s,z,p)
-
-editorGetZoom :: EditorState -> Double
-editorGetZoom (_,_,_,z,_) = z
-
-editorSetZoom :: Double -> EditorState -> EditorState
-editorSetZoom z (g,gi,s,_,p) = (g,gi,s,z,p)
-
-editorGetPan :: EditorState -> (Double,Double)
-editorGetPan (_,_,_,_,p) = p
-
-editorSetPan :: (Double,Double) -> EditorState -> EditorState
-editorSetPan p (g,gi,s,z,_) = (g,gi,s,z,p)
-
--- |Diagraph
--- A pair containing a graph and it's graphical information
-type DiaGraph = (Graph String String ,GraphicalInfo)
-
 -- |GraphStore
 -- A tuple representing what is stored in each node of the tree in the treeview
 -- It contains the informations: name, editor state, undo stack, redo stack and color to draw the cell
@@ -87,6 +45,7 @@ startGUI = do
   -- init GTK
   initGUI
 
+  ------------------------------------------------------------------------------
   -- GUI definition ------------------------------------------------------------
   -- help window ---------------------------------------------------------------
   helpWindow <- buildHelpWindow
@@ -107,6 +66,16 @@ startGUI = do
   -- shows the main window
   widgetShowAll window
 
+  -- init an model to display in the tree panel --------------------------------
+  store <- listStoreNew [("new", emptyES, [], [], "white")]
+  projectCol <- treeViewGetColumn treeview 0
+  case projectCol of
+    Nothing -> return ()
+    Just col -> do
+      treeViewSetModel treeview (Just store)
+      cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_,color) -> [cellText := name, cellTextBackground := color]
+
+  ------------------------------------------------------------------------------
   -- init the editor variables  ------------------------------------------------
   st              <- newIORef emptyES -- editor state: all the necessary info to draw the graph
   oldPoint        <- newIORef (0.0,0.0) -- last point where a mouse button was pressed
@@ -118,22 +87,14 @@ startGUI = do
   currentStyle    <- newIORef ENormal -- the style that all new edges must have
   currentC        <- newIORef (1,1,1) -- the color to init new nodes
   currentLC       <- newIORef (0,0,0) -- the color to init new edges and the line and text of new nodes
-  clipboard       <- newIORef (G.empty, (M.empty, M.empty)) -- clipboard - DiaGraph
+  clipboard       <- newIORef DG.empty -- clipboard - DiaGraph
   fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
   currentGraph    <- newIORef [0] -- current graph being edited
-  changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
+  changedProject  <- newIORef False -- set this flahttps://www.youtube.com/g as True when the graph is changed somehow
   changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the 'currentGraph' to True
   lastSavedState  <- newIORef ([] :: [DiaGraph])
 
-  -- init an model to display in the tree panel --------------------------------
-  store <- listStoreNew [("new", emptyES, [], [], "white")]
-  projectCol <- treeViewGetColumn treeview 0
-  case projectCol of
-    Nothing -> return ()
-    Just col -> do
-      treeViewSetModel treeview (Just store)
-      cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_,color) -> [cellText := name, cellTextBackground := color]
-
+  ------------------------------------------------------------------------------
   -- EVENT BINDINGS ------------------------------------------------------------
   -- event bindings for the canvas ---------------------------------------------
   -- drawing event
@@ -167,10 +128,10 @@ startGUI = do
         let (oldSN,oldSE) = editorGetSelected es
             graph = editorGetGraph es
             gi = editorGetGI es
-            sNode = case checkSelectNode gi (x',y') of
+            sNode = case selectNodeInPosition gi (x',y') of
               Nothing -> []
               Just nid -> [nid]
-            sEdge = case checkSelectEdge gi (x',y') of
+            sEdge = case selectEdgeInPosition gi (x',y') of
               Nothing -> []
               Just eid -> [eid]
         -- add/remove elements of selection
@@ -202,7 +163,7 @@ startGUI = do
       (RightButton, _) -> liftIO $ do
         let g = editorGetGraph es
             gi = editorGetGI es
-            dstNode = checkSelectNode gi (x',y')
+            dstNode = selectNodeInPosition gi (x',y')
         context <- widgetGetPangoContext canvas
         stackUndo undoStack redoStack es
         case (Control `elem` ms, dstNode) of
@@ -234,6 +195,7 @@ startGUI = do
     (ox,oy) <- liftIO $ readIORef oldPoint
     es <- liftIO $ readIORef st
     let leftButton = Button1 `elem` ms
+        -- in case of the editor being used in a notebook or with a mouse with just two buttons, ctrl + right button can be used instead of the middle button.
         middleButton = Button2 `elem` ms || Button3 `elem` ms && Control `elem` ms
         (sNodes, sEdges) = editorGetSelected es
         z = editorGetZoom es
@@ -438,7 +400,8 @@ startGUI = do
     undo <- readIORef undoStack
     redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _, _, _, c) <- listStoreGetValue store path
+    gs <- listStoreGetValue store path
+    let (name, c) = (graphStoreName gs, graphStoreColor gs)
     listStoreSetValue store path (name, currentES, undo, redo, c)
     saved <- saveFile store saveProject fileName window True
     if saved
@@ -452,7 +415,8 @@ startGUI = do
     undo <- readIORef undoStack
     redo <- readIORef redoStack
     [path] <- readIORef currentGraph
-    (name, _, _, _, c) <- listStoreGetValue store path
+    gs <- listStoreGetValue store path
+    let (name, c) = (graphStoreName gs, graphStoreColor gs)
     listStoreSetValue store path (name, currentES, undo, redo, c)
     saved <- saveFileAs store saveProject fileName window True
     if saved
@@ -563,15 +527,11 @@ startGUI = do
   hlp `on` actionActivated $ do
     widgetShowAll helpWindow
 
-
   -- event bindings -- inspector panel -----------------------------------------
   -- pressed a key when editing the entryName
   entryName `on` keyPressEvent $ do
     k <- eventKeyName
-    liftIO $ do
-      -- if it's Return, then change the name of the selected elements
-      case T.unpack k of
-        "Return" -> do
+    let setName = liftIO $ do
           es <- readIORef st
           stackUndo undoStack redoStack es
           setChangeFlags window store changedProject changedGraph currentGraph True
@@ -579,7 +539,11 @@ startGUI = do
           context <- widgetGetPangoContext canvas
           renameSelected st name context
           widgetQueueDraw canvas
-        _       -> return ()
+    -- if it's Return, then change the name of the selected elements
+    case T.unpack k of
+      "Return" -> setName
+      "KP_Enter" -> setName
+      _       -> return ()
     return False
 
   -- select a fill color or line color
@@ -723,7 +687,8 @@ startGUI = do
             currentES <- readIORef st
             u <- readIORef undoStack
             r <- readIORef redoStack
-            (name, _, _, _, color) <- listStoreGetValue store currentPath
+            gs <- listStoreGetValue store currentPath
+            let (name, color) = (graphStoreName gs, graphStoreColor gs)
             listStoreSetValue store currentPath (name,currentES, u, r, color)
             -- load the selected graph from the tree
             (_,newEs, newU, newR, _) <- listStoreGetValue store path
@@ -737,7 +702,7 @@ startGUI = do
   -- pressed the 'new' button
   btnNew `on` buttonActivated $ do
     listStoreAppend store ("new",emptyES,[],[],"green")
-    modifyIORef lastSavedState (\sst -> sst ++ [(G.empty, (M.empty, M.empty))])
+    modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
     return ()
 
   -- pressed the 'remove' button
@@ -797,7 +762,8 @@ startGUI = do
       ResponseYes -> liftIO $ do
         currentES <- readIORef st
         [path] <- readIORef currentGraph
-        (name, _, _, _, color)<- listStoreGetValue store path
+        gs <- listStoreGetValue store path
+        let (name, color) = (graphStoreName gs, graphStoreColor gs)
         listStoreSetValue store path (name, currentES, [], [], color)
         saved <- saveFile store saveProject fileName window True
         if saved
@@ -884,6 +850,44 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set hBoxColor [widgetVisible := True]
       set frameShape [widgetVisible := True]
       set frameStyle [widgetVisible := True]
+
+-- draw a graph in the canvas --------------------------------------------------
+drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
+drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
+  context <- liftIO $ widgetGetPangoContext canvas
+  scale z z
+  translate px py
+
+  -- draw the edges
+  forM (edges g) (\e -> do
+    let dstN = M.lookup (fromEnum . targetId $ e) nGI
+        srcN = M.lookup (fromEnum . sourceId $ e) nGI
+        egi  = M.lookup (fromEnum . edgeId   $ e) eGI
+        selected = (edgeId e) `elem` sEdges
+    case (egi, srcN, dstN) of
+      (Just gi, Just src, Just dst) -> renderEdge gi (edgeInfo e) selected src dst context
+      _ -> return ())
+
+  -- draw the nodes
+  forM (nodes g) (\n -> do
+    let ngi = M.lookup (fromEnum . nodeId $ n) nGI
+        selected = (nodeId n) `elem` (sNodes)
+        info = nodeInfo n
+    case (ngi) of
+      Just gi -> renderNode gi info selected context
+      Nothing -> return ())
+
+  -- draw the selectionBox
+  case sq of
+    Just (x,y,w,h) -> do
+      rectangle x y w h
+      setSourceRGBA 0 0 1 0.5
+      fill
+      rectangle x y w h
+      setSourceRGBA 0 0 1 1
+      stroke
+    Nothing -> return ()
+  return ()
 
 -- general save function -------------------------------------------------------
 saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO Bool
@@ -1016,49 +1020,11 @@ loadGraph contents = (g,gi)
     g = fromNodesAndEdges ns es
 
 
--- draw a graph in the canvas --------------------------------------------------
-drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
-drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
-  context <- liftIO $ widgetGetPangoContext canvas
-  scale z z
-  translate px py
-
-  -- draw the edges
-  forM (edges g) (\e -> do
-    let dstN = M.lookup (fromEnum . targetId $ e) nGI
-        srcN = M.lookup (fromEnum . sourceId $ e) nGI
-        egi  = M.lookup (fromEnum . edgeId   $ e) eGI
-        selected = (edgeId e) `elem` sEdges
-    case (egi, srcN, dstN) of
-      (Just gi, Just src, Just dst) -> renderEdge gi (edgeInfo e) selected src dst context
-      _ -> return ())
-
-  -- draw the nodes
-  forM (nodes g) (\n -> do
-    let ngi = M.lookup (fromEnum . nodeId $ n) nGI
-        selected = (nodeId n) `elem` (sNodes)
-        info = nodeInfo n
-    case (ngi) of
-      Just gi -> renderNode gi info selected context
-      Nothing -> return ())
-
-  -- draw the selectionBox
-  case sq of
-    Just (x,y,w,h) -> do
-      rectangle x y w h
-      setSourceRGBA 0 0 1 0.5
-      fill
-      rectangle x y w h
-      setSourceRGBA 0 0 1 1
-      stroke
-    Nothing -> return ()
-  return ()
-
 
 -- interaction ------------------------------------------------------
 -- check if the user selected a node
-checkSelectNode:: GraphicalInfo -> (Double,Double) -> Maybe NodeId
-checkSelectNode (nodesG,_) (x,y) = case find (\n -> isSelected (snd n)) $ (M.toList nodesG) of
+selectNodeInPosition:: GraphicalInfo -> (Double,Double) -> Maybe NodeId
+selectNodeInPosition (nodesG,_) (x,y) = case find (\n -> isSelected (snd n)) $ (M.toList nodesG) of
                                     Nothing -> Nothing
                                     Just (k,a) -> Just $ NodeId k
   where isSelected = (\n -> let (nx,ny) = position  n
@@ -1070,8 +1036,8 @@ checkSelectNode (nodesG,_) (x,y) = case find (\n -> isSelected (snd n)) $ (M.toL
                               NQuad -> pointInsideRectangle (x,y) (nx,ny,l,l) )
 
 -- check if the user selected a edge
-checkSelectEdge:: GraphicalInfo -> (Double,Double) -> Maybe EdgeId
-checkSelectEdge (_,edgesG) (x,y) = case find (\e -> isSelected (snd e)) $ (M.toList edgesG) of
+selectEdgeInPosition:: GraphicalInfo -> (Double,Double) -> Maybe EdgeId
+selectEdgeInPosition (_,edgesG) (x,y) = case find (\e -> isSelected (snd e)) $ (M.toList edgesG) of
                             Nothing -> Nothing
                             Just (k,a) -> Just $ EdgeId k
   where isSelected = (\e -> pointDistance (x,y) (cPosition e) < 5)
@@ -1267,14 +1233,14 @@ getStringDims str context = do
 
 
 -- Undo / Redo -----------------------------------------------------------------
-stackUndo :: IORef [(Graph String String, GraphicalInfo)] -> IORef [(Graph String String, GraphicalInfo)] -> EditorState -> IO ()
+stackUndo :: IORef [DiaGraph] -> IORef [DiaGraph] -> EditorState -> IO ()
 stackUndo undo redo es = do
   let g = editorGetGraph es
       gi = editorGetGI es
   modifyIORef undo (\u -> (g,gi):u )
   modifyIORef redo (\_ -> [])
 
-applyUndo :: IORef [(Graph String String, GraphicalInfo)] -> IORef [(Graph String String, GraphicalInfo)] -> IORef EditorState -> IO ()
+applyUndo :: IORef [DiaGraph] -> IORef [DiaGraph] -> IORef EditorState -> IO ()
 applyUndo undoStack redoStack st = do
   es <- readIORef st
   undo <- readIORef undoStack
@@ -1289,7 +1255,7 @@ applyUndo undoStack redoStack st = do
   writeIORef redoStack nr
   writeIORef st nes
 
-applyRedo :: IORef [(Graph String String, GraphicalInfo)] -> IORef [(Graph String String, GraphicalInfo)] -> IORef EditorState -> IO ()
+applyRedo :: IORef [DiaGraph] -> IORef [DiaGraph] -> IORef EditorState -> IO ()
 applyRedo undoStack redoStack st = do
   undo <- readIORef undoStack
   redo <- readIORef redoStack
@@ -1329,26 +1295,6 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
     cNgiM' = M.map (\gi -> nodeGiSetPosition (upd $ position gi) gi) cNgiM
     cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
     (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
-
--- union between two DiaGraphs
-diagrUnion :: DiaGraph -> DiaGraph -> DiaGraph
-diagrUnion (g1,(ngiM1,egiM1)) (g2,(ngiM2,egiM2)) = (g3,(ngiM3,egiM3))
-  where
-    ns2 = nodes g2
-    es2 = edges g2
-    newNids = take (length ns2) $ newNodes g1
-    newEids = take (length es2) $ newEdges g1
-    maxNidG1 = if G.null g1 then 0 else maximum $ nodeIds g1
-    maxEidG1 = if null $ edgeIds g1 then 0 else maximum $ edgeIds g1
-    ns2' = map (\n -> Node (nodeId n + maxNidG1) (nodeInfo n)) ns2
-    es2' = map (\e -> Edge (edgeId e + maxEidG1) (sourceId e + maxNidG1) (targetId e + maxNidG1) (edgeInfo e)) es2
-    ns3 = concat [nodes g1, ns2']
-    es3 = concat [edges g1, es2']
-    g3 = fromNodesAndEdges ns3 es3
-    ngiM2' = M.fromList $ zipWith (\(NodeId nid) gi -> (nid, gi)) newNids (M.elems ngiM2)
-    egiM2' = M.fromList $ zipWith (\(EdgeId eid) gi -> (eid, gi)) newEids (M.elems egiM2)
-    ngiM3 = M.union ngiM1 ngiM2'
-    egiM3 = M.union egiM1 egiM2'
 
 -- change window name to indicate if the project was modified
 indicateProjChanged :: Window -> Bool -> IO ()
@@ -1400,15 +1346,6 @@ updateSavedState sst store = do
   let newSavedState = map (\(_,es,_,_,_) -> (editorGetGraph es, editorGetGI es)) list
   writeIORef sst newSavedState
 
-isDiaGraphEqual :: DiaGraph -> DiaGraph -> Bool
-isDiaGraphEqual (g1,gi1) (g2,gi2) = nodesEq && edgesEq && nodesGiEq && edgesGiEq
-  where
-    nodesEq = sameLength (nodes g1) (nodes g2) && all (\(x,y) -> nodeId x == nodeId y && nodeInfo x == nodeInfo y) (zip (nodes g1) (nodes g2))
-    edgesEq = sameLength (edges g1) (edges g2) && all (\(x,y) -> edgeId x == edgeId y && sourceId x == sourceId y && targetId x == targetId y && edgeInfo x == edgeInfo y) (zip (edges g1) (edges g2))
-    nodesGiEq = sameLength (M.elems $ fst gi1) (M.elems $ fst gi2) && all (\(x,y) -> x == y) (zip (M.elems $ fst gi1) (M.elems $ fst gi2))
-    edgesGiEq = sameLength (M.elems $ snd gi1) (M.elems $ snd gi2) && all (\(x,y) -> x == y) (zip (M.elems $ snd gi1) (M.elems $ snd gi2))
-    sameLength l1 l2 = length l1 == length l2
-
 -- Tarefas ---------------------------------------------------------------------
 -- *TypeGraph
 
@@ -1437,3 +1374,4 @@ isDiaGraphEqual (g1,gi1) (g2,gi2) = nodesEq && edgesEq && nodesGiEq && edgesGiEq
 --   *Consertar Undo/Redo
 -- *Espaçar edges quando houver mais de uma aresta entre dois nodos e ela estiver centralizada
 -- *Removida a opção "Insert Emoji" do menu da treeView, porque a ativação estava fazendo o programa encerrar.
+-- *Arrumado bug que fazia o programa encerrar ao salvar com algum grafo que não o primeiro selecionado.
