@@ -881,10 +881,10 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   case sq of
     Just (x,y,w,h) -> do
       rectangle x y w h
-      setSourceRGBA 0 0 1 0.5
+      setSourceRGBA 0.29 0.56 0.85 0.5
       fill
       rectangle x y w h
-      setSourceRGBA 0 0 1 1
+      setSourceRGBA 0.29 0.56 0.85 1
       stroke
     Nothing -> return ()
   return ()

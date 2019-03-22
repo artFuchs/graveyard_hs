@@ -37,7 +37,7 @@ renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,D
 renderCircle (x,y) radius (r,g,b) (lr,lg,lb) selected = do
   if selected
     then do
-      setSourceRGB 0 1 0
+      setSourceRGB 0.29 0.56 0.85
       arc x y (radius+3) 0 (2*pi)
       fill
     else
@@ -53,7 +53,7 @@ renderRectangle :: (Double,Double,Double,Double) -> (Double,Double,Double) -> (D
 renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) selected = do
   if selected
     then do
-      setSourceRGB 0 1 0
+      setSourceRGB 0.29 0.56 0.85
       rectangle (x-(w/2+3)) (y-(h/2+3)) (w+6) (h+6)
       fill
     else
@@ -117,8 +117,8 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
 
   if selected
     then do
-      setLineWidth 4
-      setSourceRGB 0 1 0
+      setLineWidth 6
+      setSourceRGB 0.29 0.56 0.85
       moveTo x1' y1'
       lineTo xe ye
       lineTo x2' y2'
@@ -171,8 +171,8 @@ renderLoop edge selected node = do
 
   if selected
     then do
-      setSourceRGB 0 1 0
-      setLineWidth 4
+      setSourceRGB 0.29 0.56 0.85
+      setLineWidth 6
       moveTo x y
       curveTo (fst p1) (snd p1) (fst p2) (snd p2) xe ye
       moveTo x y
