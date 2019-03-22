@@ -1,5 +1,8 @@
 module Editor.GraphicalInfo
 ( GraphicalInfo (..)
+, GIPos (..)
+, GIDim (..)
+, GIColor (..)
 , NodeShape (..)
 , NodeGI (..)
 , EdgeStyle (..)
@@ -30,6 +33,10 @@ getNodeGI nid giM = fromMaybe newNodeGI $ M.lookup nid giM
 getEdgeGI :: Int -> M.Map Int EdgeGI -> EdgeGI
 getEdgeGI eid giM = fromMaybe newEdgeGI $ M.lookup eid giM
 
+type GIPos = (Double,Double)
+type GIDim = (Double,Double)
+type GIColor = (Double,Double,Double)
+
 -- estrutura auxiliar - define a forma de um nodo
 data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
 
@@ -39,10 +46,10 @@ data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
 -- lineColor : cor da linha e texto
 -- dims : dimensões do nodo
 -- shape : forma do nodo
-data NodeGI = NodeGI { position :: (Double, Double)
-                     , fillColor :: (Double,Double,Double)
-                     , lineColor :: (Double,Double,Double)
-                     , dims :: (Double,Double)
+data NodeGI = NodeGI { position :: GIPos
+                     , fillColor :: GIColor
+                     , lineColor :: GIColor
+                     , dims :: GIDim
                      , shape :: NodeShape
                      } deriving (Eq, Show, Read)
 
@@ -52,8 +59,8 @@ data EdgeStyle = ENormal | EPointed | ESlashed deriving (Eq ,Show, Read)
 -- cPosition : posição do ponto de controle
 -- color : cor da linha e texto
 -- centered : se a aresta deve se manter centralizada entre dois nodos ou não
-data EdgeGI = EdgeGI { cPosition :: (Double,Double)
-                     , color :: (Double,Double,Double)
+data EdgeGI = EdgeGI { cPosition :: GIPos
+                     , color :: GIColor
                      , centered :: Bool
                      , style :: EdgeStyle
                      } deriving (Eq, Show, Read)
