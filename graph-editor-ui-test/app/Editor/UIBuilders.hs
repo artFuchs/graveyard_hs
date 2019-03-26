@@ -199,7 +199,7 @@ buildHostMenu = do
   -- cria uma HBox para a propriedade nome
   hBoxName <- hBoxNew False 8
   boxPackStart vBoxProps hBoxName PackNatural 0
-  labelName <- labelNew $ Just "Nome: "
+  labelName <- labelNew $ Just "Type: "
   entryName <- entryNew
   boxPackStart hBoxName labelName PackNatural 0
   boxPackStart hBoxName entryName PackGrow 0
