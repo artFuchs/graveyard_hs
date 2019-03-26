@@ -4,13 +4,14 @@
 module Main where
 
 import Graphics.UI.Gtk hiding (rectangle)
-import UIBuilders
 import Control.Monad.IO.Class
 import Data.Tree
+import qualified Data.Text as T
+import Editor.UIBuilders
 
-type Name = String
 type Info = String
 data GraphType = MenuGraph | HostGraph Info | TypeGraph Info | RuleGraph Info deriving (Show)
+type Name = String
 data GraphStore = Store GraphType Name
 
 
@@ -23,6 +24,17 @@ main = do
   (maybeMenubar, new, opn, svn, sva, opg, svg, udo, rdo, cpy, pst, cut, sla, sle, sln, hlp') <- buildMaybeMenubar
   (treePanel, treeview, renderer, btnNew, btnRemove) <- buildTreePanel
   (window,canvas,hPaneMain) <- buildMainWindow maybeMenubar frameT treePanel
+
+  -- criar os modelos para as comboboxes do buildHostMenu
+  comboBoxSetModelText comboBoxNodeType
+  sequence $ map (comboBoxAppendText comboBoxNodeType . T.pack) ["None", "A", "B", "C"]
+  comboBoxSetActive comboBoxNodeType 0
+
+  comboBoxSetModelText comboBoxEdgeType
+  sequence $ map (comboBoxAppendText comboBoxEdgeType . T.pack) ["None", "AA", "AB", "AC" "BB", "BC", "CC"]
+  comboBoxSetActive comboBoxEdgeType 0
+
+
 
   -- criar uma estrutura para armazenar na treeStore
   let typeGraphTree = Node (Store MenuGraph "TypeGraphs") [Node (Store (TypeGraph "this is a typeGraph.") "TypeGraph") []]
@@ -53,6 +65,7 @@ main = do
 
   widgetShowAll window
   mainGUI
+
 
 changePropMenu :: GraphType -> HPaned -> (Frame,Frame) -> IO ()
 changePropMenu MenuGraph _ _ = return ()

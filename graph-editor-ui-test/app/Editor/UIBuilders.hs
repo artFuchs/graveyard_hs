@@ -1,5 +1,5 @@
 -- | Esse modulo contem a definição dos widgets da interface do usuario
-module UIBuilders
+module Editor.UIBuilders
 ( buildMainWindow
 , buildMaybeMenubar
 , buildTypeMenu
@@ -17,7 +17,7 @@ import qualified Data.Text as T
 buildMainWindow maybeMenuBar frameProps treePanel = do
   -- janela principal
   window <- windowNew
-  set window  [ windowTitle         := "Graph Editor"
+  set window  [ windowTitle         := "Graph Editor - UI PROTOTYPE"
               , windowDefaultWidth  := 640
               , windowDefaultHeight := 480]
 
@@ -222,6 +222,27 @@ buildHostMenu = do
   boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
 
   return (frame, entryName, comboBoxNodeType, comboBoxEdgeType, (hBoxNodeType, hBoxEdgeType))
+
+buildRuleMenu = do
+  frame <- frameNew
+  set frame [ frameShadowType := ShadowIn ]
+
+  vBoxProps <- vBoxNew False 8
+  containerAdd frame vBoxProps
+
+  -- cria a label de titulo
+  titleLabel <- labelNew $ Just "Propriedades"
+  boxPackStart vBoxProps titleLabel PackNatural 0
+
+  -- cria uma HBox para a propriedade nome
+  hBoxName <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxName PackNatural 0
+  labelName <- labelNew $ Just "Nome: "
+  entryName <- entryNew
+  boxPackStart hBoxName labelName PackNatural 0
+  boxPackStart hBoxName entryName PackGrow 0
+  widgetSetCanFocus entryName True
+
 
 
 
