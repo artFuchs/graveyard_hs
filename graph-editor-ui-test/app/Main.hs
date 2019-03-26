@@ -25,26 +25,35 @@ main = do
   pathRef <- newIORef [0]
 
   -- Definição da interface
+  (frameR, entryNameR, comboBoxNodeTypeR, comboBoxEdgeTypeR, comboBoxOperationR, (hBoxNodeType, hBoxEdgeType)) <- buildRuleMenu
   (frameH, entryNameH, comboBoxNodeType, comboBoxEdgeType, (hBoxNodeType, hBoxEdgeType)) <- buildHostMenu
   (frameT, entryNameT, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle)) <- buildTypeMenu
-  let propMenuFrames = (frameH, frameT)
+  let propMenuFrames = (frameH, frameT, frameR)
   (maybeMenubar, new, opn, svn, sva, opg, svg, udo, rdo, cpy, pst, cut, sla, sle, sln, hlp') <- buildMaybeMenubar
   (treePanel, treeview, renderer, btnNew, btnRemove) <- buildTreePanel
   (window,canvas,hPaneMain) <- buildMainWindow maybeMenubar frameH treePanel
 
   -- criar os modelos para as comboboxes do buildHostMenu
-  comboBoxSetModelText comboBoxNodeType
   sequence $ map (comboBoxAppendText comboBoxNodeType . T.pack) ["None", "A", "B", "C"]
   comboBoxSetActive comboBoxNodeType 0
 
-  comboBoxSetModelText comboBoxEdgeType
   sequence $ map (comboBoxAppendText comboBoxEdgeType . T.pack) ["None", "AA", "AB", "AC", "BB", "BC", "CC"]
   comboBoxSetActive comboBoxEdgeType 0
+
+  sequence $ map (comboBoxAppendText comboBoxNodeTypeR . T.pack) ["None", "A", "B", "C"]
+  comboBoxSetActive comboBoxNodeTypeR 0
+
+  sequence $ map (comboBoxAppendText comboBoxEdgeTypeR . T.pack) ["None", "AA", "AB", "AC", "BB", "BC", "CC"]
+  comboBoxSetActive comboBoxEdgeTypeR 0
+
+  sequence $ map (comboBoxAppendText comboBoxOperationR . T.pack) ["None", "Create", "Delete"]
+  comboBoxSetActive comboBoxOperationR 0
 
   -- criar uma estrutura para armazenar na treeStore
   let typeGraphTree = Node (Store MenuGraph "TypeGraphs") [Node (Store (TypeGraph (testTypeGraph)) "TypeGraph") []]
       graphTree = Node (Store MenuGraph "Graphs") [Node (Store (HostGraph ([],[])) "Graph") []]
-  store <- treeStoreNew [Node (Store MenuGraph "Project") [typeGraphTree, graphTree]]
+      ruleGraphTree = Node (Store MenuGraph "Rules") [Node (Store (RuleGraph ([],[])) "Rule0") []]
+  store <- treeStoreNew [Node (Store MenuGraph "Project") [typeGraphTree, graphTree, ruleGraphTree]]
   projectCol <- treeViewGetColumn treeview 0
   case projectCol of
     Nothing -> return ()
@@ -78,35 +87,27 @@ main = do
       Store MenuGraph n -> return ()
       Store (TypeGraph g) n -> drawGraph canvas g
       Store (HostGraph g) n -> drawGraph canvas g
-      Store (RuleGraph g) n -> return ()
+      Store (RuleGraph g) n -> drawGraph canvas g
   widgetShowAll window
   mainGUI
 
 
-changePropMenu :: GraphType -> HPaned -> (Frame,Frame) -> IO ()
+changePropMenu :: GraphType -> HPaned -> (Frame,Frame,Frame) -> IO ()
 changePropMenu MenuGraph _ _ = return ()
 
-changePropMenu (HostGraph info) hpane (hFrame,tFrame) = do
+changePropMenu graphT hpane (hFrame,tFrame,rFrame) = do
   panedchild <- panedGetChild2 hpane
+  let theFrame = case graphT of
+                  HostGraph i -> hFrame
+                  TypeGraph i -> tFrame
+                  RuleGraph i -> rFrame
   case panedchild of
     Nothing -> panedPack2 hpane hFrame False True
-    Just frame -> if toWidget hFrame == frame
+    Just frame -> if toWidget theFrame == frame
       then return ()
       else do
         containerRemove hpane frame
-        panedPack2 hpane hFrame False True
-
-changePropMenu (TypeGraph info) hpane (hFrame,tFrame) = do
-  panedchild <- panedGetChild2 hpane
-  case panedchild of
-    Nothing -> panedPack2 hpane tFrame False True
-    Just frame -> if toWidget tFrame == frame
-      then return ()
-      else do
-        containerRemove hpane frame
-        panedPack2 hpane tFrame False True
-
-changePropMenu _ _ _ = return ()
+        panedPack2 hpane theFrame False True
 
 drawGraph canvas (nodes, edges) = do
   context <- liftIO $ widgetGetPangoContext canvas

@@ -4,6 +4,7 @@ module Editor.UIBuilders
 , buildMaybeMenubar
 , buildTypeMenu
 , buildHostMenu
+, buildRuleMenu
 , buildTreePanel
 , buildHelpWindow
 , showError
@@ -210,7 +211,7 @@ buildHostMenu = do
   boxPackStart vBoxProps hBoxNodeType PackNatural 0
   labelNodeType <- labelNew $ Just "Tipo do Nodo: "
   boxPackStart hBoxNodeType labelNodeType PackNatural 0
-  comboBoxNodeType <- comboBoxNew
+  comboBoxNodeType <- comboBoxNewText
   boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
 
   -- cria uma HBOx para a propriedade Tipo da edge
@@ -218,7 +219,7 @@ buildHostMenu = do
   boxPackStart vBoxProps hBoxEdgeType PackNatural 0
   labelEdgeType <- labelNew $ Just "Tipo da Aresta: "
   boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
-  comboBoxEdgeType <- comboBoxNew
+  comboBoxEdgeType <- comboBoxNewText
   boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
 
   return (frame, entryName, comboBoxNodeType, comboBoxEdgeType, (hBoxNodeType, hBoxEdgeType))
@@ -243,9 +244,31 @@ buildRuleMenu = do
   boxPackStart hBoxName entryName PackGrow 0
   widgetSetCanFocus entryName True
 
+  -- cria uma HBox para a propriedade Tipo do nodo
+  hBoxNodeType <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxNodeType PackNatural 0
+  labelNodeType <- labelNew $ Just "Tipo do Nodo: "
+  boxPackStart hBoxNodeType labelNodeType PackNatural 0
+  comboBoxNodeType <- comboBoxNewText
+  boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
 
+  -- cria uma HBOx para a propriedade Tipo da edge
+  hBoxEdgeType <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxEdgeType PackNatural 0
+  labelEdgeType <- labelNew $ Just "Tipo da Aresta: "
+  boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
+  comboBoxEdgeType <- comboBoxNewText
+  boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
 
+  -- cria uma HBox para a propriedade Operação
+  hBoxOperation <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxOperation PackNatural 0
+  labelOperation <- labelNew $ Just "Operação: "
+  boxPackStart hBoxOperation labelOperation PackNatural 0
+  comboBoxOperation <- comboBoxNewText
+  boxPackStart hBoxOperation comboBoxOperation PackGrow 0
 
+  return (frame, entryName, comboBoxNodeType, comboBoxEdgeType, comboBoxOperation, (hBoxNodeType, hBoxEdgeType))
 
 
 buildTreePanel = do
