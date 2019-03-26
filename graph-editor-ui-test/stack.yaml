@@ -6,7 +6,7 @@ packages:
 
 extra-deps: 
 - gtk3-0.15.0
-- text-1.2.2.2
+#- text-1.2.2.2
 
 ghc-options:
   '$everything': -threaded

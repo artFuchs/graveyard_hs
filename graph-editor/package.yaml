@@ -36,12 +36,12 @@ executables:
     dependencies:
     - graph-editor
     - gtk3
+    - text
+    - parallel
+    - containers
+    - prettyprinter
     - cairo
     - pango
-    - text
-    - containers
-    - parallel
-    - prettyprinter
 
 tests:
   graph-editor-test:

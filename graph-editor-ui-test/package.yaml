@@ -36,6 +36,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - graph-editor-ui-test
+    - containers
     - text
     - gtk3
 
