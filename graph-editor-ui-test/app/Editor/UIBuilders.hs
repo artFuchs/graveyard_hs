@@ -128,13 +128,13 @@ buildTypeMenu = do
   containerAdd frame vBoxProps
 
   -- cria a label de titulo
-  titleLabel <- labelNew $ Just "Propriedades"
+  titleLabel <- labelNew $ Just "Inspector"
   boxPackStart vBoxProps titleLabel PackNatural 0
 
   -- cria uma HBox para a propriedade nome
   hBoxName <- hBoxNew False 8
   boxPackStart vBoxProps hBoxName PackNatural 0
-  labelName <- labelNew $ Just "Nome: "
+  labelName <- labelNew $ Just "Type name: "
   boxPackStart hBoxName labelName PackNatural 0
   entryName <- entryNew
   boxPackStart hBoxName entryName PackGrow 0
@@ -143,7 +143,7 @@ buildTypeMenu = do
   -- cria uma HBox para a propriedade cor
   hBoxColor <- hBoxNew False 8
   boxPackStart vBoxProps hBoxColor PackNatural 0
-  labelColor <- labelNew $ Just "Cor: "
+  labelColor <- labelNew $ Just "Color: "
   boxPackStart hBoxColor labelColor PackNatural 0
   colorBtn <- colorButtonNew
   boxPackStart hBoxColor colorBtn PackNatural 0
@@ -151,7 +151,7 @@ buildTypeMenu = do
   -- cria uma HBox para a propriedade cor da linha
   hBoxLineColor <- hBoxNew False 8
   boxPackStart vBoxProps hBoxLineColor PackNatural 0
-  labelLineColor <- labelNew $ Just "Cor da linha: "
+  labelLineColor <- labelNew $ Just "Line Color: "
   boxPackStart hBoxLineColor labelLineColor PackNatural 0
   lineColorBtn <- colorButtonNew
   boxPackStart hBoxLineColor lineColorBtn PackNatural 0
@@ -162,11 +162,11 @@ buildTypeMenu = do
   boxPackStart vBoxProps frameShape PackNatural 0
   vBoxShape <- vBoxNew False 8
   containerAdd frameShape vBoxShape
-  radioCircle <- radioButtonNewWithLabel "Circulo"
+  radioCircle <- radioButtonNewWithLabel "Circle"
   boxPackStart vBoxShape radioCircle PackGrow 0
-  radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Retangulo"
+  radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Rect"
   boxPackStart vBoxShape radioRect PackGrow 0
-  radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quadrado"
+  radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quad"
   boxPackStart vBoxShape radioQuad PackGrow 0
   let radioShapes = [radioCircle, radioRect, radioQuad]
 
@@ -194,13 +194,13 @@ buildHostMenu = do
   containerAdd frame vBoxProps
 
   -- cria a label de titulo
-  titleLabel <- labelNew $ Just "Propriedades"
+  titleLabel <- labelNew $ Just "Inspector"
   boxPackStart vBoxProps titleLabel PackNatural 0
 
   -- cria uma HBox para a propriedade nome
   hBoxName <- hBoxNew False 8
   boxPackStart vBoxProps hBoxName PackNatural 0
-  labelName <- labelNew $ Just "Type: "
+  labelName <- labelNew $ Just "Name: "
   entryName <- entryNew
   boxPackStart hBoxName labelName PackNatural 0
   boxPackStart hBoxName entryName PackGrow 0
@@ -209,7 +209,7 @@ buildHostMenu = do
   -- cria uma HBox para a propriedade Tipo do nodo
   hBoxNodeType <- hBoxNew False 8
   boxPackStart vBoxProps hBoxNodeType PackNatural 0
-  labelNodeType <- labelNew $ Just "Tipo do Nodo: "
+  labelNodeType <- labelNew $ Just "Node Type: "
   boxPackStart hBoxNodeType labelNodeType PackNatural 0
   comboBoxNodeType <- comboBoxNewText
   boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
@@ -217,7 +217,7 @@ buildHostMenu = do
   -- cria uma HBOx para a propriedade Tipo da edge
   hBoxEdgeType <- hBoxNew False 8
   boxPackStart vBoxProps hBoxEdgeType PackNatural 0
-  labelEdgeType <- labelNew $ Just "Tipo da Aresta: "
+  labelEdgeType <- labelNew $ Just "Edge Type: "
   boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
   comboBoxEdgeType <- comboBoxNewText
   boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
@@ -232,13 +232,13 @@ buildRuleMenu = do
   containerAdd frame vBoxProps
 
   -- cria a label de titulo
-  titleLabel <- labelNew $ Just "Propriedades"
+  titleLabel <- labelNew $ Just "Inspect"
   boxPackStart vBoxProps titleLabel PackNatural 0
 
   -- cria uma HBox para a propriedade nome
   hBoxName <- hBoxNew False 8
   boxPackStart vBoxProps hBoxName PackNatural 0
-  labelName <- labelNew $ Just "Nome: "
+  labelName <- labelNew $ Just "Name: "
   entryName <- entryNew
   boxPackStart hBoxName labelName PackNatural 0
   boxPackStart hBoxName entryName PackGrow 0
@@ -247,7 +247,7 @@ buildRuleMenu = do
   -- cria uma HBox para a propriedade Tipo do nodo
   hBoxNodeType <- hBoxNew False 8
   boxPackStart vBoxProps hBoxNodeType PackNatural 0
-  labelNodeType <- labelNew $ Just "Tipo do Nodo: "
+  labelNodeType <- labelNew $ Just "Node Type: "
   boxPackStart hBoxNodeType labelNodeType PackNatural 0
   comboBoxNodeType <- comboBoxNewText
   boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
@@ -255,7 +255,7 @@ buildRuleMenu = do
   -- cria uma HBOx para a propriedade Tipo da edge
   hBoxEdgeType <- hBoxNew False 8
   boxPackStart vBoxProps hBoxEdgeType PackNatural 0
-  labelEdgeType <- labelNew $ Just "Tipo da Aresta: "
+  labelEdgeType <- labelNew $ Just "Edge Type: "
   boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
   comboBoxEdgeType <- comboBoxNewText
   boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
@@ -263,7 +263,7 @@ buildRuleMenu = do
   -- cria uma HBox para a propriedade Operação
   hBoxOperation <- hBoxNew False 8
   boxPackStart vBoxProps hBoxOperation PackNatural 0
-  labelOperation <- labelNew $ Just "Operação: "
+  labelOperation <- labelNew $ Just "Operation: "
   boxPackStart hBoxOperation labelOperation PackNatural 0
   comboBoxOperation <- comboBoxNewText
   boxPackStart hBoxOperation comboBoxOperation PackGrow 0

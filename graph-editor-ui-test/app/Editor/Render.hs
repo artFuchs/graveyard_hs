@@ -20,17 +20,18 @@ renderNode node content selected context = do
   let (x,y) = position node
       (r,g,b) = fillColor node
       (rl,gl,bl) = lineColor node
-      (pw,ph) = dims node
+      (w,h) = dims node
 
   setSourceRGB r g b
   case shape node of
-    NCircle -> let radius = (max pw ph)/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl) selected
-    NRect -> renderRectangle (x, y, pw, ph) (r,g,b) (rl,gl,bl) selected
-    NQuad -> renderRectangle (x,y, (max pw ph), (max pw ph)) (r,g,b) (rl,gl,bl) selected
+    NCircle -> let radius = (max w h)/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl) selected
+    NRect -> renderRectangle (x, y, w, h) (r,g,b) (rl,gl,bl) selected
+    NQuad -> renderRectangle (x,y, (max w h), (max w h)) (r,g,b) (rl,gl,bl) selected
 
   setSourceRGB rl gl bl
-  moveTo (x-(pw/2-2)) (y-(ph/2-2))
   pL <- liftIO $ layoutText context content
+  (_, PangoRectangle _ _ pw ph) <- liftIO $ layoutGetExtents pL
+  moveTo (x-(pw/2)) (y-(ph/2))
   showLayout pL
 
 renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,Double,Double) -> Bool ->  Render ()
