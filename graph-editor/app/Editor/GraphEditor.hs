@@ -54,15 +54,15 @@ startGUI = do
   -- creates the menu bar
   (maybeMenubar,new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,hlp) <- buildMaybeMenubar
   -- creates the inspector panel on the right
-  (frameProps, entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildPropMenu
+  (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeMenu
   let
-    propWidgets = (entryNodeID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
+    propWidgets = (entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
   -- creates the tree panel on the left
   (treePanel, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
   -- creates the main window, containing the canvas and the built panels
-  (window, canvas) <- buildMainWindow maybeMenubar frameProps treePanel
+  (window, canvas, _) <- buildMainWindow maybeMenubar frameProps treePanel
   -- shows the main window
   widgetShowAll window
 
@@ -782,8 +782,8 @@ startGUI = do
 --------------------------------------------------------------------------------
 
 -- update the inspector --------------------------------------------------------
-updatePropMenu :: IORef EditorState -> IORef (Double,Double,Double) -> IORef (Double,Double,Double) -> (Entry, Entry, ColorButton, ColorButton, [RadioButton], [RadioButton]) -> (HBox, Frame, Frame)-> IO ()
-updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
+updatePropMenu :: IORef EditorState -> IORef (Double,Double,Double) -> IORef (Double,Double,Double) -> (Entry, ColorButton, ColorButton, [RadioButton], [RadioButton]) -> (HBox, Frame, Frame)-> IO ()
+updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
   est <- readIORef st
   let g = editorGetGraph est
       ns = filter (\n -> elem (nodeId n) $ fst $ editorGetSelected est) $ nodes g
@@ -794,7 +794,6 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
     (0,0) -> do
       (r, g, b)    <- readIORef currentC
       (r', g', b') <- readIORef currentLC
-      entrySetText entryID ""
       entrySetText entryName ""
       colorButtonSetColor colorBtn $ Color (round (r*65535)) (round (g*65535)) (round (b*65535))
       colorButtonSetColor lcolorBtn $ Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
@@ -810,7 +809,6 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
           nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
           nodeShape = shape gi
-      entrySetText entryID $ if n==1 then (show nid) else "----"
       entrySetText entryName name
       colorButtonSetColor colorBtn $ if n==1 then nodeColor else Color 49151 49151 49151
       colorButtonSetColor lcolorBtn $ if n==1 then nodeLineC else Color 49151 49151 49151
@@ -830,7 +828,6 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
           (r,g,b) = color gi
           edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           edgeStyle = style gi
-      entrySetText entryID $ if n == 1 then (show eid) else "----"
       entrySetText entryName name
       colorButtonSetColor lcolorBtn $ if n == 1 then edgeColor else Color 49151 49151 49151
       case (n,edgeStyle) of
@@ -843,7 +840,6 @@ updatePropMenu st currentC currentLC (entryID, entryName, colorBtn, lcolorBtn, r
       set frameShape [widgetVisible := False]
       set frameStyle [widgetVisible := True]
     _ -> do
-      entrySetText entryID "--"
       entrySetText entryName "----"
       colorButtonSetColor colorBtn $ Color 49151 49151 49151
       colorButtonSetColor lcolorBtn $ Color 49151 49151 49151

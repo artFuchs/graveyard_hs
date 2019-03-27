@@ -1,8 +1,10 @@
--- | Esse modulo contem a definição dos widgets da interface do usuario
+-- | This module contains the UI definition
 module Editor.UIBuilders
 ( buildMainWindow
 , buildMaybeMenubar
-, buildPropMenu
+, buildTypeMenu
+, buildHostMenu
+, buildRuleMenu
 , buildTreePanel
 , buildHelpWindow
 , showError
@@ -13,38 +15,41 @@ module Editor.UIBuilders
 import Graphics.UI.Gtk
 import qualified Data.Text as T
 
+-- builds the main window, containing the treepanel in the left,
+-- the canvas in the center,
+-- the inspector panel in the right
+-- and the menubar in the top of the window
 buildMainWindow maybeMenuBar frameProps treePanel = do
-  -- janela principal
+  -- main window
   window <- windowNew
-  set window  [ windowTitle         := "Graph Editor"
+  set window  [ windowTitle         := "Graph Editor - UI PROTOTYPE"
               , windowDefaultWidth  := 640
               , windowDefaultHeight := 480]
 
-  -- cria uma VBox para separar o editor do menu
+    -- creates a vBox to separate the editor and the menubar
   vBoxMain <- vBoxNew False 0
   containerAdd window vBoxMain
 
-  -- adiciona o menu
+  -- adds the menubar
   case maybeMenuBar of
     Just x -> boxPackStart vBoxMain x PackNatural 0
     Nothing -> return ()
 
-  -- cria um HPane para dividir a arvore de grafos e o editor
+  -- creates a HPane to add the treeView in the left
   hPaneTree <- hPanedNew
   boxPackStart vBoxMain hPaneTree PackGrow 0
   panedPack1 hPaneTree treePanel False True
 
-  -- cria um HPane para dividir o canvas e o menu de propriedades
-  hPaneAction <- hPanedNew
-  panedPack2 hPaneTree hPaneAction True False
-  panedPack2 hPaneAction frameProps False True
+  -- creates a HPane to add the canvas in the left and the inspector panel in the right
+  hPaneMain <- hPanedNew
+  panedPack2 hPaneTree hPaneMain True False
+  panedPack2 hPaneMain frameProps False True
 
-  -- cria um frame para englobar o canvas
+  -- creates a frame to englobe the canvas
   frameCanvas <- frameNew
   set frameCanvas [ frameShadowType := ShadowIn ]
-  -- adiciona o frame do Canvas
-  panedPack1 hPaneAction frameCanvas True True
-  -- cria um canvas em branco
+  panedPack1 hPaneMain frameCanvas True True
+  -- creates a blank canvas
   canvas <- drawingAreaNew
   containerAdd frameCanvas canvas
   widgetSetCanFocus canvas True
@@ -52,11 +57,11 @@ buildMainWindow maybeMenuBar frameProps treePanel = do
   widgetDelEvents canvas [SmoothScrollMask]
   widgetGrabFocus canvas
 
-  return (window, canvas)
+  return (window, canvas, hPaneMain)
 
 
 
--- constroi a menu toolbar
+-- create the menu toolbar
 buildMaybeMenubar = do
     fma <- actionNew "FMA" "File" Nothing Nothing
     new <- actionNew "NEW" "New Project" (Just "Just a stub") Nothing
@@ -117,68 +122,58 @@ buildMaybeMenubar = do
 \                </ui>"
 
 
--- constroi o painel do menu de propriedades
-buildPropMenu = do
+-- creates the inspector for typed graphs
+buildTypeMenu = do
   frame <- frameNew
   set frame [ frameShadowType := ShadowIn ]
 
   vBoxProps <- vBoxNew False 8
   containerAdd frame vBoxProps
 
-  -- cria a label de titulo
-  titleLabel <- labelNew $ Just "Propriedades"
+  -- creates the title label
+  titleLabel <- labelNew $ Just "Inspector"
   boxPackStart vBoxProps titleLabel PackNatural 0
 
-  -- cria uma HBox para a propriedade ID
-  hBoxID <- hBoxNew False 8
-  boxPackStart vBoxProps hBoxID PackNatural 0
-  labelID <- labelNew $ Just "ID: "
-  boxPackStart hBoxID labelID PackNatural 0
-  entryID <- entryNew
-  boxPackStart hBoxID entryID PackGrow 0
-  widgetSetCanFocus entryID False
-  set entryID [ entryEditable := False ]
-
-  -- cria uma HBox para a propriedade nome
+  -- creates a HBox containing a label and a entry for the user change the type name
   hBoxName <- hBoxNew False 8
   boxPackStart vBoxProps hBoxName PackNatural 0
-  labelName <- labelNew $ Just "Nome: "
+  labelName <- labelNew $ Just "Label: "
   boxPackStart hBoxName labelName PackNatural 0
   entryName <- entryNew
   boxPackStart hBoxName entryName PackGrow 0
   widgetSetCanFocus entryName True
 
-  -- cria uma HBox para a propriedade cor
+  -- creates a HBox containing a label and ColorButton to the user change the node color
   hBoxColor <- hBoxNew False 8
   boxPackStart vBoxProps hBoxColor PackNatural 0
-  labelColor <- labelNew $ Just "Cor: "
+  labelColor <- labelNew $ Just "Color: "
   boxPackStart hBoxColor labelColor PackNatural 0
   colorBtn <- colorButtonNew
   boxPackStart hBoxColor colorBtn PackNatural 0
 
-  -- cria uma HBox para a propriedade cor da linha
+  -- creates a HBox containing a label and a ColorButton to the user change the line and text color
   hBoxLineColor <- hBoxNew False 8
   boxPackStart vBoxProps hBoxLineColor PackNatural 0
-  labelLineColor <- labelNew $ Just "Cor da linha: "
+  labelLineColor <- labelNew $ Just "Line Color: "
   boxPackStart hBoxLineColor labelLineColor PackNatural 0
   lineColorBtn <- colorButtonNew
   boxPackStart hBoxLineColor lineColorBtn PackNatural 0
 
-  -- cria um frame contendo uma VBox para a propriedade Node Shape
+  -- creates a frame containing a VBox with radio buttons to the user change the node shape
   frameShape <- frameNew
   set frameShape [frameLabel := "Node Shape"]
   boxPackStart vBoxProps frameShape PackNatural 0
   vBoxShape <- vBoxNew False 8
   containerAdd frameShape vBoxShape
-  radioCircle <- radioButtonNewWithLabel "Circulo"
+  radioCircle <- radioButtonNewWithLabel "Circle"
   boxPackStart vBoxShape radioCircle PackGrow 0
-  radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Retangulo"
+  radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Rect"
   boxPackStart vBoxShape radioRect PackGrow 0
-  radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quadrado"
+  radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quad"
   boxPackStart vBoxShape radioQuad PackGrow 0
   let radioShapes = [radioCircle, radioRect, radioQuad]
 
-  -- cria um frame contendo uma VBox para a propriedade Edge Style
+  -- creates a frame conataining a VBox with radioButtons to the user change the edge shape
   frameStyle <- frameNew
   set frameStyle [frameLabel := "Edge Style"]
   boxPackStart vBoxProps frameStyle PackNatural 0
@@ -192,8 +187,94 @@ buildPropMenu = do
   boxPackStart vBoxStyle radioSlashed PackGrow 0
   let radioStyles = [radioNormal, radioPointed, radioSlashed]
 
-  return (frame, entryID, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))
+  return (frame, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))
 
+-- creates the inspector for the host graph
+buildHostMenu = do
+  frame <- frameNew
+  set frame [ frameShadowType := ShadowIn ]
+
+  vBoxProps <- vBoxNew False 8
+  containerAdd frame vBoxProps
+
+  -- creates a title label
+  titleLabel <- labelNew $ Just "Inspector"
+  boxPackStart vBoxProps titleLabel PackNatural 0
+
+  -- creates a HBox containing a entry for the user change the node label
+  hBoxLabel <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxLabel PackNatural 0
+  labelLabel <- labelNew $ Just "Label: "
+  entryLabel <- entryNew
+  boxPackStart hBoxLabel labelLabel PackNatural 0
+  boxPackStart hBoxLabel entryLabel PackGrow 0
+  widgetSetCanFocus entryLabel True
+
+  -- creates a HBox containing a ComboBox for the user change the node type
+  hBoxNodeType <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxNodeType PackNatural 0
+  labelNodeType <- labelNew $ Just "Node Type: "
+  boxPackStart hBoxNodeType labelNodeType PackNatural 0
+  comboBoxNodeType <- comboBoxNewText
+  boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
+
+  -- creates a HBox conataining a ComboBox for the user change the edge type
+  hBoxEdgeType <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxEdgeType PackNatural 0
+  labelEdgeType <- labelNew $ Just "Edge Type: "
+  boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
+  comboBoxEdgeType <- comboBoxNewText
+  boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
+
+  return (frame, entryLabel, comboBoxNodeType, comboBoxEdgeType, (hBoxNodeType, hBoxEdgeType))
+
+buildRuleMenu = do
+  frame <- frameNew
+  set frame [ frameShadowType := ShadowIn ]
+
+  vBoxProps <- vBoxNew False 8
+  containerAdd frame vBoxProps
+
+  -- creates the title label
+  titleLabel <- labelNew $ Just "Inspector"
+  boxPackStart vBoxProps titleLabel PackNatural 0
+
+  -- creates a HBox containing a entry for the user change the node label
+  hBoxLabel <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxLabel PackNatural 0
+  labelLabel <- labelNew $ Just "Label: "
+  entryLabel <- entryNew
+  boxPackStart hBoxLabel labelLabel PackNatural 0
+  boxPackStart hBoxLabel entryLabel PackGrow 0
+  widgetSetCanFocus entryLabel True
+
+  -- creates a HBox containing a ComboBox for the user change the node type
+  hBoxNodeType <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxNodeType PackNatural 0
+  labelNodeType <- labelNew $ Just "Node Type: "
+  boxPackStart hBoxNodeType labelNodeType PackNatural 0
+  comboBoxNodeType <- comboBoxNewText
+  boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
+
+  -- creates a HBox containing a ComboBox for the user change the edge type
+  hBoxEdgeType <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxEdgeType PackNatural 0
+  labelEdgeType <- labelNew $ Just "Edge Type: "
+  boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
+  comboBoxEdgeType <- comboBoxNewText
+  boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
+
+  -- creates a HBox containing a ComboBox for the user change the operation to be applyed in the graph element
+  hBoxOperation <- hBoxNew False 8
+  boxPackStart vBoxProps hBoxOperation PackNatural 0
+  labelOperation <- labelNew $ Just "Operation: "
+  boxPackStart hBoxOperation labelOperation PackNatural 0
+  comboBoxOperation <- comboBoxNewText
+  boxPackStart hBoxOperation comboBoxOperation PackGrow 0
+
+  return (frame, entryLabel, comboBoxNodeType, comboBoxEdgeType, comboBoxOperation, (hBoxNodeType, hBoxEdgeType))
+
+-- creates the treePanel
 buildTreePanel = do
   vboxTree <- vBoxNew False 0
   treeview <- treeViewNew
@@ -223,18 +304,20 @@ buildHelpWindow = do
   helpWindow <- windowNew
   set helpWindow  [ windowTitle         := "Graph Editor - Help"]
   helpBuffer <- textBufferNew Nothing
-  textBufferInsertAtCursor helpBuffer "Instruções: \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão direito do mouse no espaço vazio para criar um novo nodo. \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta para seleciona-lo(a). \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta + Shift para adiciona-lo à seleção. \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um nodo/aresta + Shift + Ctrl para removê-lo da seleção. \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão esquerdo sobre um espaço vazio e arraste o mouse para criar uma àrea de seleção. Os nodos/arestas que estiverem dentro dessa área serão selecionados. \n"
-  textBufferInsertAtCursor helpBuffer "Clique com o botão direito sobre um nodo para criar arestas dos nodos selecionados para ele. \n"
-  textBufferInsertAtCursor helpBuffer "Para modificar as propriedades de um nodo/aresta, selecione-o e utiliza o menu de propriedades à direita. \n"
-  textBufferInsertAtCursor helpBuffer "Use Ctrl + roda do mouse ou Ctrl + [+/-] para aumentar/reduzir o zoom. \n"
-  textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] para restaurar o zoom para o original. \n"
-  textBufferInsertAtCursor helpBuffer "Pressione o botão do meio do mouse, ou Ctrl + botão direito do mouse para navegar pelo canvas. \n"
-
+  textBufferInsertAtCursor helpBuffer "<Creating and selecting>: \n"
+  textBufferInsertAtCursor helpBuffer "Click with the right mouse button in a blank space to create a new node. \n"
+  textBufferInsertAtCursor helpBuffer "Click with the left mouse button in a node/edge to select it. \n"
+  textBufferInsertAtCursor helpBuffer "Click with the left button in a node/edge while the Shift key is pressed to add it to the selection. \n"
+  textBufferInsertAtCursor helpBuffer "Click with the left button in a node/edge while the Shift and Ctrl keys are pressed to remove it from the selection. \n"
+  textBufferInsertAtCursor helpBuffer "Click with the right button in a node while there's other nodes selected to create edges from the selected nodes to it. \n"
+  textBufferInsertAtCursor helpBuffer "<Changing the node properties>: \n"
+  textBufferInsertAtCursor helpBuffer "To change the properties of a node/edge, select it and use the inspector on the right. \n"
+  textBufferInsertAtCursor helpBuffer "Double-clicking a node or edge, or pressing F2 will focus on the name entry box on the inspector panel. \n"
+  textBufferInsertAtCursor helpBuffer "<zoom and navigation>: \n"
+  textBufferInsertAtCursor helpBuffer "Use Ctrl + mouse wheel or Ctrl + [+/-] to change the zoom level. \n"
+  textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] to change the zoom level to the original. \n"
+  textBufferInsertAtCursor helpBuffer "Hold the middle mouse button, or Ctrl + right mouse button, to navigate throught the canvas. \n"
+  textBufferInsertAtCursor helpBuffer "Press ctrl + 0 to return to the initial position of the canvas and reset the zoom to the original. \n"
   helpView <- textViewNewWithBuffer helpBuffer
   containerAdd helpWindow helpView
 
