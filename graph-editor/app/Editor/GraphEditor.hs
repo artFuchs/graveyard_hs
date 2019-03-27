@@ -1167,12 +1167,11 @@ updateSavedState sst store = do
   writeIORef sst newSavedState
 
 -- Tarefas ---------------------------------------------------------------------
--- *TypeGraph
+-- * Mudar a linguagem da interface toda para inglês
+-- * Perguntar se o usuario quer salvar o grafo no caso de ativar a ação 'new'
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
--- *Indicar em qual grafo está a mudança do projeto
--- *Usar
 
 -- Feito -----------------------------------------------------------------------
 -- *Melhorar menu de Propriedades
@@ -1195,3 +1194,5 @@ updateSavedState sst store = do
 -- *Espaçar edges quando houver mais de uma aresta entre dois nodos e ela estiver centralizada
 -- *Removida a opção "Insert Emoji" do menu da treeView, porque a ativação estava fazendo o programa encerrar.
 -- *Arrumado bug que fazia o programa encerrar ao salvar com algum grafo que não o primeiro selecionado.
+-- *Indicar em qual grafo está a mudança do projeto
+-- *Mudar a linguagem dos comentários para inglês

@@ -1,4 +1,4 @@
--- | Módulo contendo funções auxiliares relacionadas com a geometria
+-- | Module containing auxiliar functions related with the geometry
 module Editor.Helper
 ( pointDistance
 , pointLineDistance
@@ -17,36 +17,36 @@ import Data.Fixed
 
 
 
--- | calcula a distancia entre dois pontos
+-- | calculates the distance between two points
 pointDistance :: (Double,Double) -> (Double,Double) -> Double
 pointDistance (x1,y1) (x2,y2) = sqrt $ (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
 
--- | calcula a distancia de um ponto para uma reta
+-- | calculates the distance between a point and a line
 pointLineDistance :: (Double,Double) -> (Double,Double) -> (Double,Double) -> Double
 pointLineDistance (x0,y0) (x1,y1) (x2,y2) = ( abs $ (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 - y2*x1 ) / (pointDistance (x1,y1) (x2,y2))
 
--- faz a adição de do
+-- | adds two points
 addPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)
 addPoint (a,b) (c,d) = (a+c,b+d)
 
--- | multiplicação de dois pontos
+-- | multiply two points
 multPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)
 multPoint (a,b) (c,d) = (a*c,b*d)
 
--- | calcula o ponto médio entre dois pontos
+-- | calculates the center of two points
 midPoint :: (Double,Double) -> (Double,Double) -> (Double,Double)
 midPoint (x1,y1) (x2,y2) = (x1 + (x2-x1)/2, y1 + (y2-y1)/2)
 
--- | calcula um novo ponto dado um angulo, disntancia e um ponto inicial
+-- | given an angle, distance and a initial point, calculates a new point.
 pointAt :: Double -> Double -> (Double,Double) -> (Double,Double)
 pointAt ang dist (x,y) = (x + dist*cos(ang), y + dist*sin(ang))
 
--- | verifica se um ponto está dentro de um retangulo
--- faz o calculo considerando a posição do retangulo como sendo seu centro
+-- | check if a point is inside a rectangle
+-- considers the rectangle position as it's center
 pointInsideRectangle :: (Double,Double) -> (Double,Double,Double,Double) -> Bool
 pointInsideRectangle (x,y) (rx,ry,rw,rh) = (abs (x - rx) <= rw/2) && (abs (y - ry) <= rh/2)
 
--- | angulo entre dois pontos
+-- | angle between tow points
 angle :: (Double,Double) -> (Double,Double) -> Double
 angle (a,b) (c,d) =
   case (dx `compare` 0,dy `compare` 0) of
@@ -62,7 +62,7 @@ angle (a,b) (c,d) =
    where  dy = d-b
           dx = c-a
 
--- | quadrante do angulo
+-- | quadrant of an angle
 quadrant :: Double -> (Double,Double)
 quadrant ang = (c,d)
   where a = ang `mod'` pi
@@ -70,11 +70,11 @@ quadrant ang = (c,d)
         c = if (abs a) <= pi/2 then 1 else -1
         d = if b < pi then 1 else -1
 
--- | Aplica uma função em um par
+-- | Apply a function in a pair
 applyPair :: (a->b) -> (a,a) -> (b,b)
 applyPair f (a,b) = (f a, f b)
 
--- | gera um ponto em uma reta dada por dois pontos no tempo t
+-- | calculate a point of a line specified by two points in the time t
 interpolate :: (Double,Double) -> (Double,Double) -> Double -> (Double,Double)
 interpolate (x0,y0) (x1,y1) t = (x,y)
   where

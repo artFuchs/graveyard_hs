@@ -37,15 +37,16 @@ type GIPos = (Double,Double)
 type GIDim = (Double,Double)
 type GIColor = (Double,Double,Double)
 
--- estrutura auxiliar - define a forma de um nodo
+
 data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
 
--- estrutura de dados para desenhar um nodo
--- position : posição do nodo
--- color : cor de preenchimento
--- lineColor : cor da linha e texto
--- dims : dimensões do nodo
--- shape : forma do nodo
+-- data struct to draw a node.
+-- contains:
+-- position - the position where the no is draw in the canvas
+-- fillColor - the color to fill the node with
+-- lineColor - the color to draw the line surrounding the node and it's label
+-- dims - dimensions of the node, it's used differently according with the shape of the node
+-- shape - specifies if the node is drawn as a Circle, Rectangle or Square
 data NodeGI = NodeGI { position :: GIPos
                      , fillColor :: GIColor
                      , lineColor :: GIColor
@@ -55,10 +56,12 @@ data NodeGI = NodeGI { position :: GIPos
 
 data EdgeStyle = ENormal | EPointed | ESlashed deriving (Eq ,Show, Read)
 
--- estrutura de dados para desenhar uma aresta
--- cPosition : posição do ponto de controle
--- color : cor da linha e texto
--- centered : se a aresta deve se manter centralizada entre dois nodos ou não
+-- data struct to draw an edge.
+-- contains:
+-- cPosition - position of the control points.
+-- color - line and label color.
+-- centered - if the control point of the edge must be kept on the center of two nodes or not.
+-- style - specifies how the edge is rendered: if as a solid line, as a slashed line or as a pointed line.
 data EdgeGI = EdgeGI { cPosition :: GIPos
                      , color :: GIColor
                      , centered :: Bool
@@ -80,7 +83,7 @@ newEdgeGI = EdgeGI { cPosition = (0,0)
                    , style = ENormal
                    }
 
--- métodos para "modificar" um NodeGI
+-- methods to "modify" a nodeGI
 nodeGiSetPosition :: (Double, Double) -> NodeGI -> NodeGI
 nodeGiSetPosition pos gi = NodeGI { position = pos
                               , fillColor = fillColor gi
@@ -121,7 +124,7 @@ nodeGiSetShape s gi = NodeGI { position = position gi
                              , shape = s
                              }
 
--- métodos para "modificar" um EdgeGI
+-- methods to "modify" an edgeGI
 edgeGiSetPosition :: (Double,Double) -> EdgeGI -> EdgeGI
 edgeGiSetPosition pos gi = EdgeGI { cPosition = pos
                                   , color = color gi

@@ -1,4 +1,4 @@
--- | módulo contendo funções relacionadas com o rendering do grafo
+-- | module containing functions related with the rendering of a graph
 module Editor.Render
 ( renderNode
 , renderEdge
@@ -14,7 +14,7 @@ import Editor.Helper
 import Control.Monad
 
 
--- desenha um nodo, com seu texto
+-- draw a node with it's label
 renderNode :: NodeGI -> String -> Bool -> PangoContext -> Render ()
 renderNode node content selected context = do
   let (x,y) = position node
@@ -66,7 +66,7 @@ renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) selected = do
   stroke
 
 
--- desenha uma aresta
+-- draws an edge
 renderEdge :: EdgeGI -> String -> Bool -> NodeGI -> NodeGI -> PangoContext -> Render ()
 renderEdge edge content selected nodeSrc nodeDst context = do
   if nodeSrc == nodeDst
@@ -90,7 +90,7 @@ renderEdge edge content selected nodeSrc nodeDst context = do
 
 renderNormalEdge :: EdgeGI -> Bool -> NodeGI -> NodeGI -> Render ()
 renderNormalEdge edge selected nodeSrc nodeDst = do
-  -- calculo dos pontos de intersecção da aresta com os nodos de origem e destino
+  -- calculate the intersection points of the edge with the source and target nodes
   let (x1, y1) = position nodeSrc
       (pw, ph) = dims nodeSrc
       (x2, y2) = position nodeDst
@@ -112,7 +112,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
           in (x2 - vx2*n2, y2 - vy2*n2)
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
         NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
-      -- cor da aresta
+
       (r,g,b) = color edge
 
   if selected
@@ -125,7 +125,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
       stroke
     else return ()
 
-  -- desenha uma linha representando a aresta
+  -- draw a line representing the edge
   setLineWidth 2
   setSourceRGB r g b
   case style edge of
@@ -141,7 +141,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
       drawSlashedLine (x1',y1') (xe,ye)
       drawSlashedLine (xe,ye) (x2',y2')
 
-  -- desenha uma seta para indicar qual é o nó de destino
+  -- draws an arrow pointing to the target node
   let a = (angle (xe,ye) (x2,y2))
       d = pointDistance (xe,ye) (x2,y2)
       (xa1,ya1) = (x2',y2')
@@ -152,7 +152,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
   lineTo xa3 ya3
   lineTo xa1 ya1
   fill
-  -- desenha um circulo para mostar o ponto de controle
+  -- draws a circle to show the edge's control point
   arc xe  ye 2 0 (2*pi)
   fill
 
@@ -180,7 +180,7 @@ renderLoop edge selected node = do
       stroke
     else return ()
 
-  -- desenha uma curva levando ao próprio nodo
+  -- draws a bezier curve pointing to the node itself
   setSourceRGB rl gl bl
   setLineWidth 2
   case style edge of
@@ -196,19 +196,9 @@ renderLoop edge selected node = do
     ESlashed -> do
       drawSlashedCurve (x,y) p1 p2 (xe,ye)
       drawSlashedCurve (x,y) p1' p2' (xe,ye)
-  -- desenha um arco para mostrar o ponto de controle
+  -- draws a circle to show the edge's control point
   arc f g 2 0 (2*pi)
   fill
-
-
--- Retorna o ponto de intersecção de uma linha com um retangulo
--- recebe o ponto inicial da linha e a representação do retangulo (x,y,w,h)
-intersectLineRect :: (Double,Double) -> (Double,Double,Double,Double) -> (Double,Double)
-intersectLineRect (lx,ly) (rx,ry,rw,rh) = (rx + t*(lx - rx), ry + t*(ly - ry))
-  where t = min tx ty
-        tx = (rw/2) / abs (lx - rx)
-        ty = (rh/2) / abs (ly - ry)
-
 
 drawPointedLine :: (Double,Double) -> (Double,Double) -> Render ()
 drawPointedLine p1@(x1,y1) p2@(x2,y2)= do
@@ -252,11 +242,6 @@ drawSlashedLine p0@(x0,y0) p1@(x1,y1) = do
     forM linePoints (\(t0,t1) -> drawSlashInLine p0 p1 t0 t1)
     return ()
 
-genPairs :: [a] -> [(a,a)]
-genPairs [] = []
-genPairs (x:[]) = []
-genPairs (x:y:ls) = (x,y):(genPairs ls)
-
 drawSlashInLine :: (Double,Double) -> (Double,Double) -> Double -> Double ->  Render ()
 drawSlashInLine p0@(x0,y0) p1@(x1,y1) t0 t1 = do
   let
@@ -289,3 +274,21 @@ drawSlashInCurve p0@(x0,y0) p1@(x1,y1) p2@(x2,y2) p3@(x3,y3) t1 t2 = do
   moveTo x y
   lineTo x' y'
   stroke
+
+-- auxiliar functions not directly related with rendering ----------------------
+--------------------------------------------------------------------------------
+
+-- auxiliar function used in the functions 'drawSlashedLine' and 'drawSlashedCurve'
+genPairs :: [a] -> [(a,a)]
+genPairs [] = []
+genPairs (x:[]) = []
+genPairs (x:y:ls) = (x,y):(genPairs ls)
+
+-- calculates the intersection point of a line with a rectangle
+-- receives the init point of the line and the rectangle representation
+-- used in the function 'renderNormalEdge'
+intersectLineRect :: (Double,Double) -> (Double,Double,Double,Double) -> (Double,Double)
+intersectLineRect (lx,ly) (rx,ry,rw,rh) = (rx + t*(lx - rx), ry + t*(ly - ry))
+  where t = min tx ty
+        tx = (rw/2) / abs (lx - rx)
+        ty = (rh/2) / abs (ly - ry)
