@@ -346,42 +346,16 @@ startGUI = do
     return True
 
   -- event bindings for the menu toolbar ---------------------------------------
-  -- new project action activated
-  new `on` actionActivated $ do
-    writeIORef fileName Nothing
-    treeViewSetCursor treeview [0] Nothing
-    listStoreClear store
-    listStoreAppend store ("new", emptyES, [], [], "white")
-    writeIORef st emptyES
-    writeIORef undoStack []
-    writeIORef redoStack []
-    writeIORef lastSavedState []
-    writeIORef changedProject False
-    writeIORef changedGraph [False]
-    set window [windowTitle := "Graph Editor"]
-    widgetQueueDraw canvas
 
-  -- open project
-  opn `on` actionActivated $ do
-    mg <- loadFile window loadProject
-    case mg of
-      Just (list,fn) -> do
-        if length list > 0
-          then do
-            listStoreClear store
-            let plist = map (\(n,e) -> (n,e,[],[],"white")) list
-            forM plist (listStoreAppend store)
-            let (name,es) = list!!0
-            writeIORef st es
-            writeIORef fileName $ Just fn
-            writeIORef undoStack []
-            writeIORef redoStack []
-            writeIORef changedProject False
-            writeIORef changedGraph [False]
-            set window [windowTitle := "Graph Editor - " ++ fn]
-            widgetQueueDraw canvas
-          else return ()
-      Nothing -> return ()
+  -- auxiliar functions to create/open/save the project
+  -- auxiliar function to prepare the treeStore to save
+  let prepToSave = do currentES <- readIORef st
+                      undo <- readIORef undoStack
+                      redo <- readIORef redoStack
+                      [path] <- readIORef currentGraph
+                      gs <- listStoreGetValue store path
+                      let (name, c) = (graphStoreName gs, graphStoreColor gs)
+                      listStoreSetValue store path (name, currentES, undo, redo, c)
 
   -- auxiliar function to clean the flags after saving
   let afterSave = do  size <- listStoreGetSize store
@@ -393,31 +367,78 @@ startGUI = do
                       indicateProjChanged window False
                       updateSavedState lastSavedState store
 
+  -- auxiliar function to check if the project was changed
+  -- it does the checking and if no, ask the user if them want to save.
+  -- returns True if there's no changes, if the user don't wanted to save or if he wanted and the save operation was successfull
+  -- returns False if the user wanted to save and the save operation failed or opted to cancel.
+  let confirmOperation = do changed <- readIORef changedProject
+                            response <- if changed
+                              then createCloseDialog (Just window) "The project was changed, wants to save?"
+                              else return ResponseNo
+                            case response of
+                              ResponseCancel -> return False
+                              r -> case r of
+                                ResponseNo -> return True
+                                ResponseYes -> do
+                                  prepToSave
+                                  saveFile store saveProject fileName window True -- returns True if saved the file
+
+  -- new project action activated
+  new `on` actionActivated $ do
+    continue <- confirmOperation
+    if continue
+      then do
+        writeIORef fileName Nothing
+        treeViewSetCursor treeview [0] Nothing
+        listStoreClear store
+        listStoreAppend store ("new", emptyES, [], [], "white")
+        writeIORef st emptyES
+        writeIORef undoStack []
+        writeIORef redoStack []
+        writeIORef lastSavedState []
+        writeIORef changedProject False
+        writeIORef changedGraph [False]
+        set window [windowTitle := "Graph Editor"]
+        widgetQueueDraw canvas
+      else return ()
+
+  -- open project
+  opn `on` actionActivated $ do
+    continue <- confirmOperation
+    if continue
+      then do
+        mg <- loadFile window loadProject
+        case mg of
+          Just (list,fn) -> do
+            if length list > 0
+              then do
+                listStoreClear store
+                let plist = map (\(n,e) -> (n,e,[],[],"white")) list
+                forM plist (listStoreAppend store)
+                let (name,es) = list!!0
+                writeIORef st es
+                writeIORef fileName $ Just fn
+                writeIORef undoStack []
+                writeIORef redoStack []
+                writeIORef changedProject False
+                writeIORef changedGraph [False]
+                set window [windowTitle := "Graph Editor - " ++ fn]
+                widgetQueueDraw canvas
+              else return ()
+          Nothing -> return ()
+        else return ()
 
   -- save project
   svn `on` actionActivated $ do
-    currentES <- readIORef st
-    undo <- readIORef undoStack
-    redo <- readIORef redoStack
-    [path] <- readIORef currentGraph
-    gs <- listStoreGetValue store path
-    let (name, c) = (graphStoreName gs, graphStoreColor gs)
-    listStoreSetValue store path (name, currentES, undo, redo, c)
+    prepToSave
     saved <- saveFile store saveProject fileName window True
     if saved
       then afterSave
       else return ()
 
-
   -- save project as
   sva `on` actionActivated $ do
-    currentES <- readIORef st
-    undo <- readIORef undoStack
-    redo <- readIORef redoStack
-    [path] <- readIORef currentGraph
-    gs <- listStoreGetValue store path
-    let (name, c) = (graphStoreName gs, graphStoreColor gs)
-    listStoreSetValue store path (name, currentES, undo, redo, c)
+    prepToSave
     saved <- saveFileAs store saveProject fileName window True
     if saved
       then afterSave
@@ -751,27 +772,12 @@ startGUI = do
   -- event bindings for the main window ----------------------------------------
   -- when click in the close button, the application must close
   window `on` deleteEvent $ do
-    changes <- liftIO $ readIORef changedProject
-    response <- liftIO $ if changes
-      then createCloseDialog (Just window) "O projeto foi modificado, deseja salvar?"
-      else return ResponseNo
-    case response of
-      ResponseNo -> do
+    continue <- liftIO $ confirmOperation
+    if continue
+      then do
         liftIO mainQuit
         return False
-      ResponseYes -> liftIO $ do
-        currentES <- readIORef st
-        [path] <- readIORef currentGraph
-        gs <- listStoreGetValue store path
-        let (name, color) = (graphStoreName gs, graphStoreColor gs)
-        listStoreSetValue store path (name, currentES, [], [], color)
-        saved <- saveFile store saveProject fileName window True
-        if saved
-          then do
-            mainQuit
-            return False
-          else return True
-      ResponseCancel -> return True
+      else return True
 
   -- run the preogram ----------------------------------------------------------
   mainGUI
@@ -1163,11 +1169,10 @@ updateSavedState sst store = do
   writeIORef sst newSavedState
 
 -- Tarefas ---------------------------------------------------------------------
--- * Mudar a linguagem da interface toda para inglês
--- * Perguntar se o usuario quer salvar o grafo no caso de ativar a ação 'new'
 
 -- Progresso -------------------------------------------------------------------
 -- *Criar uma janela de ajuda
+-- *Mudar a linguagem da interface toda para inglês
 
 -- Feito -----------------------------------------------------------------------
 -- *Melhorar menu de Propriedades
@@ -1192,3 +1197,4 @@ updateSavedState sst store = do
 -- *Arrumado bug que fazia o programa encerrar ao salvar com algum grafo que não o primeiro selecionado.
 -- *Indicar em qual grafo está a mudança do projeto
 -- *Mudar a linguagem dos comentários para inglês
+-- *Perguntar se o usuario quer salvar o grafo no caso de ativar a ação 'new'
