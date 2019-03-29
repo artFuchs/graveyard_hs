@@ -692,6 +692,16 @@ startGUI = do
         widgetQueueDraw canvas
 
   -- event bindings for the graphs' tree ---------------------------------------
+
+  -- auxiliar
+  let loadFromStore path = do
+                      (_,newEs, newU, newR, _) <- listStoreGetValue store path
+                      writeIORef st newEs
+                      writeIORef undoStack newU
+                      writeIORef redoStack newR
+                      writeIORef currentGraph [path]
+
+
   -- changed the selected graph
   treeview `on` cursorChanged $ do
     selection <- treeViewGetSelection treeview
@@ -712,11 +722,7 @@ startGUI = do
             let (name, color) = (graphStoreName gs, graphStoreColor gs)
             listStoreSetValue store currentPath (name,currentES, u, r, color)
             -- load the selected graph from the tree
-            (_,newEs, newU, newR, _) <- listStoreGetValue store path
-            writeIORef st newEs
-            writeIORef undoStack newU
-            writeIORef redoStack newR
-            writeIORef currentGraph [path]
+            loadFromStore path
             -- update canvas
             widgetQueueDraw canvas
 
@@ -742,7 +748,7 @@ startGUI = do
             modifyIORef changedGraph (\cg -> take path cg)
           (True, False) -> do
             listStoreRemove store path
-            treeViewSetCursor treeview [path] Nothing
+            loadFromStore path -- load the graph of the next entry
             modifyIORef changedGraph (\cg -> take path cg ++ drop (path+1) cg)
           (False, True) -> do
             listStoreSetValue store 0 ("new",emptyES,[],[],"green")
@@ -901,7 +907,7 @@ saveFile x saveF fileName window changeFN = do
       case tentativa of
         True -> return True
         False -> do
-          showError (Just window) $ "Não foi possível escrever no arquivo " ++ path
+          showError (Just window) $ "Couldn't write to file." ++ path
           return False
     Nothing -> saveFileAs x saveF fileName window changeFN
 
@@ -925,7 +931,7 @@ saveFileAs x saveF fileName window changeFN = do
               return $ Just path
             False -> do
               widgetDestroy saveD
-              showError (Just window) $ "Não foi possível escrever no arquivo " ++ path
+              showError (Just window) $ "Couldn't write to file." ++ path
               return Nothing
     _  -> do
       widgetDestroy saveD
