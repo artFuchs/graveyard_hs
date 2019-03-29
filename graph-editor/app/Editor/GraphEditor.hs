@@ -74,6 +74,7 @@ startGUI = do
     Just col -> do
       treeViewSetModel treeview (Just store)
       cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_,color) -> [cellText := name, cellTextBackground := color]
+      treeViewSetCursor treeview [0] Nothing
 
   ------------------------------------------------------------------------------
   -- init the editor variables  ------------------------------------------------
@@ -253,7 +254,7 @@ startGUI = do
             writeIORef st newEs
             updatePropMenu st currentC currentLC propWidgets propBoxes
           ((n,e), Nothing) -> modifyIORef st (adjustEdges)
-          (_,_) -> return ()
+          _ -> return ()
       _ -> return ()
     liftIO $ do
       writeIORef squareSelection Nothing
@@ -277,12 +278,12 @@ startGUI = do
       _ -> return ()
     return True
 
+
   -- keyboard
   canvas `on` keyPressEvent $ do
     k <- eventKeyName
     ms <- eventModifierAll
     liftIO $ do
-      pos <- readIORef oldPoint
       context <- widgetGetPangoContext canvas
       case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
         -- <delete> : delete selection
@@ -292,6 +293,29 @@ startGUI = do
           stackUndo undoStack redoStack es
           setChangeFlags window store changedProject changedGraph currentGraph True
           widgetQueueDraw canvas
+        -- CTRL + [SHIFT] + A : [de]select all
+        (True, True, "a") -> do
+          modifyIORef st $ editorSetSelected ([],[])
+          widgetQueueDraw canvas
+        (True, False, "a") -> do
+          modifyIORef st (\es -> let g = editorGetGraph es
+                                 in editorSetSelected (nodeIds g, edgeIds g) es)
+          widgetQueueDraw canvas
+        -- F2 - rename selection
+        (False,False,"f2") -> widgetGrabFocus entryName
+        -- CTRL + C/V/X : copy/paste/cut
+        (True, False, "c") -> actionActivate cpy
+        (True, False, "v") -> actionActivate pst
+        (True, False, "x") -> actionActivate cut
+        _       -> return ()
+    return True
+
+  window `on` keyPressEvent $ do
+    k <- eventKeyName
+    ms <- eventModifierAll
+    liftIO $ do
+      context <- widgetGetPangoContext canvas
+      case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
         -- CTRL + <+>/<->/<=> : zoom controls
         (True,_,"plus") -> do
           modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
@@ -306,17 +330,14 @@ startGUI = do
         (True,_,"0") -> do
           modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
           widgetQueueDraw canvas
-        -- CTRL + [SHIFT] + A : select/desselect all
-        (True, True, "a") -> do
-          modifyIORef st $ editorSetSelected ([],[])
-          widgetQueueDraw canvas
-        (True, False, "a") -> do
-          modifyIORef st (\es -> let g = editorGetGraph es
-                                 in editorSetSelected (nodeIds g, edgeIds g) es)
-          widgetQueueDraw canvas
 
-        -- CTRL + N : create a new file
-        (True, False, "n") -> do
+        -- CTRL + N : create a new graph in the treeView
+        (True, False, "n") -> buttonClicked btnNew
+        -- CTRL + W : remove a graph from the treeView
+        (True, False, "w") -> buttonClicked btnRmv
+
+        -- CTRL + SHIFT + N : create a new file
+        (True, True, "n") -> do
           modifyIORef st (\es -> (G.empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
           listStoreClear store
           listStoreAppend store ("new",emptyES,[], [], "white")
@@ -335,15 +356,8 @@ startGUI = do
         -- CTRL + Z/R : undo/redo
         (True, False, "z") -> actionActivate udo
         (True, False, "r") -> actionActivate rdo
-        -- CTRL + C/V/X : copy/paste/cut
-        (True, False, "c") -> actionActivate cpy
-        (True, False, "v") -> actionActivate pst
-        (True, False, "x") -> actionActivate cut
-        -- F2 - rename selection
-        (False,False,"f2") -> widgetGrabFocus entryName
-        _       -> return ()
-
-    return True
+        _ -> return ()
+    return False
 
   -- event bindings for the menu toolbar ---------------------------------------
 
