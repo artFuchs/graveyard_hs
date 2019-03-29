@@ -230,7 +230,8 @@ adjustEdges es = editorSetGI (ngiM,newEgiM) es
   where graph = editorGetGraph es
         (ngiM,egiM) = editorGetGI es
         adjust = (\giM eid -> case lookupEdge eid graph of
-          Just edge ->  let
+          Nothing -> giM
+          Just edge -> let
                           srcPos = position $ getNodeGI (fromEnum $ sourceId edge) ngiM
                           dstPos = position $ getNodeGI (fromEnum $ targetId edge) ngiM
                           gi = getEdgeGI (fromEnum eid) egiM
