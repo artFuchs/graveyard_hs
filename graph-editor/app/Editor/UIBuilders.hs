@@ -22,7 +22,7 @@ import qualified Data.Text as T
 buildMainWindow maybeMenuBar frameProps treePanel = do
   -- main window
   window <- windowNew
-  set window  [ windowTitle         := "Graph Editor - UI PROTOTYPE"
+  set window  [ windowTitle         := "Graph Editor"
               , windowDefaultWidth  := 640
               , windowDefaultHeight := 480]
 
