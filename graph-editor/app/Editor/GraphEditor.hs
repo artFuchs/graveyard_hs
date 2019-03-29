@@ -380,6 +380,11 @@ startGUI = do
                       forM [0..(size-1)] $ \i -> let (n,e,u,r,_) = list!!i in listStoreSetValue store i (n,e,u,r,"white")
                       indicateProjChanged window False
                       updateSavedState lastSavedState store
+                      filename <- readIORef fileName
+                      case filename of
+                        Nothing -> set window [windowTitle := "Graph Editor"]
+                        Just fn -> set window [windowTitle := "Graph Editor - " ++ fn]
+
 
   -- auxiliar function to check if the project was changed
   -- it does the checking and if no, ask the user if them want to save.
@@ -447,7 +452,7 @@ startGUI = do
     prepToSave
     saved <- saveFile store saveProject fileName window True
     if saved
-      then afterSave
+      then do afterSave
       else return ()
 
   -- save project as
