@@ -1,3 +1,5 @@
 .stack-work/
 graph-editor.cabal
+*.hi
+*.o
 *~
