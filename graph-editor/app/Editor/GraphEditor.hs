@@ -1032,7 +1032,8 @@ createNode' :: IORef EditorState -> GIPos -> PangoContext -> NodeShape -> GIColo
 createNode' st pos context nshape color lcolor = do
   es <- readIORef st
   let nid = head $ newNodes (editorGetGraph es)
-      content = "node " ++ show nid
+      --content = "node " ++ show nid
+      content = ""
   dim <- getStringDims content context
   writeIORef st $ createNode es pos dim content nshape color lcolor
 
