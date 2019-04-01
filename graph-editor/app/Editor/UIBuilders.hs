@@ -81,17 +81,27 @@ buildMaybeMenubar = do
     sle <- actionNew "SLE" "Select Edges" (Just "Just a stub") Nothing
     sln <- actionNew "SLN" "Select Nodes" (Just "Just a stub") Nothing
 
+    viw <- actionNew "VIW" "View" Nothing Nothing
+    zin <- actionNew "ZIN" "Zoom In" Nothing Nothing
+    zut <- actionNew "ZUT" "Zoom Out" Nothing Nothing
+    zdf <- actionNew "ZDF" "Zoom: 100%" Nothing Nothing
+    vdf <- actionNew "VDF" "Default View" Nothing Nothing
+
     hlp <- actionNew "HLP" "Help" (Just "Just a stub") Nothing
     hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
+
     agr <- actionGroupNew "AGR"
-    mapM_ (actionGroupAddAction agr) [fma,edt,hlp]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,hlp']
+    mapM_ (actionGroupAddAction agr) [fma,edt,viw,hlp]
+    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,zin,zut,zdf,vdf,hlp']
 
     ui <- uiManagerNew
     uiManagerAddUiFromString ui uiStr
     uiManagerInsertActionGroup ui agr 0
     maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    return (maybeMenubar, new, opn, svn, sva, opg, svg, udo, rdo, cpy, pst, cut, sla, sle, sln, hlp')
+    let fileActions = (new, opn, svn, sva, opg, svg)
+        editActions = (udo, rdo, cpy, pst, cut, sla, sle, sln)
+        viewActions = (zin,zut,zdf,vdf)
+    return (maybeMenubar, fileActions, editActions, viewActions, hlp')
 
   where uiStr = "<ui>\
 \                 <menubar>\
@@ -114,6 +124,12 @@ buildMaybeMenubar = do
 \                     <menuitem action=\"SLA\"/>\
 \                     <menuitem action=\"SLE\"/>\
 \                     <menuitem action=\"SLN\"/>\
+\                   </menu>\
+\                   <menu action=\"VIW\">\
+\                     <menuitem action=\"ZIN\"/>\
+\                     <menuitem action=\"ZUT\"/>\
+\                     <menuitem action=\"ZDF\"/>\
+\                     <menuitem action=\"VDF\"/>\
 \                   </menu>\
 \                   <menu action=\"HLP\">\
 \                     <menuitem action=\"HLP'\"/>\

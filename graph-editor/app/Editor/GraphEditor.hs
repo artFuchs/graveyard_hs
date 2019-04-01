@@ -52,7 +52,7 @@ startGUI = do
 
   -- main window ---------------------------------------------------------------
   -- creates the menu bar
-  (maybeMenubar,new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,hlp) <- buildMaybeMenubar
+  (maybeMenubar,(new,opn,svn,sva,opg,svg),(udo,rdo,cpy,pst,cut,sla,sle,sln),(zin,zut,zdf,vdf),hlp) <- buildMaybeMenubar
   -- creates the inspector panel on the right
   (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeMenu
   let
@@ -268,17 +268,12 @@ startGUI = do
     case (Control `elem` ms, d) of
       -- when control is pressed,
       -- if the direction is up, then zoom in
-      (True, ScrollUp)  -> liftIO $ do
-        modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
-        widgetQueueDraw canvas
+      (True, ScrollUp)  -> liftIO $ actionActivate zin
       -- if the direction is down, then zoom out
-      (True, ScrollDown) -> liftIO $ do
-        modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.6 then editorSetZoom (editorGetZoom es * 0.9) es else es)
-        widgetQueueDraw canvas
+      (True, ScrollDown) -> liftIO $ actionActivate zut
       _ -> return ()
     return True
-
-
+    
   -- keyboard
   canvas `on` keyPressEvent $ do
     k <- eventKeyName
@@ -317,19 +312,11 @@ startGUI = do
       context <- widgetGetPangoContext canvas
       case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
         -- CTRL + <+>/<->/<=> : zoom controls
-        (True,_,"plus") -> do
-          modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
-          widgetQueueDraw canvas
-        (True,_,"minus") -> do
-          modifyIORef st (\es -> if (editorGetZoom es * 0.9) > 0.6 then editorSetZoom (editorGetZoom es * 0.9) es else es)
-          widgetQueueDraw canvas
-        (True,_,"equal") -> do
-          modifyIORef st (\es -> editorSetZoom 1.0 es )
-          widgetQueueDraw canvas
+        (True,_,"plus") -> actionActivate zin
+        (True,_,"minus") -> actionActivate zut
+        (True,_,"equal") -> actionActivate zdf
         -- CTRL + <0> : reset pan & zoom
-        (True,_,"0") -> do
-          modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
-          widgetQueueDraw canvas
+        (True,_,"0") -> actionActivate vdf
 
         -- CTRL + N : create a new graph in the treeView
         (True, False, "n") -> buttonClicked btnNew
@@ -561,6 +548,26 @@ startGUI = do
       ([],[]) -> writeIORef st $ editorSetSelected (nodeIds g, []) es
       (n, []) -> return ()
       (n,e) -> writeIORef st $ editorSetSelected (n,[]) es
+    widgetQueueDraw canvas
+
+  -- zoom in
+  zin `on` actionActivated $ do
+    modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
+    widgetQueueDraw canvas
+
+  -- zoom out
+  zut `on` actionActivated $ do
+    modifyIORef st (\es -> let z = editorGetZoom es * 0.9 in if z >= 0.5 then editorSetZoom z es else es)
+    widgetQueueDraw canvas
+
+  -- reset zoom to defaults
+  zdf `on` actionActivated $ do
+    modifyIORef st (\es -> editorSetZoom 1.0 es )
+    widgetQueueDraw canvas
+
+  -- reset view to defaults (reset zoom and pan)
+  vdf `on` actionActivated $ do
+    modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
     widgetQueueDraw canvas
 
   -- help
