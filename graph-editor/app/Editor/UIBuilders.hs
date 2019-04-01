@@ -85,7 +85,7 @@ buildMaybeMenubar = do
     zin <- actionNew "ZIN" "Zoom In" Nothing Nothing
     zut <- actionNew "ZUT" "Zoom Out" Nothing Nothing
     zdf <- actionNew "ZDF" "Zoom: 100%" Nothing Nothing
-    vdf <- actionNew "VDF" "Default View" Nothing Nothing
+    vdf <- actionNew "VDF" "Reset Zoom & Pan" Nothing Nothing
 
     hlp <- actionNew "HLP" "Help" (Just "Just a stub") Nothing
     hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
