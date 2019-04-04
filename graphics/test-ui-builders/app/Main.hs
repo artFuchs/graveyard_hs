@@ -1,3 +1,8 @@
+{-
+this application is just a test of the GtkBuilder.
+it reads a xml file containing the definitions of a menubar and contruct the respective widget   
+-}
+
 module Main where
 
 import Graphics.UI.Gtk
