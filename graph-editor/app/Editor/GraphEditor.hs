@@ -52,7 +52,7 @@ startGUI = do
 
   -- main window ---------------------------------------------------------------
   -- creates the menu bar
-  (maybeMenubar,(new,opn,svn,sva,opg,svg),(udo,rdo,cpy,pst,cut,sla,sle,sln),(zin,zut,zdf,vdf),hlp) <- buildMaybeMenubar
+  (menubar,(new,opn,svn,sva,opg,svg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
   -- creates the inspector panel on the right
   (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeMenu
   let
@@ -62,7 +62,7 @@ startGUI = do
   -- creates the tree panel on the left
   (treePanel, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
   -- creates the main window, containing the canvas and the built panels
-  (window, canvas, _) <- buildMainWindow maybeMenubar frameProps treePanel
+  (window, canvas, _) <- buildMainWindow (Just menubar) frameProps treePanel
   -- shows the main window
   widgetShowAll window
 
@@ -268,12 +268,12 @@ startGUI = do
     case (Control `elem` ms, d) of
       -- when control is pressed,
       -- if the direction is up, then zoom in
-      (True, ScrollUp)  -> liftIO $ actionActivate zin
+      (True, ScrollUp)  -> liftIO $ menuItemEmitActivate zin
       -- if the direction is down, then zoom out
-      (True, ScrollDown) -> liftIO $ actionActivate zut
+      (True, ScrollDown) -> liftIO $ menuItemEmitActivate zut
       _ -> return ()
     return True
-    
+
   -- keyboard
   canvas `on` keyPressEvent $ do
     k <- eventKeyName
@@ -299,9 +299,9 @@ startGUI = do
         -- F2 - rename selection
         (False,False,"f2") -> widgetGrabFocus entryName
         -- CTRL + C/V/X : copy/paste/cut
-        (True, False, "c") -> actionActivate cpy
-        (True, False, "v") -> actionActivate pst
-        (True, False, "x") -> actionActivate cut
+        (True, False, "c") -> menuItemEmitActivate cpy
+        (True, False, "v") -> menuItemEmitActivate pst
+        (True, False, "x") -> menuItemEmitActivate cut
         _       -> return ()
     return True
 
@@ -312,11 +312,11 @@ startGUI = do
       context <- widgetGetPangoContext canvas
       case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
         -- CTRL + <+>/<->/<=> : zoom controls
-        (True,_,"plus") -> actionActivate zin
-        (True,_,"minus") -> actionActivate zut
-        (True,_,"equal") -> actionActivate zdf
+        (True,_,"plus") -> menuItemEmitActivate zin
+        (True,_,"minus") -> menuItemEmitActivate zut
+        (True,_,"equal") -> menuItemEmitActivate zdf
         -- CTRL + <0> : reset pan & zoom
-        (True,_,"0") -> actionActivate vdf
+        (True,_,"0") -> menuItemEmitActivate vdf
 
         -- CTRL + N : create a new graph in the treeView
         (True, False, "n") -> buttonClicked btnNew
@@ -335,14 +335,14 @@ startGUI = do
           set window [windowTitle := "Graph Editor"]
           widgetQueueDraw canvas
         -- CTRL + SHIFT + S : save file as
-        (True, True, "s") -> actionActivate sva
+        (True, True, "s") -> menuItemEmitActivate sva
         -- CTRL + S : save file
-        (True, False, "s") -> actionActivate svn
+        (True, False, "s") -> menuItemEmitActivate svn
         -- CTRL + O : open file
-        (True, False, "o") -> actionActivate opn
+        (True, False, "o") -> menuItemEmitActivate opn
         -- CTRL + Z/R : undo/redo
-        (True, False, "z") -> actionActivate udo
-        (True, False, "r") -> actionActivate rdo
+        (True, False, "z") -> menuItemEmitActivate udo
+        (True, False, "r") -> menuItemEmitActivate rdo
         _ -> return ()
     return False
 
@@ -390,7 +390,7 @@ startGUI = do
                                   saveFile store saveProject fileName window True -- returns True if saved the file
 
   -- new project action activated
-  new `on` actionActivated $ do
+  new `on` menuItemActivated $ do
     continue <- confirmOperation
     if continue
       then do
@@ -409,7 +409,7 @@ startGUI = do
       else return ()
 
   -- open project
-  opn `on` actionActivated $ do
+  opn `on` menuItemActivated $ do
     continue <- confirmOperation
     if continue
       then do
@@ -435,7 +435,7 @@ startGUI = do
         else return ()
 
   -- save project
-  svn `on` actionActivated $ do
+  svn `on` menuItemActivated $ do
     prepToSave
     saved <- saveFile store saveProject fileName window True
     if saved
@@ -443,7 +443,7 @@ startGUI = do
       else return ()
 
   -- save project as
-  sva `on` actionActivated $ do
+  sva `on` menuItemActivated $ do
     prepToSave
     saved <- saveFileAs store saveProject fileName window True
     if saved
@@ -451,7 +451,7 @@ startGUI = do
       else return ()
 
   -- open graph
-  opg `on`actionActivated $ do
+  opg `on`menuItemActivated $ do
     mg <- loadFile window loadGraph
     case mg of
       Just ((g,gi),path) -> do
@@ -468,7 +468,7 @@ startGUI = do
       _      -> return ()
 
   -- save graph
-  svg `on` actionActivated $ do
+  svg `on` menuItemActivated $ do
     es <- readIORef st
     let g  = editorGetGraph es
         gi = editorGetGI es
@@ -476,7 +476,7 @@ startGUI = do
     return ()
 
   -- undo
-  udo `on` actionActivated $ do
+  udo `on` menuItemActivated $ do
     applyUndo undoStack redoStack st
     -- indicate changes
     sst <- readIORef lastSavedState
@@ -488,7 +488,7 @@ startGUI = do
     widgetQueueDraw canvas
 
   -- redo
-  rdo `on` actionActivated $ do
+  rdo `on` menuItemActivated $ do
     applyRedo undoStack redoStack st
     -- indicate changes
     sst <- readIORef lastSavedState
@@ -500,12 +500,12 @@ startGUI = do
     widgetQueueDraw canvas
 
   -- copy
-  cpy `on` actionActivated $ do
+  cpy `on` menuItemActivated $ do
     es <- readIORef st
     writeIORef clipboard $ copySelected es
 
   -- paste
-  pst `on` actionActivated $ do
+  pst `on` menuItemActivated $ do
     es <- readIORef st
     clip <- readIORef clipboard
     stackUndo undoStack redoStack es
@@ -514,7 +514,7 @@ startGUI = do
     widgetQueueDraw canvas
 
   -- cut
-  cut `on` actionActivated $ do
+  cut `on` menuItemActivated $ do
     es <- readIORef st
     writeIORef clipboard $ copySelected es
     modifyIORef st (\es -> deleteSelected es)
@@ -523,13 +523,13 @@ startGUI = do
     widgetQueueDraw canvas
 
   -- select all
-  sla `on` actionActivated $ do
+  sla `on` menuItemActivated $ do
     modifyIORef st (\es -> let g = editorGetGraph es
                            in editorSetSelected (nodeIds g, edgeIds g) es)
     widgetQueueDraw canvas
 
   -- select edges
-  sle `on` actionActivated $ do
+  sle `on` menuItemActivated $ do
     es <- readIORef st
     let selected = editorGetSelected es
         g = editorGetGraph es
@@ -540,7 +540,7 @@ startGUI = do
     widgetQueueDraw canvas
 
   -- select nodes
-  sln `on` actionActivated $ do
+  sln `on` menuItemActivated $ do
     es <- readIORef st
     let selected = editorGetSelected es
         g = editorGetGraph es
@@ -551,27 +551,39 @@ startGUI = do
     widgetQueueDraw canvas
 
   -- zoom in
-  zin `on` actionActivated $ do
+  zin `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
     widgetQueueDraw canvas
 
   -- zoom out
-  zut `on` actionActivated $ do
+  zut `on` menuItemActivated $ do
     modifyIORef st (\es -> let z = editorGetZoom es * 0.9 in if z >= 0.5 then editorSetZoom z es else es)
     widgetQueueDraw canvas
 
+  z50 `on` menuItemActivated $ do
+    modifyIORef st (\es -> editorSetZoom 0.5 es )
+    widgetQueueDraw canvas
+
   -- reset zoom to defaults
-  zdf `on` actionActivated $ do
+  zdf `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 1.0 es )
     widgetQueueDraw canvas
 
+  z150 `on` menuItemActivated $ do
+    modifyIORef st (\es -> editorSetZoom 1.5 es )
+    widgetQueueDraw canvas
+
+  z200 `on` menuItemActivated $ do
+    modifyIORef st (\es -> editorSetZoom 2.0 es )
+    widgetQueueDraw canvas
+
   -- reset view to defaults (reset zoom and pan)
-  vdf `on` actionActivated $ do
+  vdf `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
     widgetQueueDraw canvas
 
   -- help
-  hlp `on` actionActivated $ do
+  hlp `on` menuItemActivated $ do
     widgetShowAll helpWindow
 
   -- event bindings -- inspector panel -----------------------------------------

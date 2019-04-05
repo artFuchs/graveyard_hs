@@ -1,7 +1,7 @@
 -- | This module contains the UI definition
 module Editor.UIBuilders
 ( buildMainWindow
-, buildMaybeMenubar
+, buildMenubar
 , buildTypeMenu
 , buildHostMenu
 , buildRuleMenu
@@ -62,81 +62,41 @@ buildMainWindow maybeMenuBar frameProps treePanel = do
 
 
 -- create the menu toolbar
-buildMaybeMenubar = do
-    fma <- actionNew "FMA" "File" Nothing Nothing
-    new <- actionNew "NEW" "New Project" (Just "Just a stub") Nothing
-    opn <- actionNew "OPN" "Open Project" (Just "Just a stub") (Just stockOpen)
-    svn <- actionNew "SVN" "Save Project" (Just "Just a stub") (Just stockSave)
-    sva <- actionNew "SVA" "Save Project As" (Just "Just a stub") (Just stockSaveAs)
-    opg <- actionNew "OPG" "Open Graph" (Just "Just a stub") Nothing
-    svg <- actionNew "SVG" "Save Graph" (Just "Just a stub") Nothing
+buildMenubar = do
+  builder <- builderNew
+  builderAddFromFile builder "./Resources/menubar.ui"
+  menubar <- builderGetObject builder castToWidget "menubar1"
 
-    edt <- actionNew "EDT" "Edit" Nothing Nothing
-    udo <- actionNew "UDO" "Undo" (Just "Just a stub") Nothing
-    rdo <- actionNew "RDO" "Redo" (Just "Just a stub") Nothing
-    cpy <- actionNew "CPY" "Copy" (Just "Just a stub") Nothing
-    pst <- actionNew "PST" "Paste" (Just "Just a stub") Nothing
-    cut <- actionNew "CUT" "Cut" (Just "Just a stub") Nothing
-    sla <- actionNew "SLA" "Select All" (Just "Just a stub") Nothing
-    sle <- actionNew "SLE" "Select Edges" (Just "Just a stub") Nothing
-    sln <- actionNew "SLN" "Select Nodes" (Just "Just a stub") Nothing
+  newItem <- builderGetObject builder castToMenuItem "new_item"
+  openItem <- builderGetObject builder castToMenuItem "open_item"
+  saveItem <- builderGetObject builder castToMenuItem "save_item"
+  saveAsItem <- builderGetObject builder castToMenuItem "save_as_item"
+  saveGraphItem <- builderGetObject builder castToMenuItem "save_graph_item"
+  openGraphItem <- builderGetObject builder castToMenuItem "open_graph_item"
+  let fileItems = (newItem,openItem,saveItem,saveAsItem,saveGraphItem,openGraphItem)
 
-    viw <- actionNew "VIW" "View" Nothing Nothing
-    zin <- actionNew "ZIN" "Zoom In" Nothing Nothing
-    zut <- actionNew "ZUT" "Zoom Out" Nothing Nothing
-    zdf <- actionNew "ZDF" "Zoom: 100%" Nothing Nothing
-    vdf <- actionNew "VDF" "Reset Zoom & Pan" Nothing Nothing
+  undoItem <- builderGetObject builder castToMenuItem "undo_item"
+  redoItem <- builderGetObject builder castToMenuItem "redo_item"
+  copyItem <- builderGetObject builder castToMenuItem "copy_item"
+  pasteItem <- builderGetObject builder castToMenuItem "paste_item"
+  cutItem <- builderGetObject builder castToMenuItem "cut_item"
+  sallItem <- builderGetObject builder castToMenuItem "sall_item"
+  snodesItem <- builderGetObject builder castToMenuItem "snodes_item"
+  sedgesItem <- builderGetObject builder castToMenuItem "sedges_item"
+  let editItems = (undoItem,redoItem,copyItem,pasteItem,cutItem,sallItem,snodesItem,sedgesItem)
 
-    hlp <- actionNew "HLP" "Help" (Just "Just a stub") Nothing
-    hlp' <- actionNew "HLP'" "Help" (Just "Just a stub") Nothing
+  zoomInItem <- builderGetObject builder castToMenuItem "zoomin_item"
+  zoomOutItem <- builderGetObject builder castToMenuItem "zoomout_item"
+  zoom50Item <- builderGetObject builder castToMenuItem "zoom50_item"
+  zoom100Item <- builderGetObject builder castToMenuItem "zoom100_item"
+  zoom150Item <- builderGetObject builder castToMenuItem "zoom150_item"
+  zoom200Item <- builderGetObject builder castToMenuItem "zoom200_item"
+  resetViewItem <- builderGetObject builder castToMenuItem "resetview_item"
+  let viewItems = (zoomInItem,zoomOutItem,zoom50Item,zoom100Item,zoom150Item,zoom200Item,resetViewItem)
 
-    agr <- actionGroupNew "AGR"
-    mapM_ (actionGroupAddAction agr) [fma,edt,viw,hlp]
-    mapM_ (\act -> actionGroupAddActionWithAccel agr act (Nothing :: Maybe String)) [new,opn,svn,sva,opg,svg,udo,rdo,cpy,pst,cut,sla,sle,sln,zin,zut,zdf,vdf,hlp']
+  helpItem <- builderGetObject builder castToMenuItem "help_item"
 
-    ui <- uiManagerNew
-    uiManagerAddUiFromString ui uiStr
-    uiManagerInsertActionGroup ui agr 0
-    maybeMenubar <- uiManagerGetWidget ui "/ui/menubar"
-    let fileActions = (new, opn, svn, sva, opg, svg)
-        editActions = (udo, rdo, cpy, pst, cut, sla, sle, sln)
-        viewActions = (zin,zut,zdf,vdf)
-    return (maybeMenubar, fileActions, editActions, viewActions, hlp')
-
-  where uiStr = "<ui>\
-\                 <menubar>\
-\                   <menu action=\"FMA\">\
-\                     <menuitem action=\"NEW\"/>\
-\                     <menuitem action=\"OPN\"/>\
-\                     <menuitem action=\"SVN\"/>\
-\                     <menuitem action=\"SVA\"/>\
-\                     <separator/>\
-\                     <menuitem action=\"SVG\"/>\
-\                     <menuitem action=\"OPG\"/>\
-\                   </menu> \
-\                   <menu action=\"EDT\">\
-\                     <menuitem action=\"UDO\"/>\
-\                     <menuitem action=\"RDO\"/>\
-\                     <separator/>\
-\                     <menuitem action=\"CPY\"/>\
-\                     <menuitem action=\"PST\"/>\
-\                     <menuitem action=\"CUT\"/>\
-\                     <menuitem action=\"SLA\"/>\
-\                     <menuitem action=\"SLE\"/>\
-\                     <menuitem action=\"SLN\"/>\
-\                   </menu>\
-\                   <menu action=\"VIW\">\
-\                     <menuitem action=\"ZIN\"/>\
-\                     <menuitem action=\"ZUT\"/>\
-\                     <menuitem action=\"ZDF\"/>\
-\                     <menuitem action=\"VDF\"/>\
-\                   </menu>\
-\                   <menu action=\"HLP\">\
-\                     <menuitem action=\"HLP'\"/>\
-\                   </menu>\
-\                 </menubar>\
-\                </ui>"
-
+  return (menubar, fileItems, editItems, viewItems, helpItem)
 
 -- creates the inspector for typed graphs
 buildTypeMenu = do
