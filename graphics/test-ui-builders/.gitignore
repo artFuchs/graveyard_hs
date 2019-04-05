@@ -1,3 +1,5 @@
 .stack-work/
 test-ui-builders.cabal
+.hi
+.o
 *~

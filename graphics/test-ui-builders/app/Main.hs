@@ -1,6 +1,6 @@
 {-
 this application is just a test of the GtkBuilder.
-it reads a xml file containing the definitions of a menubar and contruct the respective widget   
+it reads a xml file containing the definitions of a menubar and contruct the respective widget
 -}
 
 module Main where
@@ -12,21 +12,14 @@ import Control.Monad.IO.Class
 main = do
   initGUI
 
-  -- create window
-  window <- windowNew
-  set window [ windowTitle        := "hohohoho"
-             , windowDefaultWidth := 300
-             , windowDefaultHeight := 200
-             ]
+  builder <- builderNew
+  builderAddFromFile builder "./window.ui"
 
-  vboxMain <- vBoxNew False 8
-  containerAdd window vboxMain
+  -- create window
+  window <- builderGetObject builder castToWindow "window"
 
   -- load the menubar
-  builder <- builderNew
-  builderAddFromFile builder "./menubar.ui"
   menubar <- builderGetObject builder castToWidget "menubar1"
-  boxPackStart vboxMain menubar PackNatural 0
 
   newItem <- builderGetObject builder castToMenuItem "new_item"
   newItem `on` menuItemActivated $ putStrLn "new file"
