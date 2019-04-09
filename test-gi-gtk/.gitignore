@@ -1,0 +1,5 @@
+.stack-work/
+test-gi-gtk.cabal
+.hi
+.o
+*~
