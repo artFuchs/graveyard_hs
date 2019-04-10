@@ -105,7 +105,7 @@ buildMenubar = return ()
 
 -- creates the inspector for typed graphs
 
-buildTypeMenu :: IO Gtk.Frame
+buildTypeMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
 buildTypeMenu = do
   frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn ]
   mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
@@ -127,53 +127,54 @@ buildTypeMenu = do
   Gtk.boxPackStart typeBox typeEntry True True 0
   Gtk.widgetSetCanFocus typeEntry True
 
-  return frame
-  --
-  -- -- creates a HBox containing a label and ColorButton to the user change the node color
-  -- hBoxColor <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxColor PackNatural 0
-  -- labelColor <- labelNew $ Just "Color: "
-  -- boxPackStart hBoxColor labelColor PackNatural 0
-  -- colorBtn <- colorButtonNew
-  -- boxPackStart hBoxColor colorBtn PackNatural 0
-  --
-  -- -- creates a HBox containing a label and a ColorButton to the user change the line and text color
-  -- hBoxLineColor <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxLineColor PackNatural 0
-  -- labelLineColor <- labelNew $ Just "Line Color: "
-  -- boxPackStart hBoxLineColor labelLineColor PackNatural 0
-  -- lineColorBtn <- colorButtonNew
-  -- boxPackStart hBoxLineColor lineColorBtn PackNatural 0
-  --
-  -- -- creates a frame containing a VBox with radio buttons to the user change the node shape
-  -- frameShape <- frameNew
-  -- set frameShape [frameLabel := "Node Shape"]
-  -- boxPackStart vBoxProps frameShape PackNatural 0
-  -- vBoxShape <- vBoxNew False 8
-  -- containerAdd frameShape vBoxShape
-  -- radioCircle <- radioButtonNewWithLabel "Circle"
-  -- boxPackStart vBoxShape radioCircle PackGrow 0
-  -- radioRect <- radioButtonNewWithLabelFromWidget radioCircle "Rect"
-  -- boxPackStart vBoxShape radioRect PackGrow 0
-  -- radioQuad <- radioButtonNewWithLabelFromWidget radioCircle "Quad"
-  -- boxPackStart vBoxShape radioQuad PackGrow 0
-  -- let radioShapes = [radioCircle, radioRect, radioQuad]
+  -- creates a HBox containing a label and ColorButton to the user change the node color
+  colorBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                          , #spacing := 8]
+  Gtk.boxPackStart mainBox colorBox False False 0
+  colorLabel <- new Gtk.Label [ #label := "Fill color: "]
+  Gtk.boxPackStart colorBox colorLabel False False 0
+  colorButton <- new Gtk.ColorButton []
+  Gtk.boxPackStart colorBox colorButton False False 0
 
-  -- -- creates a frame conataining a VBox with radioButtons to the user change the edge shape
-  -- frameStyle <- frameNew
-  -- set frameStyle [frameLabel := "Edge Style"]
-  -- boxPackStart vBoxProps frameStyle PackNatural 0
-  -- vBoxStyle <- vBoxNew False 8
-  -- containerAdd frameStyle vBoxStyle
-  -- radioNormal <- radioButtonNewWithLabel "Normal"
-  -- boxPackStart vBoxStyle radioNormal PackGrow 0
-  -- radioPointed <- radioButtonNewWithLabelFromWidget radioNormal "Pointed"
-  -- boxPackStart vBoxStyle radioPointed PackGrow 0
-  -- radioSlashed <- radioButtonNewWithLabelFromWidget radioNormal "Slashed"
-  -- boxPackStart vBoxStyle radioSlashed PackGrow 0
-  -- let radioStyles = [radioNormal, radioPointed, radioSlashed]
-  --
-  -- return (frame, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, (hBoxColor, frameShape, frameStyle))
+  -- creates a HBox containing a label and a ColorButton to the user change the line and text color
+  lineColorBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                              , #spacing := 8]
+  Gtk.boxPackStart mainBox lineColorBox False False 0
+  lineColorLabel <- new Gtk.Label [ #label := "Line color: "]
+  Gtk.boxPackStart lineColorBox lineColorLabel False False 0
+  lineColorButton <- new Gtk.ColorButton []
+  Gtk.boxPackStart lineColorBox lineColorButton False False 0
+
+  -- creates a frame containing a VBox with radio buttons to the user change the node shape
+  frameShape <- new Gtk.Frame [#label := "Node Shape"]
+  Gtk.boxPackStart mainBox frameShape False False 0
+  nodeShapeBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
+                              , #spacing := 8]
+  Gtk.containerAdd frameShape nodeShapeBox
+  radioCircle <- new Gtk.RadioButton [#label := "Circle"]
+  Gtk.boxPackStart nodeShapeBox radioCircle True True 0
+  radioRect <- Gtk.radioButtonNewWithLabelFromWidget (Just radioCircle) "Rect"
+  Gtk.boxPackStart nodeShapeBox radioRect True True 0
+  radioQuad <- Gtk.radioButtonNewWithLabelFromWidget (Just radioCircle) "Quad"
+  Gtk.boxPackStart nodeShapeBox radioQuad True True 0
+  let radioShapes = [radioCircle, radioRect, radioQuad]
+
+
+  -- creates a frame conataining a VBox with radioButtons to the user change the edge shape
+  frameStyle <- new Gtk.Frame [#label := "Edge Style"]
+  Gtk.boxPackStart mainBox frameStyle False False 0
+  edgeStyleBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
+                              , #spacing := 8]
+  Gtk.containerAdd frameStyle edgeStyleBox
+  radioNormal <- new Gtk.RadioButton [#label := "Normal"]
+  Gtk.boxPackStart edgeStyleBox radioNormal True True 0
+  radioPointed <- Gtk.radioButtonNewWithLabelFromWidget (Just radioNormal) "Pointed"
+  Gtk.boxPackStart edgeStyleBox radioPointed True True 0
+  radioSlashed <- Gtk.radioButtonNewWithLabelFromWidget (Just radioNormal) "Slashed"
+  Gtk.boxPackStart edgeStyleBox radioSlashed True True 0
+  let radioStyles = [radioNormal, radioPointed, radioSlashed]
+
+  return (frame, typeEntry, colorButton, lineColorButton, radioShapes, radioStyles, (colorBox, frameShape, frameStyle))
 
 -- creates the inspector for the host graph
 buildHostMenu :: IO ()
@@ -266,38 +267,31 @@ buildRuleMenu = do
   -- return (frame, entryLabel, comboBoxNodeType, comboBoxEdgeType, comboBoxOperation, (hBoxNodeType, hBoxEdgeType))
 
 -- creates the treePanel
-buildTreePanel :: IO ()
 buildTreePanel = do
-  return ()
-  -- vboxTree <- vBoxNew False 0
-  -- treeview <- treeViewNew
-  -- boxPackStart vboxTree treeview PackGrow 0
-  -- treeViewSetHeadersVisible treeview True
-  --
-  -- col <- treeViewColumnNew
-  -- treeViewColumnSetTitle col "project"
-  -- treeViewAppendColumn treeview col
-  --
-  -- renderer <- cellRendererTextNew
-  -- cellLayoutPackStart col renderer False
-  -- set renderer [cellTextEditable := True]
-  --
-  -- btnNew <- buttonNewWithLabel "New Graph"
-  -- boxPackStart vboxTree btnNew PackNatural 0
-  --
-  -- btnRmv <- buttonNewWithLabel "Remove Graph"
-  -- boxPackStart vboxTree btnRmv PackNatural 0
-  --
-  -- return (vboxTree, treeview, renderer, btnNew, btnRmv)
+  return () :: IO ()
+  mainBox <- new Gtk.Box [#orientation := Gtk.OrientationVertical, #spacing := 0]
+  treeview <- new Gtk.TreeView [#headersVisible := True]
+  Gtk.boxPackStart mainBox treeview True True 0
+
+  col <- new Gtk.TreeViewColumn [#title := "project"]
+  Gtk.treeViewAppendColumn treeview col
+
+  renderer <- new Gtk.CellRendererText [#editable := True]
+  Gtk.cellLayoutPackStart col renderer False
+
+  btnNew <- new Gtk.Button [#label := "New Graph"]
+  Gtk.boxPackStart mainBox btnNew False False 0
+
+  btnRmv <- new Gtk.Button [#label := "Remove Graph"]
+  Gtk.boxPackStart mainBox btnRmv False False 0
+
+  return (mainBox, treeview, renderer, btnNew, btnRmv)
 
 
 
---buildHelpWindow :: IO Gtk.Window
-buildHelpWindow :: IO ()
+buildHelpWindow :: IO Gtk.Window
 buildHelpWindow = do
-  return ()
-  -- helpWindow <- windowNew
-  -- set helpWindow  [ windowTitle         := "Graph Editor - Help"]
+  helpWindow <- new Gtk.Window [ #title := "Graph Editor - Help"]
   -- helpBuffer <- textBufferNew Nothing
   -- textBufferInsertAtCursor helpBuffer "<Creating and selecting>: \n"
   -- textBufferInsertAtCursor helpBuffer "Click with the right mouse button in a blank space to create a new node. \n"
@@ -316,23 +310,29 @@ buildHelpWindow = do
   -- helpView <- textViewNewWithBuffer helpBuffer
   -- containerAdd helpWindow helpView
   --
-  -- return helpWindow
+  return helpWindow
 
 
-showError :: Maybe Gtk.Window -> String -> IO ()
-showError window msg = do
+showError :: T.Text -> IO ()
+showError msg = do
+  --dlgE <- messageDialogNew window [DialogDestroyWithParent] MessageError ButtonsOk msg
+  msgDialog <- new Gtk.MessageDialog [ #text := msg
+                                , #messageType := Gtk.MessageTypeError
+                                , #buttons := Gtk.ButtonsTypeOk]
+  Gtk.widgetShowAll msgDialog
+  Gtk.dialogRun msgDialog
+  Gtk.widgetDestroy msgDialog
   return ()
-  -- dlgE <- messageDialogNew window [DialogDestroyWithParent] MessageError ButtonsOk msg
-  -- widgetShow dlgE
-  -- dialogRun dlgE
-  -- widgetDestroy dlgE
-  -- return ()
 
---createSaveDialog :: Window -> IO FileChooserDialog
-createSaveDialog:: Gtk.Window -> IO ()
-createSaveDialog window = do
-  return ()
-  -- saveD <- fileChooserDialogNew
+createSaveDialog :: IO Gtk.FileChooserDialog
+createSaveDialog = do
+  saveD <- new Gtk.FileChooserDialog [ #action := Gtk.FileChooserActionSave
+                                     , #createFolders := True
+                                     , #doOverwriteConfirmation := True
+                                     ]
+  Gtk.dialogAddButton saveD "save" (fromIntegral . fromEnum $ Gtk.ResponseTypeAccept)
+  Gtk.dialogAddButton saveD "cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeReject)
+  return saveD
   --          (Just "Salvar arquivo")
   --          (Just window)
   --          FileChooserActionSave
