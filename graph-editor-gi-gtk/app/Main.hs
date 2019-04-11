@@ -4,6 +4,7 @@ import Editor.UIBuilders
 import qualified GI.Gtk as Gtk
 import Data.GI.Base
 import Data.Text
+import Control.Monad.IO.Class
 
 setJustText :: Gtk.ListStore -> Gtk.TreeIter -> Text -> IO ()
 setJustText store iter text = do
@@ -16,9 +17,22 @@ main = do
   Gtk.init Nothing
   (treePanel, treeview, renderer, btnNew, btnRmv) <-buildTreePanel
   (inspectorFrame, typeLabel, cbtn, lcbtn, rshps, rstls, hideable) <- buildTypeMenu
-  (window,canvas,_) <- buildMainWindow (Nothing :: Maybe Gtk.Widget) inspectorFrame treePanel
+  (menubar, fileItems, editItems, viewItems, helpItem) <- buildMenubar
+  (window,canvas,_) <- buildMainWindow menubar inspectorFrame treePanel
 
-  on window #destroy $ Gtk.mainQuit
+  on window #deleteEvent $ return $ do
+    response <- createCloseDialog "You want to save before quit?"
+    continue <- case response of
+      Gtk.ResponseTypeNo -> return True
+      Gtk.ResponseTypeYes -> do
+        showError "can't save!"
+        return True
+      _ -> return False
+    case continue of
+      True -> do
+        Gtk.mainQuit
+        return False
+      False -> return True
 
   store <- Gtk.listStoreNew [gtypeString]
   iter <- Gtk.listStoreAppend store
@@ -38,6 +52,7 @@ main = do
   Gtk.widgetShowAll window
 
   on btnNew #clicked $ do
+    showError "Can't create new graph. Saving instead..."
     saveD <- createSaveDialog
     response <- Gtk.dialogRun saveD
     case toEnum . fromIntegral $ response of

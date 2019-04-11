@@ -17,7 +17,10 @@ module Editor.UIBuilders
 import qualified GI.Gtk as Gtk
 import qualified GI.Gdk as Gdk
 import qualified Data.Text as T
+import Data.GI.Base.ManagedPtr (unsafeCastTo)
+import Data.Maybe
 import Data.GI.Base
+import Control.Monad.IO.Class
 
 -- builds the main window, containing the treepanel in the left,
 -- the canvas in the center,
@@ -66,45 +69,45 @@ buildMainWindow maybeMenuBar frameProps treePanel = do
 
 
 -- create the menu toolbar
-buildMenubar :: IO ()
-buildMenubar = return ()
-  -- builder <- new Gtk.Builder []
-  -- Gtk.builderAddFromFile builder "./Resources/menubar.ui"
-  -- menubar <- builderGetObject builder castToWidget "menubar1"
-  --
-  -- newItem <- builderGetObject builder castToMenuItem "new_item"
-  -- openItem <- builderGetObject builder castToMenuItem "open_item"
-  -- saveItem <- builderGetObject builder castToMenuItem "save_item"
-  -- saveAsItem <- builderGetObject builder castToMenuItem "save_as_item"
-  -- saveGraphItem <- builderGetObject builder castToMenuItem "save_graph_item"
-  -- openGraphItem <- builderGetObject builder castToMenuItem "open_graph_item"
-  -- let fileItems = (newItem,openItem,saveItem,saveAsItem,saveGraphItem,openGraphItem)
-  --
-  -- undoItem <- builderGetObject builder castToMenuItem "undo_item"
-  -- redoItem <- builderGetObject builder castToMenuItem "redo_item"
-  -- copyItem <- builderGetObject builder castToMenuItem "copy_item"
-  -- pasteItem <- builderGetObject builder castToMenuItem "paste_item"
-  -- cutItem <- builderGetObject builder castToMenuItem "cut_item"
-  -- sallItem <- builderGetObject builder castToMenuItem "sall_item"
-  -- snodesItem <- builderGetObject builder castToMenuItem "snodes_item"
-  -- sedgesItem <- builderGetObject builder castToMenuItem "sedges_item"
-  -- let editItems = (undoItem,redoItem,copyItem,pasteItem,cutItem,sallItem,snodesItem,sedgesItem)
-  --
-  -- zoomInItem <- builderGetObject builder castToMenuItem "zoomin_item"
-  -- zoomOutItem <- builderGetObject builder castToMenuItem "zoomout_item"
-  -- zoom50Item <- builderGetObject builder castToMenuItem "zoom50_item"
-  -- zoom100Item <- builderGetObject builder castToMenuItem "zoom100_item"
-  -- zoom150Item <- builderGetObject builder castToMenuItem "zoom150_item"
-  -- zoom200Item <- builderGetObject builder castToMenuItem "zoom200_item"
-  -- resetViewItem <- builderGetObject builder castToMenuItem "resetview_item"
-  -- let viewItems = (zoomInItem,zoomOutItem,zoom50Item,zoom100Item,zoom150Item,zoom200Item,resetViewItem)
-  --
-  -- helpItem <- builderGetObject builder castToMenuItem "help_item"
-  --
-  -- return (menubar, fileItems, editItems, viewItems, helpItem)
+buildMenubar = do
+  return () :: IO ()
+  builder <- new Gtk.Builder []
+  Gtk.builderAddFromFile builder "./Resources/menubar.ui"
+  menubar  <- Gtk.builderGetObject builder "menubar1" >>= unsafeCastTo Gtk.MenuBar . fromJust
+
+
+  newItem <- Gtk.builderGetObject builder "new_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  openItem <- Gtk.builderGetObject builder "open_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  saveItem <- Gtk.builderGetObject builder "save_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  saveAsItem <- Gtk.builderGetObject builder "save_as_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  saveGraphItem <- Gtk.builderGetObject builder "save_graph_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  openGraphItem <- Gtk.builderGetObject builder "open_graph_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  let fileItems = (newItem,openItem,saveItem,saveAsItem,saveGraphItem,openGraphItem)
+
+  undoItem <- Gtk.builderGetObject builder  "undo_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  redoItem <- Gtk.builderGetObject builder  "redo_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  copyItem <- Gtk.builderGetObject builder  "copy_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  pasteItem <- Gtk.builderGetObject builder  "paste_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  cutItem <- Gtk.builderGetObject builder  "cut_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  sallItem <- Gtk.builderGetObject builder  "sall_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  snodesItem <- Gtk.builderGetObject builder  "snodes_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  sedgesItem <- Gtk.builderGetObject builder  "sedges_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  let editItems = (undoItem,redoItem,copyItem,pasteItem,cutItem,sallItem,snodesItem,sedgesItem)
+
+  zoomInItem <- Gtk.builderGetObject builder  "zoomin_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  zoomOutItem <- Gtk.builderGetObject builder  "zoomout_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  zoom50Item <- Gtk.builderGetObject builder  "zoom50_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  zoom100Item <- Gtk.builderGetObject builder  "zoom100_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  zoom150Item <- Gtk.builderGetObject builder  "zoom150_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  zoom200Item <- Gtk.builderGetObject builder  "zoom200_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  resetViewItem <- Gtk.builderGetObject builder  "resetview_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  let viewItems = (zoomInItem,zoomOutItem,zoom50Item,zoom100Item,zoom150Item,zoom200Item,resetViewItem)
+
+  helpItem <- Gtk.builderGetObject builder  "help_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+
+  return (Just menubar, fileItems, editItems, viewItems, helpItem)
 
 -- creates the inspector for typed graphs
-
 buildTypeMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
 buildTypeMenu = do
   frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn ]
@@ -318,7 +321,8 @@ showError msg = do
   --dlgE <- messageDialogNew window [DialogDestroyWithParent] MessageError ButtonsOk msg
   msgDialog <- new Gtk.MessageDialog [ #text := msg
                                 , #messageType := Gtk.MessageTypeError
-                                , #buttons := Gtk.ButtonsTypeOk]
+                                , #buttons := Gtk.ButtonsTypeOk
+                                ]
   Gtk.widgetShowAll msgDialog
   Gtk.dialogRun msgDialog
   Gtk.widgetDestroy msgDialog
@@ -330,26 +334,20 @@ createSaveDialog = do
                                      , #createFolders := True
                                      , #doOverwriteConfirmation := True
                                      ]
-  Gtk.dialogAddButton saveD "save" (fromIntegral . fromEnum $ Gtk.ResponseTypeAccept)
-  Gtk.dialogAddButton saveD "cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeReject)
+  Gtk.dialogAddButton saveD "Save" (fromIntegral . fromEnum $ Gtk.ResponseTypeAccept)
+  Gtk.dialogAddButton saveD "Cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeReject)
   return saveD
-  --          (Just "Salvar arquivo")
-  --          (Just window)
-  --          FileChooserActionSave
-  --          [("Cancela",ResponseCancel),("Salva",ResponseAccept)]
-  -- fileChooserSetDoOverwriteConfirmation saveD True
-  -- widgetShow saveD
-  -- return saveD
 
-createCloseDialog :: Maybe Gtk.Window -> String -> IO Gtk.ResponseType
-createCloseDialog window msg = do
-  return Gtk.ResponseTypeNo
-  --
-  -- dlgC <- messageDialogNew window  [DialogDestroyWithParent] MessageWarning ButtonsNone msg
-  -- dialogAddButton dlgC "Salvar" ResponseYes
-  -- dialogAddButton dlgC "Não Salvar" ResponseNo
-  -- dialogAddButton dlgC "Cancelar" ResponseCancel
-  -- widgetShow dlgC
-  -- response <- dialogRun dlgC
-  -- widgetDestroy dlgC
-  -- return response
+createCloseDialog :: T.Text -> IO Gtk.ResponseType
+createCloseDialog msg = do
+  closeD <- new Gtk.MessageDialog
+            [ #text := msg
+            , #messageType := Gtk.MessageTypeWarning
+            , #buttons := Gtk.ButtonsTypeNone
+            ]
+  Gtk.dialogAddButton closeD "Save" (fromIntegral . fromEnum $ Gtk.ResponseTypeYes)
+  Gtk.dialogAddButton closeD "Don't save" (fromIntegral . fromEnum $ Gtk.ResponseTypeNo)
+  Gtk.dialogAddButton closeD "Cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeCancel)
+  response <- Gtk.dialogRun closeD
+  Gtk.widgetDestroy closeD
+  return $ toEnum . fromIntegral $ response
