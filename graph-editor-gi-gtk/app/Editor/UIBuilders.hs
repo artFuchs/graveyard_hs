@@ -301,23 +301,23 @@ buildTreePanel = do
 buildHelpWindow :: IO Gtk.Window
 buildHelpWindow = do
   helpWindow <- new Gtk.Window [ #title := "Graph Editor - Help"]
-  -- helpBuffer <- textBufferNew Nothing
-  -- textBufferInsertAtCursor helpBuffer "<Creating and selecting>: \n"
-  -- textBufferInsertAtCursor helpBuffer "Click with the right mouse button in a blank space to create a new node. \n"
-  -- textBufferInsertAtCursor helpBuffer "Click with the left mouse button in a node/edge to select it. \n"
-  -- textBufferInsertAtCursor helpBuffer "Click with the left button in a node/edge while the Shift key is pressed to add it to the selection. \n"
-  -- textBufferInsertAtCursor helpBuffer "Click with the left button in a node/edge while the Shift and Ctrl keys are pressed to remove it from the selection. \n"
-  -- textBufferInsertAtCursor helpBuffer "Click with the right button in a node while there's other nodes selected to create edges from the selected nodes to it. \n"
-  -- textBufferInsertAtCursor helpBuffer "<Changing the node properties>: \n"
-  -- textBufferInsertAtCursor helpBuffer "To change the properties of a node/edge, select it and use the inspector on the right. \n"
-  -- textBufferInsertAtCursor helpBuffer "Double-clicking a node or edge, or pressing F2 will focus on the name entry box on the inspector panel. \n"
-  -- textBufferInsertAtCursor helpBuffer "<zoom and navigation>: \n"
-  -- textBufferInsertAtCursor helpBuffer "Use Ctrl + mouse wheel or Ctrl + [+/-] to change the zoom level. \n"
-  -- textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] to change the zoom level to the original. \n"
-  -- textBufferInsertAtCursor helpBuffer "Hold the middle mouse button, or Ctrl + right mouse button, to navigate throught the canvas. \n"
-  -- textBufferInsertAtCursor helpBuffer "Press ctrl + 0 to return to the initial position of the canvas and reset the zoom to the original. \n"
-  -- helpView <- textViewNewWithBuffer helpBuffer
-  -- containerAdd helpWindow helpView
+  helpBuffer <- new Gtk.TextBuffer []
+  Gtk.textBufferInsertAtCursor helpBuffer "<Creating and selecting>: \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Click with the right mouse button in a blank space to create a new node. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Click with the left mouse button in a node/edge to select it. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Click with the left button in a node/edge while the Shift key is pressed to add it to the selection. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Click with the left button in a node/edge while the Shift and Ctrl keys are pressed to remove it from the selection. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Click with the right button in a node while there's other nodes selected to create edges from the selected nodes to it. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "<Changing the node properties>: \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "To change the properties of a node/edge, select it and use the inspector on the right. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Double-clicking a node or edge, or pressing F2 will focus on the name entry box on the inspector panel. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "<zoom and navigation>: \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Use Ctrl + mouse wheel or Ctrl + [+/-] to change the zoom level. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Use Ctrl + [=] to change the zoom level to the original. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Hold the middle mouse button, or Ctrl + right mouse button, to navigate throught the canvas. \n" (-1)
+  Gtk.textBufferInsertAtCursor helpBuffer "Press ctrl + 0 to return to the initial position of the canvas and reset the zoom to the original. \n" (-1)
+  helpView <- new Gtk.TextView [ #buffer := helpBuffer ]
+  Gtk.containerAdd helpWindow helpView
   --
   return helpWindow
 
