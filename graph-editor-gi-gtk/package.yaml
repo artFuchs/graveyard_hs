@@ -39,6 +39,7 @@ executables:
     - gi-gdk
     - text
     - cairo
+    - pango
     - gi-cairo
     - haskell-gi-base
     - transformers

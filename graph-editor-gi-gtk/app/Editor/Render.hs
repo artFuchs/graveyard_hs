@@ -9,7 +9,12 @@ import GI.Cairo
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Cairo.Internal (Render(runRender))
 import Graphics.Rendering.Cairo.Types (Cairo(Cairo))
-import Graphics.Rendering.Pango.Layout
+import Control.Monad.Trans.Reader (runReaderT)
+import Foreign.Ptr (castPtr)
+
+import Graphics.Rendering.Pango.Cairo as GRPC
+import Graphics.Rendering.Pango.Layout as GRPL
+
 import qualified Data.Text as T
 import Data.List
 import Editor.GraphicalInfo
@@ -25,9 +30,12 @@ renderWithContext :: GI.Cairo.Context -> Render () -> IO ()
 renderWithContext ct r = withManagedPtr ct $ \p ->
                          runReaderT (runRender r) (Cairo (castPtr p))
 
+
+
+
 -- draw a node with it's label
-renderNode :: NodeGI -> String -> Bool -> PangoContext -> Render ()
-renderNode node content selected context = do
+renderNode :: NodeGI -> String -> Bool -> Render ()
+renderNode node content selected = do
   let (x,y) = position node
       (r,g,b) = fillColor node
       (rl,gl,bl) = lineColor node
@@ -37,12 +45,14 @@ renderNode node content selected context = do
   case shape node of
     NCircle -> let radius = (max pw ph)/2 in renderCircle (x,y) radius (r,g,b) (rl,gl,bl) selected
     NRect -> renderRectangle (x, y, pw, ph) (r,g,b) (rl,gl,bl) selected
-    NQuad -> renderRectangle (x,y, (max pw ph), (max pw ph)) (r,g,b) (rl,gl,bl) selected
+    NSquare -> renderRectangle (x,y, (max pw ph), (max pw ph)) (r,g,b) (rl,gl,bl) selected
 
   setSourceRGB rl gl bl
   moveTo (x-(pw/2-2)) (y-(ph/2-2))
-  pL <- liftIO $ layoutText context content
+
+  pL <- GRPC.createLayout content
   showLayout pL
+
 
 renderCircle :: (Double,Double) -> Double -> (Double,Double,Double) -> (Double,Double,Double) -> Bool ->  Render ()
 renderCircle (x,y) radius (r,g,b) (lr,lg,lb) selected = do
@@ -78,8 +88,8 @@ renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) selected = do
 
 
 -- draws an edge
-renderEdge :: EdgeGI -> String -> Bool -> NodeGI -> NodeGI -> PangoContext -> Render ()
-renderEdge edge content selected nodeSrc nodeDst context = do
+renderEdge :: EdgeGI -> String -> Bool -> NodeGI -> NodeGI -> Render ()
+renderEdge edge content selected nodeSrc nodeDst = do
   if nodeSrc == nodeDst
     then renderLoop edge selected nodeSrc
     else renderNormalEdge edge selected nodeSrc nodeDst
@@ -87,7 +97,7 @@ renderEdge edge content selected nodeSrc nodeDst context = do
   if null content
     then  return ()
     else  do
-      pL <- liftIO $ layoutText context content
+      pL <- GRPC.createLayout content
       (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
       let (x,y) = position nodeSrc
           (u,v) = cPosition edge
@@ -114,7 +124,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
               n1 = (max pw ph + 1)/2
           in (x1 + vx1*n1, y1 + vy1*n1)
         NRect -> intersectLineRect (xe,ye) (x1,y1,pw+3,ph+3)
-        NQuad -> let l = max pw ph in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
+        NSquare -> let l = max pw ph in intersectLineRect (xe,ye) (x1,y1,l+3,l+3)
       (x2', y2') = case shape nodeDst of
         NCircle ->
           let d2 = pointDistance (xe,ye) (x2,y2)
@@ -122,7 +132,7 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
               n2 = (max pw2 ph2 + 1)/2
           in (x2 - vx2*n2, y2 - vy2*n2)
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
-        NQuad -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
+        NSquare -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
 
       (r,g,b) = color edge
 
