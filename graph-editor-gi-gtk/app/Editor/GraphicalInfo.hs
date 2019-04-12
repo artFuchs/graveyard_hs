@@ -38,7 +38,7 @@ type GIDim = (Double,Double)
 type GIColor = (Double,Double,Double)
 
 
-data NodeShape = NCircle | NRect | NQuad deriving (Eq ,Show, Read)
+data NodeShape = NCircle | NRect | NSquare deriving (Eq ,Show, Read)
 
 -- data struct to draw a node.
 -- contains:
