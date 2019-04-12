@@ -180,94 +180,100 @@ buildTypeMenu = do
   return (frame, typeEntry, colorButton, lineColorButton, radioShapes, radioStyles, (colorBox, frameShape, frameStyle))
 
 -- creates the inspector for the host graph
-buildHostMenu :: IO ()
+buildHostMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
 buildHostMenu = do
-  return ()
-  -- frame <- frameNew
-  -- set frame [ frameShadowType := ShadowIn ]
-  --
-  -- vBoxProps <- vBoxNew False 8
-  -- containerAdd frame vBoxProps
-  --
-  -- -- creates a title label
-  -- titleLabel <- labelNew $ Just "Inspector"
-  -- boxPackStart vBoxProps titleLabel PackNatural 0
-  --
-  -- -- creates a HBox containing a entry for the user change the node label
-  -- hBoxLabel <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxLabel PackNatural 0
-  -- labelLabel <- labelNew $ Just "Label: "
-  -- entryLabel <- entryNew
-  -- boxPackStart hBoxLabel labelLabel PackNatural 0
-  -- boxPackStart hBoxLabel entryLabel PackGrow 0
-  -- widgetSetCanFocus entryLabel True
-  --
-  -- -- creates a HBox containing a ComboBox for the user change the node type
-  -- hBoxNodeType <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxNodeType PackNatural 0
-  -- labelNodeType <- labelNew $ Just "Node Type: "
-  -- boxPackStart hBoxNodeType labelNodeType PackNatural 0
-  -- comboBoxNodeType <- comboBoxNewText
-  -- boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
-  --
-  -- -- creates a HBox conataining a ComboBox for the user change the edge type
-  -- hBoxEdgeType <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxEdgeType PackNatural 0
-  -- labelEdgeType <- labelNew $ Just "Edge Type: "
-  -- boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
-  -- comboBoxEdgeType <- comboBoxNewText
-  -- boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
-  --
-  -- return (frame, entryLabel, comboBoxNodeType, comboBoxEdgeType, (hBoxNodeType, hBoxEdgeType))
+  frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn]
+  mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
+                         , #spacing := 8
+                         ]
+  Gtk.containerAdd frame mainBox
 
-buildRuleMenu :: IO ()
+  -- creates a title label
+  titleLabel <- new Gtk.Label [#label := "Inspector"]
+  Gtk.boxPackStart mainBox titleLabel False False 0
+
+  -- creates a HBox containing a entry for the user change the node label
+  labelBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                         , #spacing := 8]
+  Gtk.boxPackStart mainBox labelBox False False 0
+  labelLabel <- new Gtk.Label [ #label := "Label: "]
+  Gtk.boxPackStart labelBox labelLabel False False 0
+  labelEntry <- new Gtk.Entry []
+  Gtk.boxPackStart labelBox labelEntry True True 0
+  Gtk.widgetSetCanFocus labelEntry True
+
+  -- creates a HBox containing a ComboBox for the user change the node type
+  nodeTypeBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                             , #spacing := 8
+                             ]
+  Gtk.boxPackStart mainBox nodeTypeBox False False 0
+  nodeTypeLabel <- new Gtk.Label [ #label := "Node Type: "]
+  Gtk.boxPackStart nodeTypeBox nodeTypeLabel False False 0
+  nodeTypeComboBox <- new Gtk.ComboBoxText []
+  Gtk.boxPackStart nodeTypeBox nodeTypeComboBox True True 0
+
+  -- creates a HBox conataining a ComboBox for the user change the edge type
+  edgeTypeBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                             , #spacing := 8 ]
+  Gtk.boxPackStart mainBox edgeTypeBox False False 0
+  edgeTypeLabel <- new Gtk.Label [ #label := "Edge Type: "]
+  Gtk.boxPackStart edgeTypeBox edgeTypeLabel False False 0
+  edgeTypeComboBox <- new Gtk.ComboBoxText []
+  Gtk.boxPackStart edgeTypeBox edgeTypeComboBox True True 0
+
+  return (frame, labelEntry, nodeTypeComboBox, edgeTypeComboBox, (nodeTypeBox, edgeTypeBox))
+
+buildRuleMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
 buildRuleMenu = do
-  return ()
+  frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn]
+  mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
+                         , #spacing := 8
+                         ]
+  Gtk.containerAdd frame mainBox
+
+  -- creates a title label
+  titleLabel <- new Gtk.Label [#label := "Inspector"]
+  Gtk.boxPackStart mainBox titleLabel False False 0
+
+  -- creates a HBox containing a entry for the user change the node label
+  labelBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                         , #spacing := 8]
+  Gtk.boxPackStart mainBox labelBox False False 0
+  labelLabel <- new Gtk.Label [ #label := "Label: "]
+  Gtk.boxPackStart labelBox labelLabel False False 0
+  labelEntry <- new Gtk.Entry []
+  Gtk.boxPackStart labelBox labelEntry True True 0
+  Gtk.widgetSetCanFocus labelEntry True
   --
-  -- frame <- frameNew
-  -- set frame [ frameShadowType := ShadowIn ]
+  -- creates a HBox containing a ComboBox for the user change the node type
+  nodeTypeBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                             , #spacing := 8
+                             ]
+  Gtk.boxPackStart mainBox nodeTypeBox False False 0
+  nodeTypeLabel <- new Gtk.Label [ #label := "Node Type: "]
+  Gtk.boxPackStart nodeTypeBox nodeTypeLabel False False 0
+  nodeTypeComboBox <- new Gtk.ComboBoxText []
+  Gtk.boxPackStart nodeTypeBox nodeTypeComboBox True True 0
   --
-  -- vBoxProps <- vBoxNew False 8
-  -- containerAdd frame vBoxProps
-  --
-  -- -- creates the title label
-  -- titleLabel <- labelNew $ Just "Inspector"
-  -- boxPackStart vBoxProps titleLabel PackNatural 0
-  --
-  -- -- creates a HBox containing a entry for the user change the node label
-  -- hBoxLabel <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxLabel PackNatural 0
-  -- labelLabel <- labelNew $ Just "Label: "
-  -- entryLabel <- entryNew
-  -- boxPackStart hBoxLabel labelLabel PackNatural 0
-  -- boxPackStart hBoxLabel entryLabel PackGrow 0
-  -- widgetSetCanFocus entryLabel True
-  --
-  -- -- creates a HBox containing a ComboBox for the user change the node type
-  -- hBoxNodeType <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxNodeType PackNatural 0
-  -- labelNodeType <- labelNew $ Just "Node Type: "
-  -- boxPackStart hBoxNodeType labelNodeType PackNatural 0
-  -- comboBoxNodeType <- comboBoxNewText
-  -- boxPackStart hBoxNodeType comboBoxNodeType PackGrow 0
-  --
-  -- -- creates a HBox containing a ComboBox for the user change the edge type
-  -- hBoxEdgeType <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxEdgeType PackNatural 0
-  -- labelEdgeType <- labelNew $ Just "Edge Type: "
-  -- boxPackStart hBoxEdgeType labelEdgeType PackNatural 0
-  -- comboBoxEdgeType <- comboBoxNewText
-  -- boxPackStart hBoxEdgeType comboBoxEdgeType PackGrow 0
+  -- creates a HBox containing a ComboBox for the user change the edge type
+  edgeTypeBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                             , #spacing := 8 ]
+  Gtk.boxPackStart mainBox edgeTypeBox False False 0
+  edgeTypeLabel <- new Gtk.Label [ #label := "Edge Type: "]
+  Gtk.boxPackStart edgeTypeBox edgeTypeLabel False False 0
+  edgeTypeComboBox <- new Gtk.ComboBoxText []
+  Gtk.boxPackStart edgeTypeBox edgeTypeComboBox True True 0
   --
   -- -- creates a HBox containing a ComboBox for the user change the operation to be applyed in the graph element
-  -- hBoxOperation <- hBoxNew False 8
-  -- boxPackStart vBoxProps hBoxOperation PackNatural 0
-  -- labelOperation <- labelNew $ Just "Operation: "
-  -- boxPackStart hBoxOperation labelOperation PackNatural 0
-  -- comboBoxOperation <- comboBoxNewText
-  -- boxPackStart hBoxOperation comboBoxOperation PackGrow 0
+  operationBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
+                              , #spacing := 8 ]
+  Gtk.boxPackStart mainBox operationBox False False 0
+  operationLabel <- new Gtk.Label [ #label := "Operation: "]
+  Gtk.boxPackStart operationBox operationLabel False False 0
+  operationComboBox <- new Gtk.ComboBoxText []
+  Gtk.boxPackStart operationBox operationComboBox True True 0
   --
-  -- return (frame, entryLabel, comboBoxNodeType, comboBoxEdgeType, comboBoxOperation, (hBoxNodeType, hBoxEdgeType))
+  return (frame, labelEntry, nodeTypeComboBox, edgeTypeComboBox, operationComboBox, (nodeTypeBox, edgeTypeBox))
 
 -- creates the treePanel
 buildTreePanel = do
