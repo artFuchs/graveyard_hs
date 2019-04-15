@@ -1,13 +1,17 @@
+{-# LANGUAGE OverloadedStrings, OverloadedLabels #-}
 module Editor.GraphEditor
 ( startGUI
 )where
 
-import Graphics.UI.Gtk hiding (rectangle)
+import qualified GI.Gtk as Gtk
+import qualified GI.Gdk as Gdk
+import Data.GI.Base
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
 import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
+import Graphics.Rendering.Pango
 import Data.List
 import Data.Maybe
 import qualified Data.Text as T
@@ -22,18 +26,25 @@ import Editor.UIBuilders
 import Editor.DiaGraph hiding (empty)
 import qualified Editor.DiaGraph as DG
 import Editor.EditorState
+
 --------------------------------------------------------------------------------
 -- MODULE STRUCTURES -----------------------------------------------------------
 --------------------------------------------------------------------------------
 -- |GraphStore
--- A tuple representing what is stored in each node of the tree in the treeview
--- It contains the informations: name, editor state, undo stack, redo stack and color to draw the cell
-type GraphStore = (String, EditorState, [DiaGraph], [DiaGraph], String)
-graphStoreName (n,es,u,r,col) = n
-graphStoreEditor (n,es,u,r,col) = es
-graphStoreUndo (n,es,u,r,col) = u
-graphStoreRedo (n,es,u,r,col) = r
-graphStoreColor (n,es,u,r,col) = col
+-- A tuple representing what is showed in each node of the tree in the treeview
+-- It contains the informations: name, color, and a integer that is the identifier
+type GraphStore = (String, String, Int)
+graphStoreName (n,c,i) = n
+graphStoreColor (n,c,i) = col
+graphStoreId (n,c,i) = i
+
+storeSetGraphStore :: Gtk.ListStore -> Gtk.TreeIter -> GraphStore -> IO ()
+storeSetGraphStore store iter (n,c,i) = do
+  gv0 <- toGValue (Just n)
+  gv1 <- toGValue (Just c)
+  gv2 <- toGValue (Just i)
+  #set store iter [0,1,2] [gv0,gv1,gv2]
+
 --------------------------------------------------------------------------------
 -- MODULE FUNCTIONS ------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -43,7 +54,7 @@ graphStoreColor (n,es,u,r,col) = col
 startGUI :: IO()
 startGUI = do
   -- init GTK
-  initGUI
+  Gtk.init Nothing
 
   ------------------------------------------------------------------------------
   -- GUI definition ------------------------------------------------------------
@@ -53,28 +64,31 @@ startGUI = do
   -- main window ---------------------------------------------------------------
   -- creates the menu bar
   (menubar,(new,opn,svn,sva,opg,svg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
-  -- creates the inspector panel on the right
+  -- creates the inspector panel
   (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeMenu
   let
     propWidgets = (entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
-  -- creates the tree panel on the left
+  -- creates the tree panel
   (treePanel, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
   -- creates the main window, containing the canvas and the built panels
-  (window, canvas, _) <- buildMainWindow (Just menubar) frameProps treePanel
+  (window, canvas, _) <- buildMainWindow menubar frameProps treePanel
   -- shows the main window
-  widgetShowAll window
+  #showAll window
 
   -- init an model to display in the tree panel --------------------------------
-  store <- listStoreNew [("new", emptyES, [], [], "white")]
-  projectCol <- treeViewGetColumn treeview 0
+  store <- Gtk.listStoreNew [gtypeString, gtypeString, gtypeInt]
+  fstIter <- Gtk.listStoreAppend store
+  storeSetGraphStore store fstIter ("new", "white", 0)
+
+  projectCol <- Gtk.treeViewGetColumn treeview 0
   case projectCol of
     Nothing -> return ()
     Just col -> do
-      treeViewSetModel treeview (Just store)
-      cellLayoutSetAttributes col treeRenderer store $ \(name,_,_,_,color) -> [cellText := name, cellTextBackground := color]
-      treeViewSetCursor treeview [0] Nothing
+      Gtk.treeViewSetModel treeview (Just store)
+      #addAttribute col treeRenderer "text" 0
+      #addAttribute col treeRenderer "background" 1
 
   ------------------------------------------------------------------------------
   -- init the editor variables  ------------------------------------------------
@@ -90,114 +104,120 @@ startGUI = do
   currentLC       <- newIORef (0,0,0) -- the color to init new edges and the line and text of new nodes
   clipboard       <- newIORef DG.empty -- clipboard - DiaGraph
   fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
-  currentGraph    <- newIORef [0] -- current graph being edited
-  changedProject  <- newIORef False -- set this flahttps://www.youtube.com/g as True when the graph is changed somehow
+  currentGraph    <- newIORef fstIter -- current graph being edited
+  states          <- newIORef $ M.fromList [(0,emptyES)]
+  undoStacks      <- newIORef $ M.fromList [(0,[] :: [(Graph String String, GraphicalInfo)])]
+  redoStacks      <- newIORef $ M.fromList [(0,[] :: [(Graph String String, GraphicalInfo)])]
+  changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
   changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the 'currentGraph' to True
   lastSavedState  <- newIORef ([] :: [DiaGraph])
+
 
   ------------------------------------------------------------------------------
   -- EVENT BINDINGS ------------------------------------------------------------
   -- event bindings for the canvas ---------------------------------------------
   -- drawing event
-  canvas `on` draw $ do
+  on canvas #draw $ \context -> do
     es <- liftIO $ readIORef st
     sq <- liftIO $ readIORef squareSelection
-    drawGraph es sq canvas
+    renderWithContext context $ drawGraph es sq canvas
 
   -- mouse button pressed on canvas
-  canvas `on` buttonPressEvent $ do
-    b <- eventButton
-    (x,y) <- eventCoordinates
-    ms <- eventModifierAll
-    es <- liftIO $ readIORef st
-    click <- eventClick
-    let z = editorGetZoom es
-        (px,py) = editorGetPan es
-        (x',y') = (x/z - px, y/z - py)
-    liftIO $ do
-      writeIORef oldPoint (x',y')
-      widgetGrabFocus canvas
-    case (b, click == DoubleClick) of
-      -- double click with left button : rename selection
-      (LeftButton, True) -> do
-        let (n,e) = editorGetSelected es
-        if null n && null e
-          then return ()
-          else liftIO $ widgetGrabFocus entryName
-      -- left button: select nodes and edges
-      (LeftButton, False)  -> liftIO $ do
-        let (oldSN,oldSE) = editorGetSelected es
-            graph = editorGetGraph es
-            gi = editorGetGI es
-            sNode = case selectNodeInPosition gi (x',y') of
-              Nothing -> []
-              Just nid -> [nid]
-            sEdge = case selectEdgeInPosition gi (x',y') of
-              Nothing -> []
-              Just eid -> [eid]
-        -- add/remove elements of selection
-        case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
-          -- clicked in blank space with Shift not pressed
-          ([], [], False, _) -> do
-            modifyIORef st (editorSetSelected ([],[]))
-            writeIORef squareSelection $ Just (x',y',0,0)
-          -- selected nodes or edges with shift pressed:
-          (n, e, False, _) -> do
-            let nS = if null n then False else n!!0 `elem` oldSN
-                eS = if null e then False else e!!0 `elem` oldSE
-            if nS || eS
-              then return ()
-              else modifyIORef st (editorSetSelected (n, e))
-          -- selected nodes or edges with Shift pressed -> add to selection
-          (n, e, True, False) -> do
-            let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
-                jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
-            modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-          -- selected nodes or edges with Shift + Ctrl pressed -> remove from selection
-          (n, e, True, True) -> do
-            let jointSN = if null n then oldSN else delete (n!!0) oldSN
-                jointSE = if null e then oldSE else delete (e!!0) oldSE
-            modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-        widgetQueueDraw canvas
-        updatePropMenu st currentC currentLC propWidgets propBoxes
-      -- right button click: create nodes and insert edges
-      (RightButton, _) -> liftIO $ do
-        let g = editorGetGraph es
-            gi = editorGetGI es
-            dstNode = selectNodeInPosition gi (x',y')
-        context <- widgetGetPangoContext canvas
-        stackUndo undoStack redoStack es
-        case (Control `elem` ms, dstNode) of
-          -- no selected node: create node
-          (False, Nothing) -> do
-            shape <- readIORef currentShape
-            c <- readIORef currentC
-            lc <- readIORef currentLC
-            createNode' st (x',y') context shape c lc
-            setChangeFlags window store changedProject changedGraph currentGraph True
-          -- one node selected: create edges targeting this node
-          (False, Just nid) -> do
-            estyle <- readIORef currentStyle
-            color <- readIORef currentLC
-            modifyIORef st (\es -> createEdges es nid estyle color)
-            setChangeFlags window store changedProject changedGraph currentGraph True
-          -- ctrl pressed: middle mouse button emulation
-          (True,_) -> return ()
-        widgetQueueDraw canvas
-        updatePropMenu st currentC currentLC propWidgets propBoxes
-      _           -> return ()
-
-    return True
+  -- on canvas #buttonPressEvent $ \eventButton -> do
+  --   b <- get eventButton #button
+  --   x <- get eventButton #x
+  --   y <- get eventButton #y
+  --   ms <- get eventButton #state
+  --   click <- get eventButton #type
+  --   es <- liftIO $ readIORef st
+  --   let z = editorGetZoom es
+  --       (px,py) = editorGetPan es
+  --       (x',y') = (x/z - px, y/z - py)
+  --   liftIO $ do
+  --     writeIORef oldPoint (x',y')
+  --     Gtk.widgetGrabFocus canvas
+  --   case (b, click == Gdk.EventType2buttonPress) of
+  --     -- double click with left button : rename selection
+  --     (Gdk.ModifierTypeButton1Mask, True) -> do
+  --       let (n,e) = editorGetSelected es
+  --       if null n && null e
+  --         then return ()
+  --         else liftIO $ Gtk.widgetGrabFocus entryName
+  --     -- left button: select nodes and edges
+  --     (Gdk.ModifierTypeButton1Mask, False)  -> liftIO $ do
+  --       let (oldSN,oldSE) = editorGetSelected es
+  --           graph = editorGetGraph es
+  --           gi = editorGetGI es
+  --           sNode = case selectNodeInPosition gi (x',y') of
+  --             Nothing -> []
+  --             Just nid -> [nid]
+  --           sEdge = case selectEdgeInPosition gi (x',y') of
+  --             Nothing -> []
+  --             Just eid -> [eid]
+  --       -- add/remove elements of selection
+  --       case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
+  --         -- clicked in blank space with Shift not pressed
+  --         ([], [], False, _) -> do
+  --           modifyIORef st (editorSetSelected ([],[]))
+  --           writeIORef squareSelection $ Just (x',y',0,0)
+  --         -- selected nodes or edges with shift pressed:
+  --         (n, e, False, _) -> do
+  --           let nS = if null n then False else n!!0 `elem` oldSN
+  --               eS = if null e then False else e!!0 `elem` oldSE
+  --           if nS || eS
+  --             then return ()
+  --             else modifyIORef st (editorSetSelected (n, e))
+  --         -- selected nodes or edges with Shift pressed -> add to selection
+  --         (n, e, True, False) -> do
+  --           let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
+  --               jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
+  --           modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
+  --         -- selected nodes or edges with Shift + Ctrl pressed -> remove from selection
+  --         (n, e, True, True) -> do
+  --           let jointSN = if null n then oldSN else delete (n!!0) oldSN
+  --               jointSE = if null e then oldSE else delete (e!!0) oldSE
+  --           modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
+  --       Gtk.widgetQueueDraw canvas
+  --       updatePropMenu st currentC currentLC propWidgets propBoxes
+  --     -- right button click: create nodes and insert edges
+  --     (Gdk.ModifierTypeButton2Mask, _) -> liftIO $ do
+  --       let g = editorGetGraph es
+  --           gi = editorGetGI es
+  --           dstNode = selectNodeInPosition gi (x',y')
+  --       context <- Gtk.widgetGetPangoContext canvas
+  --       stackUndo undoStack redoStack es
+  --       case (Gdk.ModifierTMask `elem` ms, dstNode) of
+  --         -- no selected node: create node
+  --         (False, Nothing) -> do
+  --           shape <- readIORef currentShape
+  --           c <- readIORef currentC
+  --           lc <- readIORef currentLC
+  --           createNode' st (x',y') context shape c lc
+  --           setChangeFlags window store changedProject changedGraph currentGraph True
+  --         -- one node selected: create edges targeting this node
+  --         (False, Just nid) -> do
+  --           estyle <- readIORef currentStyle
+  --           color <- readIORef currentLC
+  --           modifyIORef st (\es -> createEdges es nid estyle color)
+  --           setChangeFlags window store changedProject changedGraph currentGraph True
+  --         -- ctrl pressed: middle mouse button emulation
+  --         (True,_) -> return ()
+  --       Gtk.widgetQueueDraw canvas
+  --       updatePropMenu st currentC currentLC propWidgets propBoxes
+  --     _           -> return ()
+  --
+  --   return True
 
   -- mouse motion on canvas
-  canvas `on` motionNotifyEvent $ do
-    ms <- eventModifierAll
-    (x,y) <- eventCoordinates
+  on canvas #motionNotifyEvent $ \eventMotion -> do
+    ms <- get eventMotion #status
+    x <- get eventMotion #x
+    y <- get eventMotion #y
     (ox,oy) <- liftIO $ readIORef oldPoint
     es <- liftIO $ readIORef st
-    let leftButton = Button1 `elem` ms
+    let leftButton = Gdk.ModifierTypeButton1Mask `elem` ms
         -- in case of the editor being used in a notebook or with a mouse with just two buttons, ctrl + right button can be used instead of the middle button.
-        middleButton = Button2 `elem` ms || Button3 `elem` ms && Control `elem` ms
+        middleButton = Gdk.ModifierTypeButton2Mask `elem` ms || Gdk.ModifierTypeButton3Mask `elem` ms && ModifierTypeControlMask `elem` ms
         (sNodes, sEdges) = editorGetSelected es
         z = editorGetZoom es
         (px,py) = editorGetPan es
@@ -207,7 +227,7 @@ startGUI = do
       (True, False, [], []) -> liftIO $ do
         modifyIORef squareSelection $ liftM $ (\(a,b,c,d) -> (a,b,x'-a,y'-b))
         sq <- readIORef squareSelection
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
       -- if left button is pressed with some elements selected, then move them
       (True, False, n, e) -> liftIO $ do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
@@ -220,260 +240,260 @@ startGUI = do
             writeIORef movingGI True
             stackUndo undoStack redoStack es
           else return ()
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
       -- if middle button is pressed, then move the view
       (False ,True, _, _) -> liftIO $ do
         let (dx,dy) = (x'-ox,y'-oy)
         modifyIORef st (editorSetPan (px+dx, py+dy))
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
       (_,_,_,_) -> return ()
     return True
 
   -- mouse button release on canvas
-  canvas `on` buttonReleaseEvent $ do
-    b <- eventButton
-    case b of
-      LeftButton -> liftIO $ do
-        writeIORef movingGI False
-        es <- readIORef st
-        sq <- readIORef squareSelection
-        let (n,e) = editorGetSelected es
-        case (editorGetSelected es,sq) of
-          -- if release the left button when there's a square selection,
-          -- select the elements that are inside the selection
-          (([],[]), Just (x,y,w,h)) -> do
-            let graph = editorGetGraph es
-                (ngiM, egiM) = editorGetGI es
-                sNodes = map NodeId $ M.keys $
-                                      M.filter (\ngi -> let pos = position ngi
-                                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) ngiM
-                sEdges = map EdgeId $ M.keys $
-                                      M.filter (\egi -> let pos = cPosition egi
-                                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) egiM
-                newEs = editorSetSelected (sNodes, sEdges) $ es
-            writeIORef st newEs
-            updatePropMenu st currentC currentLC propWidgets propBoxes
-          ((n,e), Nothing) -> modifyIORef st (adjustEdges)
-          _ -> return ()
-      _ -> return ()
-    liftIO $ do
-      writeIORef squareSelection Nothing
-      widgetQueueDraw canvas
-    return True
+  -- canvas `on` buttonReleaseEvent $ do
+  --   b <- eventButton
+  --   case b of
+  --     LeftButton -> liftIO $ do
+  --       writeIORef movingGI False
+  --       es <- readIORef st
+  --       sq <- readIORef squareSelection
+  --       let (n,e) = editorGetSelected es
+  --       case (editorGetSelected es,sq) of
+  --         -- if release the left button when there's a square selection,
+  --         -- select the elements that are inside the selection
+  --         (([],[]), Just (x,y,w,h)) -> do
+  --           let graph = editorGetGraph es
+  --               (ngiM, egiM) = editorGetGI es
+  --               sNodes = map NodeId $ M.keys $
+  --                                     M.filter (\ngi -> let pos = position ngi
+  --                                                       in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) ngiM
+  --               sEdges = map EdgeId $ M.keys $
+  --                                     M.filter (\egi -> let pos = cPosition egi
+  --                                                       in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) egiM
+  --               newEs = editorSetSelected (sNodes, sEdges) $ es
+  --           writeIORef st newEs
+  --           updatePropMenu st currentC currentLC propWidgets propBoxes
+  --         ((n,e), Nothing) -> modifyIORef st (adjustEdges)
+  --         _ -> return ()
+  --     _ -> return ()
+  --   liftIO $ do
+  --     writeIORef squareSelection Nothing
+  --     Gtk.widgetQueueDraw canvas
+  --   return True
 
   -- mouse wheel scroll on canvas
-  canvas `on` scrollEvent $ do
-    d <- eventScrollDirection
-    ms <- eventModifierAll
-    case (Control `elem` ms, d) of
+  on canvas #scrollEvent $ \eventScroll -> do
+    d <- get eventScroll #direction
+    ms <- get eventScroll #status
+    case (Gdk.ModifierTypeControlMask `elem` ms, d) of
       -- when control is pressed,
       -- if the direction is up, then zoom in
-      (True, ScrollUp)  -> liftIO $ menuItemEmitActivate zin
+      (True, Gdk.ScrollDirectionUp)  -> liftIO $ Gtk.menuItemActivate zin
       -- if the direction is down, then zoom out
-      (True, ScrollDown) -> liftIO $ menuItemEmitActivate zut
+      (True, Gdk.ScrollDirectionDown) -> liftIO $ Gtk.menuItemActivate zut
       _ -> return ()
     return True
 
   -- keyboard
-  canvas `on` keyPressEvent $ do
-    k <- eventKeyName
-    ms <- eventModifierAll
-    liftIO $ do
-      context <- widgetGetPangoContext canvas
-      case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
-        -- <delete> : delete selection
-        (False,False,"delete") -> do
-          es <- readIORef st
-          modifyIORef st (\es -> deleteSelected es)
-          stackUndo undoStack redoStack es
-          setChangeFlags window store changedProject changedGraph currentGraph True
-          widgetQueueDraw canvas
-        -- CTRL + [SHIFT] + A : [de]select all
-        (True, True, "a") -> do
-          modifyIORef st $ editorSetSelected ([],[])
-          widgetQueueDraw canvas
-        (True, False, "a") -> do
-          modifyIORef st (\es -> let g = editorGetGraph es
-                                 in editorSetSelected (nodeIds g, edgeIds g) es)
-          widgetQueueDraw canvas
-        -- F2 - rename selection
-        (False,False,"f2") -> widgetGrabFocus entryName
-        -- CTRL + C/V/X : copy/paste/cut
-        (True, False, "c") -> menuItemEmitActivate cpy
-        (True, False, "v") -> menuItemEmitActivate pst
-        (True, False, "x") -> menuItemEmitActivate cut
-        _       -> return ()
-    return True
-
-  window `on` keyPressEvent $ do
-    k <- eventKeyName
-    ms <- eventModifierAll
-    liftIO $ do
-      context <- widgetGetPangoContext canvas
-      case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
-        -- CTRL + <+>/<->/<=> : zoom controls
-        (True,_,"plus") -> menuItemEmitActivate zin
-        (True,_,"minus") -> menuItemEmitActivate zut
-        (True,_,"equal") -> menuItemEmitActivate zdf
-        -- CTRL + <0> : reset pan & zoom
-        (True,_,"0") -> menuItemEmitActivate vdf
-
-        -- CTRL + N : create a new graph in the treeView
-        (True, False, "n") -> buttonClicked btnNew
-        -- CTRL + W : remove a graph from the treeView
-        (True, False, "w") -> buttonClicked btnRmv
-
-        -- CTRL + SHIFT + N : create a new file
-        (True, True, "n") -> do
-          modifyIORef st (\es -> (G.empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
-          listStoreClear store
-          listStoreAppend store ("new",emptyES,[], [], "white")
-          writeIORef changedProject False
-          writeIORef fileName Nothing
-          writeIORef undoStack []
-          writeIORef redoStack []
-          set window [windowTitle := "Graph Editor"]
-          widgetQueueDraw canvas
-        -- CTRL + SHIFT + S : save file as
-        (True, True, "s") -> menuItemEmitActivate sva
-        -- CTRL + S : save file
-        (True, False, "s") -> menuItemEmitActivate svn
-        -- CTRL + O : open file
-        (True, False, "o") -> menuItemEmitActivate opn
-        -- CTRL + Z/R : undo/redo
-        (True, False, "z") -> menuItemEmitActivate udo
-        (True, False, "r") -> menuItemEmitActivate rdo
-        _ -> return ()
-    return False
+  -- on canvas #keyPressEvent $ \eventKey do
+  --   k <- get eventKey #name
+  --   ms <- get eventKey #status
+  --   liftIO $ do
+  --     case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, T.unpack $ T.toLower k) of
+  --       -- <delete> : delete selection
+  --       (False,False,"delete") -> do
+  --         es <- readIORef st
+  --         modifyIORef st (\es -> deleteSelected es)
+  --         stackUndo undoStack redoStack es
+  --         setChangeFlags window store changedProject changedGraph currentGraph True
+  --         Gtk.widgetQueueDraw canvas
+  --       -- CTRL + [SHIFT] + A : [de]select all
+  --       (True, True, "a") -> do
+  --         modifyIORef st $ editorSetSelected ([],[])
+  --         Gtk.widgetQueueDraw canvas
+  --       (True, False, "a") -> do
+  --         modifyIORef st (\es -> let g = editorGetGraph es
+  --                                in editorSetSelected (nodeIds g, edgeIds g) es)
+  --         Gtk.widgetQueueDraw canvas
+  --       -- F2 - rename selection
+  --       (False,False,"f2") -> Gtk.widgetGrabFocus entryName
+  --       -- CTRL + C/V/X : copy/paste/cut
+  --       (True, False, "c") -> Gtk.menuItemActivate cpy
+  --       (True, False, "v") -> Gtk.menuItemActivate pst
+  --       (True, False, "x") -> Gtk.menuItemActivate cut
+  --       _       -> return ()
+  --   return True
+  --
+  -- on window #keyPressEvent $ \eventKey -> do
+  --   k <- eventKeyName
+  --   ms <- eventModifierAll
+  --   liftIO $ do
+  --     context <- widgetGetPangoContext canvas
+  --     case (Control `elem` ms, Shift `elem` ms, T.unpack $ T.toLower k) of
+  --       -- CTRL + <+>/<->/<=> : zoom controls
+  --       (True,_,"plus") -> menuItemEmitActivate zin
+  --       (True,_,"minus") -> menuItemEmitActivate zut
+  --       (True,_,"equal") -> menuItemEmitActivate zdf
+  --       -- CTRL + <0> : reset pan & zoom
+  --       (True,_,"0") -> menuItemEmitActivate vdf
+  --
+  --       -- CTRL + N : create a new graph in the treeView
+  --       (True, False, "n") -> buttonClicked btnNew
+  --       -- CTRL + W : remove a graph from the treeView
+  --       (True, False, "w") -> buttonClicked btnRmv
+  --
+  --       -- CTRL + SHIFT + N : create a new file
+  --       (True, True, "n") -> do
+  --         modifyIORef st (\es -> (G.empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
+  --         listStoreClear store
+  --         listStoreAppend store ("new",emptyES,[], [], "white")
+  --         writeIORef changedProject False
+  --         writeIORef fileName Nothing
+  --         writeIORef undoStack []
+  --         writeIORef redoStack []
+  --         set window [windowTitle := "Graph Editor"]
+  --         Gtk.widgetQueueDraw canvas
+  --       -- CTRL + SHIFT + S : save file as
+  --       (True, True, "s") -> menuItemEmitActivate sva
+  --       -- CTRL + S : save file
+  --       (True, False, "s") -> menuItemEmitActivate svn
+  --       -- CTRL + O : open file
+  --       (True, False, "o") -> menuItemEmitActivate opn
+  --       -- CTRL + Z/R : undo/redo
+  --       (True, False, "z") -> menuItemEmitActivate udo
+  --       (True, False, "r") -> menuItemEmitActivate rdo
+  --       _ -> return ()
+  --   return False
 
   -- event bindings for the menu toolbar ---------------------------------------
 
   -- auxiliar functions to create/open/save the project
   -- auxiliar function to prepare the treeStore to save
-  let prepToSave = do currentES <- readIORef st
-                      undo <- readIORef undoStack
-                      redo <- readIORef redoStack
-                      [path] <- readIORef currentGraph
-                      gs <- listStoreGetValue store path
-                      let (name, c) = (graphStoreName gs, graphStoreColor gs)
-                      listStoreSetValue store path (name, currentES, undo, redo, c)
-
-  -- auxiliar function to clean the flags after saving
-  let afterSave = do  size <- listStoreGetSize store
-                      writeIORef changedProject False
-                      writeIORef changedGraph (take size (repeat False))
-                      list <- listStoreToList store
-                      writeIORef lastSavedState (map (\gs -> let es = graphStoreEditor gs in (editorGetGraph es, editorGetGI es)) list)
-                      forM [0..(size-1)] $ \i -> let (n,e,u,r,_) = list!!i in listStoreSetValue store i (n,e,u,r,"white")
-                      indicateProjChanged window False
-                      updateSavedState lastSavedState store
-                      filename <- readIORef fileName
-                      case filename of
-                        Nothing -> set window [windowTitle := "Graph Editor"]
-                        Just fn -> set window [windowTitle := "Graph Editor - " ++ fn]
-
-
-  -- auxiliar function to check if the project was changed
-  -- it does the checking and if no, ask the user if them want to save.
-  -- returns True if there's no changes, if the user don't wanted to save or if he wanted and the save operation was successfull
-  -- returns False if the user wanted to save and the save operation failed or opted to cancel.
-  let confirmOperation = do changed <- readIORef changedProject
-                            response <- if changed
-                              then createCloseDialog (Just window) "The project was changed, wants to save?"
-                              else return ResponseNo
-                            case response of
-                              ResponseCancel -> return False
-                              r -> case r of
-                                ResponseNo -> return True
-                                ResponseYes -> do
-                                  prepToSave
-                                  saveFile store saveProject fileName window True -- returns True if saved the file
-
-  -- new project action activated
-  new `on` menuItemActivated $ do
-    continue <- confirmOperation
-    if continue
-      then do
-        writeIORef fileName Nothing
-        treeViewSetCursor treeview [0] Nothing
-        listStoreClear store
-        listStoreAppend store ("new", emptyES, [], [], "white")
-        writeIORef st emptyES
-        writeIORef undoStack []
-        writeIORef redoStack []
-        writeIORef lastSavedState []
-        writeIORef changedProject False
-        writeIORef changedGraph [False]
-        set window [windowTitle := "Graph Editor"]
-        widgetQueueDraw canvas
-      else return ()
-
-  -- open project
-  opn `on` menuItemActivated $ do
-    continue <- confirmOperation
-    if continue
-      then do
-        mg <- loadFile window loadProject
-        case mg of
-          Just (list,fn) -> do
-            if length list > 0
-              then do
-                listStoreClear store
-                let plist = map (\(n,e) -> (n,e,[],[],"white")) list
-                forM plist (listStoreAppend store)
-                let (name,es) = list!!0
-                writeIORef st es
-                writeIORef fileName $ Just fn
-                writeIORef undoStack []
-                writeIORef redoStack []
-                writeIORef changedProject False
-                writeIORef changedGraph [False]
-                set window [windowTitle := "Graph Editor - " ++ fn]
-                widgetQueueDraw canvas
-              else return ()
-          Nothing -> return ()
-        else return ()
-
-  -- save project
-  svn `on` menuItemActivated $ do
-    prepToSave
-    saved <- saveFile store saveProject fileName window True
-    if saved
-      then do afterSave
-      else return ()
-
-  -- save project as
-  sva `on` menuItemActivated $ do
-    prepToSave
-    saved <- saveFileAs store saveProject fileName window True
-    if saved
-      then afterSave
-      else return ()
-
-  -- open graph
-  opg `on`menuItemActivated $ do
-    mg <- loadFile window loadGraph
-    case mg of
-      Just ((g,gi),path) -> do
-        let splitAtToken str tkn = splitAt (1 + (fromMaybe (-1) $ findIndex (==tkn) str)) str
-            getLastPart str = let splited = (splitAtToken str '/') in if fst splited == "" then str else getLastPart (snd splited)
-            getName str = if (tails str)!!(length str - 3) == ".gr" then take (length str - 3) str else str
-        listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[],"green")
-        size <- listStoreGetSize store
-        treeViewSetCursor treeview [size-1] Nothing
-        modifyIORef changedGraph (\xs -> xs ++ [True])
-        writeIORef changedProject True
-        indicateProjChanged window True
-        widgetQueueDraw canvas
-      _      -> return ()
-
-  -- save graph
-  svg `on` menuItemActivated $ do
-    es <- readIORef st
-    let g  = editorGetGraph es
-        gi = editorGetGI es
-    saveFileAs (g,gi) saveGraph fileName window False
-    return ()
+  -- let prepToSave = do currentES <- readIORef st
+  --                     undo <- readIORef undoStack
+  --                     redo <- readIORef redoStack
+  --                     iter <- readIORef currentGraph
+  --                     gs <- listStoreGetValue store path
+  --                     let (name, c) = (graphStoreName gs, graphStoreColor gs)
+  --                     storeSetGraphStore store iter (name,curre)
+  --                     listStoreSetValue store path (name, currentES, undo, redo, c)
+  --
+  -- -- auxiliar function to clean the flags after saving
+  -- let afterSave = do  size <- listStoreGetSize store
+  --                     writeIORef changedProject False
+  --                     writeIORef changedGraph (take size (repeat False))
+  --                     list <- listStoreToList store
+  --                     writeIORef lastSavedState (map (\gs -> let es = graphStoreEditor gs in (editorGetGraph es, editorGetGI es)) list)
+  --                     forM [0..(size-1)] $ \i -> let (n,e,u,r,_) = list!!i in listStoreSetValue store i (n,e,u,r,"white")
+  --                     indicateProjChanged window False
+  --                     updateSavedState lastSavedState store
+  --                     filename <- readIORef fileName
+  --                     case filename of
+  --                       Nothing -> set window [windowTitle := "Graph Editor"]
+  --                       Just fn -> set window [windowTitle := "Graph Editor - " ++ fn]
+  --
+  --
+  -- -- auxiliar function to check if the project was changed
+  -- -- it does the checking and if no, ask the user if them want to save.
+  -- -- returns True if there's no changes, if the user don't wanted to save or if he wanted and the save operation was successfull
+  -- -- returns False if the user wanted to save and the save operation failed or opted to cancel.
+  -- let confirmOperation = do changed <- readIORef changedProject
+  --                           response <- if changed
+  --                             then createCloseDialog (Just window) "The project was changed, wants to save?"
+  --                             else return ResponseNo
+  --                           case response of
+  --                             ResponseCancel -> return False
+  --                             r -> case r of
+  --                               ResponseNo -> return True
+  --                               ResponseYes -> do
+  --                                 prepToSave
+  --                                 saveFile store saveProject fileName window True -- returns True if saved the file
+  --
+  -- -- new project action activated
+  -- new `on` menuItemActivated $ do
+  --   continue <- confirmOperation
+  --   if continue
+  --     then do
+  --       writeIORef fileName Nothing
+  --       treeViewSetCursor treeview [0] Nothing
+  --       listStoreClear store
+  --       listStoreAppend store ("new", emptyES, [], [], "white")
+  --       writeIORef st emptyES
+  --       writeIORef undoStack []
+  --       writeIORef redoStack []
+  --       writeIORef lastSavedState []
+  --       writeIORef changedProject False
+  --       writeIORef changedGraph [False]
+  --       set window [windowTitle := "Graph Editor"]
+  --       Gtk.widgetQueueDraw canvas
+  --     else return ()
+  --
+  -- -- open project
+  -- opn `on` menuItemActivated $ do
+  --   continue <- confirmOperation
+  --   if continue
+  --     then do
+  --       mg <- loadFile window loadProject
+  --       case mg of
+  --         Just (list,fn) -> do
+  --           if length list > 0
+  --             then do
+  --               listStoreClear store
+  --               let plist = map (\(n,e) -> (n,e,[],[],"white")) list
+  --               forM plist (listStoreAppend store)
+  --               let (name,es) = list!!0
+  --               writeIORef st es
+  --               writeIORef fileName $ Just fn
+  --               writeIORef undoStack []
+  --               writeIORef redoStack []
+  --               writeIORef changedProject False
+  --               writeIORef changedGraph [False]
+  --               set window [windowTitle := "Graph Editor - " ++ fn]
+  --               Gtk.widgetQueueDraw canvas
+  --             else return ()
+  --         Nothing -> return ()
+  --       else return ()
+  --
+  -- -- save project
+  -- svn `on` menuItemActivated $ do
+  --   prepToSave
+  --   saved <- saveFile store saveProject fileName window True
+  --   if saved
+  --     then do afterSave
+  --     else return ()
+  --
+  -- -- save project as
+  -- sva `on` menuItemActivated $ do
+  --   prepToSave
+  --   saved <- saveFileAs store saveProject fileName window True
+  --   if saved
+  --     then afterSave
+  --     else return ()
+  --
+  -- -- open graph
+  -- opg `on`menuItemActivated $ do
+  --   mg <- loadFile window loadGraph
+  --   case mg of
+  --     Just ((g,gi),path) -> do
+  --       let splitAtToken str tkn = splitAt (1 + (fromMaybe (-1) $ findIndex (==tkn) str)) str
+  --           getLastPart str = let splited = (splitAtToken str '/') in if fst splited == "" then str else getLastPart (snd splited)
+  --           getName str = if (tails str)!!(length str - 3) == ".gr" then take (length str - 3) str else str
+  --       listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[],"green")
+  --       size <- listStoreGetSize store
+  --       treeViewSetCursor treeview [size-1] Nothing
+  --       modifyIORef changedGraph (\xs -> xs ++ [True])
+  --       writeIORef changedProject True
+  --       indicateProjChanged window True
+  --       Gtk.widgetQueueDraw canvas
+  --     _      -> return ()
+  --
+  -- -- save graph
+  -- svg `on` menuItemActivated $ do
+  --   es <- readIORef st
+  --   let g  = editorGetGraph es
+  --       gi = editorGetGI es
+  --   saveFileAs (g,gi) saveGraph fileName window False
+  --   return ()
 
   -- undo
   udo `on` menuItemActivated $ do
@@ -485,7 +505,7 @@ startGUI = do
     let (g,gi) = (editorGetGraph es, editorGetGI es)
         x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
     setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- redo
   rdo `on` menuItemActivated $ do
@@ -497,7 +517,7 @@ startGUI = do
     let (g,gi) = (editorGetGraph es, editorGetGI es)
         x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
     setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- copy
   cpy `on` menuItemActivated $ do
@@ -511,7 +531,7 @@ startGUI = do
     stackUndo undoStack redoStack es
     setChangeFlags window store changedProject changedGraph currentGraph True
     modifyIORef st (pasteClipBoard clip)
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- cut
   cut `on` menuItemActivated $ do
@@ -520,13 +540,13 @@ startGUI = do
     modifyIORef st (\es -> deleteSelected es)
     stackUndo undoStack redoStack es
     setChangeFlags window store changedProject changedGraph currentGraph True
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- select all
   sla `on` menuItemActivated $ do
     modifyIORef st (\es -> let g = editorGetGraph es
                            in editorSetSelected (nodeIds g, edgeIds g) es)
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- select edges
   sle `on` menuItemActivated $ do
@@ -537,7 +557,7 @@ startGUI = do
       ([],[]) -> writeIORef st $ editorSetSelected ([], edgeIds g) es
       ([], e) -> return ()
       (n,e) -> writeIORef st $ editorSetSelected ([],e) es
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- select nodes
   sln `on` menuItemActivated $ do
@@ -548,39 +568,39 @@ startGUI = do
       ([],[]) -> writeIORef st $ editorSetSelected (nodeIds g, []) es
       (n, []) -> return ()
       (n,e) -> writeIORef st $ editorSetSelected (n,[]) es
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- zoom in
   zin `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- zoom out
   zut `on` menuItemActivated $ do
     modifyIORef st (\es -> let z = editorGetZoom es * 0.9 in if z >= 0.5 then editorSetZoom z es else es)
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   z50 `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 0.5 es )
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- reset zoom to defaults
   zdf `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 1.0 es )
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   z150 `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 1.5 es )
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   z200 `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 2.0 es )
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- reset view to defaults (reset zoom and pan)
   vdf `on` menuItemActivated $ do
     modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
-    widgetQueueDraw canvas
+    Gtk.widgetQueueDraw canvas
 
   -- help
   hlp `on` menuItemActivated $ do
@@ -588,30 +608,30 @@ startGUI = do
 
   -- event bindings -- inspector panel -----------------------------------------
   -- pressed a key when editing the entryName
-  entryName `on` keyPressEvent $ do
-    k <- eventKeyName
-    let setName = liftIO $ do
-          es <- readIORef st
-          stackUndo undoStack redoStack es
-          setChangeFlags window store changedProject changedGraph currentGraph True
-          name <- entryGetText entryName :: IO String
-          context <- widgetGetPangoContext canvas
-          renameSelected st name context
-          widgetQueueDraw canvas
-    -- if it's Return, then change the name of the selected elements
-    case T.unpack k of
-      "Return" -> setName
-      "KP_Enter" -> setName
-      _       -> return ()
-    return False
+  -- entryName `on` keyPressEvent $ do
+  --   k <- eventKeyName
+  --   let setName = liftIO $ do
+  --         es <- readIORef st
+  --         stackUndo undoStack redoStack es
+  --         setChangeFlags window store changedProject changedGraph currentGraph True
+  --         name <- entryGetText entryName :: IO String
+  --         context <- widgetGetPangoContext canvas
+  --         renameSelected st name context
+  --         Gtk.widgetQueueDraw canvas
+  --   -- if it's Return, then change the name of the selected elements
+  --   case T.unpack k of
+  --     "Return" -> setName
+  --     "KP_Enter" -> setName
+  --     _       -> return ()
+  --   return False
 
   -- select a fill color or line color
   -- change the selection fill color or line color and
   -- set the current fill or line color as the selected color
-  onColorSet colorBtn $ do
-    Color r g b <- colorButtonGetColor colorBtn
+  on colorBtn #colorSet $ do
+    gtkcolor <- Gtk.colorButtonGetColor colorBtn
     es <- readIORef st
-    let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
+    let color = ((fromIntegral $ get gtkcolor #red)/65535, (fromIntegral $ get gtkcolor #green)/65535, (fromIntegral$ get gtkcolor #blue)/65535)
         (nds,edgs) = editorGetSelected es
     writeIORef currentC color
     if null nds
@@ -622,12 +642,12 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
-  onColorSet lineColorBtn $ do
-    Color r g b <- colorButtonGetColor lineColorBtn
+  on lineColorBtn #colorSet $ do
+    gtkcolor <- Gtk.colorButtonGetColor lineColorBtn
     es <- readIORef st
-    let color = ((fromIntegral r)/65535, (fromIntegral g)/65535, (fromIntegral b)/65535)
+    let color = ((fromIntegral $ get gtkcolor #red)/65535, (fromIntegral $ get gtkcolor #green)/65535, (fromIntegral$ get gtkcolor #blue)/65535)
         (nds,edgs) = editorGetSelected es
     writeIORef currentLC color
     if null nds && null edgs
@@ -639,7 +659,7 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
   -- toogle the radio buttons for node shapes
   -- change the shape of the selected nodes and set the current shape for new nodes
@@ -655,7 +675,7 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NCircle)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
   radioRect `on` toggled $ do
     writeIORef currentShape NRect
@@ -669,21 +689,21 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NRect)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
   radioQuad `on` toggled $ do
-    writeIORef currentShape NQuad
+    writeIORef currentShape NSquare
     es <- readIORef st
     active <- toggleButtonGetActive radioQuad
     let nds = fst $ editorGetSelected es
         giM = fst $ editorGetGI es
-    if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NQuad) giM)
+    if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NSquare) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
-        modifyIORef st (\es -> changeNodeShape es NQuad)
-        widgetQueueDraw canvas
+        modifyIORef st (\es -> changeNodeShape es NSquare)
+        Gtk.widgetQueueDraw canvas
 
   -- toogle the radio buttons for edge styles
   -- change the style of the selected edges and set the current style for new edges
@@ -699,7 +719,7 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ENormal)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
   radioPointed `on` toggled $ do
     writeIORef currentStyle EPointed
@@ -713,7 +733,7 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es EPointed)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
   radioSlashed `on` toggled $ do
     writeIORef currentStyle ESlashed
@@ -727,101 +747,103 @@ startGUI = do
         stackUndo undoStack redoStack es
         setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ESlashed)
-        widgetQueueDraw canvas
+        Gtk.widgetQueueDraw canvas
 
   -- event bindings for the graphs' tree ---------------------------------------
 
   -- auxiliar
-  let loadFromStore path = do
-                      (_,newEs, newU, newR, _) <- listStoreGetValue store path
-                      writeIORef st newEs
-                      writeIORef undoStack newU
-                      writeIORef redoStack newR
-                      writeIORef currentGraph [path]
+  -- let loadFromStore path = do
+  --                     (_,newEs, newU, newR, _) <- listStoreGetValue store path
+  --                     writeIORef st newEs
+  --                     writeIORef undoStack newU
+  --                     writeIORef redoStack newR
+  --                     writeIORef currentGraph [path]
 
 
   -- changed the selected graph
-  treeview `on` cursorChanged $ do
-    selection <- treeViewGetSelection treeview
-    sel <- treeSelectionGetSelected selection
-    case sel of
-      Nothing -> return ()
-      Just it -> do
-        [path] <- treeModelGetPath store it
-        [currentPath] <- readIORef currentGraph
-        if currentPath == path
-          then return ()
-          else do
-            -- update the current graph in the tree
-            currentES <- readIORef st
-            u <- readIORef undoStack
-            r <- readIORef redoStack
-            gs <- listStoreGetValue store currentPath
-            let (name, color) = (graphStoreName gs, graphStoreColor gs)
-            listStoreSetValue store currentPath (name,currentES, u, r, color)
-            -- load the selected graph from the tree
-            loadFromStore path
-            -- update canvas
-            widgetQueueDraw canvas
+  -- treeview `on` cursorChanged $ do
+  --   selection <- treeViewGetSelection treeview
+  --   sel <- treeSelectionGetSelected selection
+  --   case sel of
+  --     Nothing -> return ()
+  --     Just it -> do
+  --       [path] <- treeModelGetPath store it
+  --       [currentPath] <- readIORef currentGraph
+  --       if currentPath == path
+  --         then return ()
+  --         else do
+  --           -- update the current graph in the tree
+  --           currentES <- readIORef st
+  --           u <- readIORef undoStack
+  --           r <- readIORef redoStack
+  --           gs <- listStoreGetValue store currentPath
+  --           let (name, color) = (graphStoreName gs, graphStoreColor gs)
+  --           listStoreSetValue store currentPath (name,currentES, u, r, color)
+  --           -- load the selected graph from the tree
+  --           loadFromStore path
+  --           -- update canvas
+  --           Gtk.widgetQueueDraw canvas
 
   -- pressed the 'new' button
-  btnNew `on` buttonActivated $ do
-    listStoreAppend store ("new",emptyES,[],[],"green")
-    modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
-    return ()
-
-  -- pressed the 'remove' button
-  btnRmv `on` buttonActivated $ do
-    selection <- treeViewGetSelection treeview
-    sel <- treeSelectionGetSelected selection
-    case sel of
-      Nothing -> return ()
-      Just it -> do
-        size <- listStoreGetSize store
-        [path] <- treeModelGetPath store it
-        case (size>1, path==size-1) of
-          (True, True) -> do
-            treeViewSetCursor treeview [path-1] Nothing
-            listStoreRemove store path
-            modifyIORef changedGraph (\cg -> take path cg)
-          (True, False) -> do
-            listStoreRemove store path
-            loadFromStore path -- load the graph of the next entry
-            modifyIORef changedGraph (\cg -> take path cg ++ drop (path+1) cg)
-          (False, True) -> do
-            listStoreSetValue store 0 ("new",emptyES,[],[],"green")
-            writeIORef changedGraph [False]
-            writeIORef st emptyES
-          _ -> return ()
-
-        widgetQueueDraw canvas
+  -- on btnNew #clicked $ do
+  --   iter <- gtk.listStoreAppend store
+  --   storeSetGraphStore store iter ("new","green",1)
+  --   --modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
+  --   return ()
+  --
+  -- -- pressed the 'remove' button
+  -- on btnRmv #clicked $ do
+  --   selection <- treeViewGetSelection treeview
+  --   sel <- treeSelectionGetSelected selection
+  --   case sel of
+  --     Nothing -> return ()
+  --     Just it -> do
+  --       size <- listStoreGetSize store
+  --       [path] <- treeModelGetPath store it
+  --       case (size>1, path==size-1) of
+  --         (True, True) -> do
+  --           treeViewSetCursor treeview [path-1] Nothing
+  --           listStoreRemove store path
+  --           modifyIORef changedGraph (\cg -> take path cg)
+  --         (True, False) -> do
+  --           listStoreRemove store path
+  --           loadFromStore path -- load the graph of the next entry
+  --           modifyIORef changedGraph (\cg -> take path cg ++ drop (path+1) cg)
+  --         (False, True) -> do
+  --           listStoreSetValue store 0 ("new",emptyES,[],[],"green")
+  --           writeIORef changedGraph [False]
+  --           writeIORef st emptyES
+  --         _ -> return ()
+  --
+  --       widgetQueueDraw canvas
 
   -- edited a graph name
-  treeRenderer `on` edited $ \[path] newName -> do
-    (oldName, val, u, r, color) <- listStoreGetValue store path
-    listStoreSetValue store path (newName, val, u, r, color)
-    writeIORef changedProject True
-    indicateProjChanged window True
-
-  -- remove menuItem "insert Emoji" cause it causes the program to crash
-  treeRenderer `on` editingStarted $ \widget path -> do
-    let entry = castToEntry widget
-    entry `on` entryPopulatePopup $ \menu -> do
-      items <- containerGetChildren menu
-      containerRemove menu (items!!(length items -1))
-      widgetShowAll menu
-    return ()
+  -- on treeRenderer #edited $ \[path] newName -> do
+  --   (oldName, color) <- listStoreGetValue store path
+  --   listStoreSetValue store path (newName, color)
+  --   writeIORef changedProject True
+  --   indicateProjChanged window True
+  --
+  -- -- remove menuItem "insert Emoji" cause it causes the program to crash
+  -- treeRenderer `on` editingStarted $ \widget path -> do
+  --   let entry = castToEntry widget
+  --   entry `on` entryPopulatePopup $ \menu -> do
+  --     items <- containerGetChildren menu
+  --     containerRemove menu (items!!(length items -1))
+  --     widgetShowAll menu
+  --   return ()
 
 
   -- event bindings for the main window ----------------------------------------
   -- when click in the close button, the application must close
-  window `on` deleteEvent $ do
-    continue <- liftIO $ confirmOperation
-    if continue
-      then do
-        liftIO mainQuit
-        return False
-      else return True
+  -- window `on` deleteEvent $ do
+  --   continue <- liftIO $ confirmOperation
+  --   if continue
+  --     then do
+  --       liftIO mainQuit
+  --       return False
+  --     else return True]
+  on window #destroy Gtk.mainQuit
 
   -- run the preogram ----------------------------------------------------------
   mainGUI
@@ -832,8 +854,9 @@ startGUI = do
 --------------------------------------------------------------------------------
 
 -- update the inspector --------------------------------------------------------
-updatePropMenu :: IORef EditorState -> IORef (Double,Double,Double) -> IORef (Double,Double,Double) -> (Entry, ColorButton, ColorButton, [RadioButton], [RadioButton]) -> (HBox, Frame, Frame)-> IO ()
+updatePropMenu :: IORef EditorState -> IORef (Double,Double,Double) -> IORef (Double,Double,Double) -> (Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton]) -> (Gtk.Box, Gtk.Frame, Gtk.Frame)-> IO ()
 updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
+  emptyColor <- new Gdk.Color [#red := 49151, #blue := 49151, #green := 49151]
   est <- readIORef st
   let g = editorGetGraph est
       ns = filter (\n -> elem (nodeId n) $ fst $ editorGetSelected est) $ nodes g
@@ -845,60 +868,62 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
       (r, g, b)    <- readIORef currentC
       (r', g', b') <- readIORef currentLC
       entrySetText entryName ""
-      colorButtonSetColor colorBtn $ Color (round (r*65535)) (round (g*65535)) (round (b*65535))
-      colorButtonSetColor lcolorBtn $ Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
-      set hBoxColor [widgetVisible := True]
-      set frameShape [widgetVisible := True]
-      set frameStyle [widgetVisible := True]
+      color <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
+      lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
+      Gtk.colorButtonSetColor colorBtn color
+      Gtk.colorButtonSetColor lcolorBtn lcolor
+      set hBoxColor [#visible := True]
+      set frameShape [#visible := True]
+      set frameStyle [#visible := True]
     (n,0) -> do
       let nid = nodeId (ns!!0)
           name = if n == 1 then nodeInfo $ (ns!!0) else unifyNames (map nodeInfo ns)
           gi = getNodeGI (fromEnum nid) ngiM
           (r,g,b) = fillColor gi
           (r',g',b') = lineColor gi
-          nodeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
-          nodeLineC = Color (round (r'*65535)) (round (g'*65535)) (round (b'*65535))
           nodeShape = shape gi
-      entrySetText entryName name
-      colorButtonSetColor colorBtn $ if n==1 then nodeColor else Color 49151 49151 49151
-      colorButtonSetColor lcolorBtn $ if n==1 then nodeLineC else Color 49151 49151 49151
+      lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
+      color <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
+      set entryName [#text := name]
+      colorButtonSetColor colorBtn $ if n==1 then nodeColor else emptyColor
+      colorButtonSetColor lcolorBtn $ if n==1 then nodeLineC else emptyColor
       case (n,nodeShape) of
-        (1,NCircle) -> toggleButtonSetActive (radioShapes!!0) True
-        (1,NRect) -> toggleButtonSetActive (radioShapes!!1) True
-        (1,NQuad) -> toggleButtonSetActive (radioShapes!!2) True
+        (1,NCircle) -> Gtk.toggleButtonSetActive (radioShapes!!0) True
+        (1,NRect) -> Gtk.toggleButtonSetActive (radioShapes!!1) True
+        (1,NSquare) -> Gtk.toggleButtonSetActive (radioShapes!!2) True
         _ -> return ()
 
-      set hBoxColor [widgetVisible := True]
-      set frameShape [widgetVisible := True]
-      set frameStyle [widgetVisible := False]
+      set hBoxColor [#visible := True]
+      set frameShape [#visible := True]
+      set frameStyle [#visible := False]
     (0,n) -> do
       let eid = edgeId (es!!0)
           name = if n == 1 then edgeInfo (es!!0) else unifyNames (map edgeInfo es)
           gi = getEdgeGI (fromEnum eid) egiM
           (r,g,b) = color gi
-          edgeColor = Color (round (r*65535)) (round (g*65535)) (round (b*65535))
           edgeStyle = style gi
-      entrySetText entryName name
-      colorButtonSetColor lcolorBtn $ if n == 1 then edgeColor else Color 49151 49151 49151
+      edgeColor <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
+      set entryName [#text := name]
+      Gtk.colorButtonSetColor lcolorBtn $ if n == 1 then edgeColor else emptyColor
       case (n,edgeStyle) of
-        (1,ENormal) -> toggleButtonSetActive (radioStyles!!0) True
-        (1,EPointed) -> toggleButtonSetActive (radioStyles!!1) True
-        (1,ESlashed) -> toggleButtonSetActive (radioStyles!!2) True
+        (1,ENormal) -> Gtk.toggleButtonSetActive (radioStyles!!0) True
+        (1,EPointed) -> Gtk.toggleButtonSetActive (radioStyles!!1) True
+        (1,ESlashed) -> Gtk.toggleButtonSetActive (radioStyles!!2) True
         _ -> return ()
 
-      set hBoxColor [widgetVisible := False]
-      set frameShape [widgetVisible := False]
-      set frameStyle [widgetVisible := True]
+      set hBoxColor [#visible := False]
+      set frameShape [#visible := False]
+      set frameStyle [#visible := True]
     _ -> do
       entrySetText entryName "----"
-      colorButtonSetColor colorBtn $ Color 49151 49151 49151
-      colorButtonSetColor lcolorBtn $ Color 49151 49151 49151
-      set hBoxColor [widgetVisible := True]
-      set frameShape [widgetVisible := True]
-      set frameStyle [widgetVisible := True]
+      colorButtonSetColor colorBtn emptyColor
+      colorButtonSetColor lcolorBtn emptyColor
+      set hBoxColor [#visible := True]
+      set frameShape [#visible := True]
+      set frameStyle [#visible := True]
 
 -- draw a graph in the canvas --------------------------------------------------
-drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> DrawingArea -> Render ()
+drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> Gtk.DrawingArea -> Render ()
 drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   context <- liftIO $ widgetGetPangoContext canvas
   scale z z
@@ -936,7 +961,7 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
   return ()
 
 -- general save function -------------------------------------------------------
-saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO Bool
+saveFile :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Gtk.Window -> Bool -> IO Bool
 saveFile x saveF fileName window changeFN = do
   fn <- readIORef fileName
   case fn of
@@ -950,12 +975,12 @@ saveFile x saveF fileName window changeFN = do
     Nothing -> saveFileAs x saveF fileName window changeFN
 
 
-saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Window -> Bool -> IO Bool
+saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Gtk.Window -> Bool -> IO Bool
 saveFileAs x saveF fileName window changeFN = do
   saveD <- createSaveDialog window
   response <- dialogRun saveD
   fn <- case response of
-    ResponseAccept -> do
+    Gtk.ResponseTypeAccept -> do
       filename <- fileChooserGetFilename saveD
       case filename of
         Nothing -> do
@@ -982,7 +1007,7 @@ saveFileAs x saveF fileName window changeFN = do
 
 -- auxiliar save functions -----------------------------------------------------
 -- save project
-saveProject :: ListStore GraphStore -> String -> IO Bool
+saveProject :: Gtk.ListStore -> String -> IO Bool
 saveProject model path = do
   editorList <- listStoreToList model
   let getWhatMatters = (\(name, es, _, _, _) -> (name, editorGetGraph es, editorGetGI es))
@@ -1012,18 +1037,18 @@ saveGraph (g,gi) path = do
 
 
 -- load function ---------------------------------------------------------------
-loadFile :: Window -> (String -> a) -> IO (Maybe (a,String))
+loadFile :: Gtk.Window -> (String -> a) -> IO (Maybe (a,String))
 loadFile window loadF = do
   loadD <- fileChooserDialogNew
            (Just "Abrir Arquivo")
            (Just window)
            FileChooserActionOpen
-           [("Cancela", ResponseCancel), ("Abre",ResponseAccept)]
+           [("Cancela", Gtk.ResponseTypeCancel), ("Abre",Gtk.ResponseTypeAccept)]
   fileChooserSetDoOverwriteConfirmation loadD True
   widgetShow loadD
   response <- dialogRun loadD
   case response of
-    ResponseAccept -> do
+    Gtk.ResponseTypeAccept -> do
       filename <- fileChooserGetFilename loadD
       widgetDestroy loadD
       case filename of
@@ -1164,7 +1189,7 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
     (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
 
 -- change window name to indicate if the project was modified
-indicateProjChanged :: Window -> Bool -> IO ()
+indicateProjChanged :: Gtk.Window -> Bool -> IO ()
 indicateProjChanged window True = do
   title <- get window windowTitle
   if title!!0 == '*'
@@ -1177,7 +1202,7 @@ indicateProjChanged window False = do
     then set window [windowTitle := title]
     else return ()
 
-indicateGraphChanged :: ListStore GraphStore -> Int -> Bool -> IO ()
+indicateGraphChanged :: Gtk.ListStore -> Int -> Bool -> IO ()
 indicateGraphChanged store path True = do
   (n,e,u,r,_) <- listStoreGetValue store path
   listStoreSetValue store path (n,e,u,r,"yellow")
@@ -1188,7 +1213,7 @@ indicateGraphChanged store path False = do
 
 
 -- change the flags that inform if the graphs and project were changed and inform the graphs
-setChangeFlags :: Window -> ListStore GraphStore -> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
+setChangeFlags :: Gtk.Window -> Gtk.ListStore-> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
 setChangeFlags window store changedProject changedGraph currentPath True = do
   [path] <- readIORef currentPath
   modifyIORef changedGraph (\xs -> take path xs ++ [True] ++ drop (path+1) xs)
@@ -1207,7 +1232,7 @@ setChangeFlags window store changedProject changedGraph currentPath False = do
   indicateGraphChanged store path False
 
 -- change updatedState
-updateSavedState :: IORef [DiaGraph] -> ListStore GraphStore -> IO ()
+updateSavedState :: IORef [DiaGraph] -> Gtk.ListStore -> IO ()
 updateSavedState sst store = do
   list <- listStoreToList store
   let newSavedState = map (\(_,es,_,_,_) -> (editorGetGraph es, editorGetGI es)) list

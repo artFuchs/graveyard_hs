@@ -88,7 +88,7 @@ selectNodeInPosition (nodesG,_) (x,y) =
                             in case shape n of
                               NCircle -> pointDistance (x,y) (nx,ny) < l/2
                               NRect -> pointInsideRectangle (x,y) (nx,ny,w,h)
-                              NQuad -> pointInsideRectangle (x,y) (nx,ny,l,l) )
+                              NSquare -> pointInsideRectangle (x,y) (nx,ny,l,l) )
 
 -- check if a given point is close of an edge control point
 selectEdgeInPosition:: GraphicalInfo -> (Double,Double) -> Maybe EdgeId
