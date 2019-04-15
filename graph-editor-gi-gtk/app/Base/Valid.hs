@@ -43,16 +43,15 @@ data ValidationResult
   | IsInvalid [String] -- ^ Indicates that errors were found, with messages explaining them
   deriving (Eq, Show)
 
+instance Semigroup ValidationResult where
+  (<>) IsValid IsValid                     = IsValid
+  (<>) IsValid (IsInvalid msgs)            = IsInvalid msgs
+  (<>) (IsInvalid msgs) IsValid            = IsInvalid msgs
+  (<>) (IsInvalid msgs1) (IsInvalid msgs2) = IsInvalid (msgs1 ++ msgs2)
 
 instance Monoid ValidationResult where
-
   mempty = IsValid
-
-  mappend IsValid IsValid                     = IsValid
-  mappend IsValid (IsInvalid msgs)            = IsInvalid msgs
-  mappend (IsInvalid msgs) IsValid            = IsInvalid msgs
-  mappend (IsInvalid msgs1) (IsInvalid msgs2) = IsInvalid (msgs1 ++ msgs2)
-
+  mappend = (<>)
 
 -- | Return 'IsValid' if the given boolean is true, otherwise return 'IsInvalid' with the given error message.
 ensure :: Bool -> String -> ValidationResult
