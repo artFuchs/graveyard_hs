@@ -43,6 +43,8 @@ executables:
     - gi-cairo
     - haskell-gi-base
     - transformers
+    - prettyprinter
+    - parallel
 
 tests:
   graph-editor-gi-gtk-test:
