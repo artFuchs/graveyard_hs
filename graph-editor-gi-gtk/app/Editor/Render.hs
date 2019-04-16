@@ -51,8 +51,8 @@ renderNode node content selected = do
   setSourceRGB rl gl bl
   moveTo (x-(pw/2-2)) (y-(ph/2-2))
 
-  desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
   pL <- GRPC.createLayout content
+  desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
   liftIO $ GRPL.layoutSetFontDescription pL (Just desc)
   showLayout pL
 
@@ -101,6 +101,8 @@ renderEdge edge content selected nodeSrc nodeDst = do
     then  return ()
     else  do
       pL <- GRPC.createLayout content
+      desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
+      liftIO $ GRPL.layoutSetFontDescription pL (Just desc)
       (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
       let (x,y) = position nodeSrc
           (u,v) = cPosition edge

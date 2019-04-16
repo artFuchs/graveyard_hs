@@ -184,7 +184,6 @@ startGUI = do
           updatePropMenu st currentC currentLC propWidgets propBoxes
         -- right button click: create nodes and insert edges
         (3, False) -> liftIO $ do
-          print "right"
           let g = editorGetGraph es
               gi = editorGetGI es
               dstNode = selectNodeInPosition gi (x',y')
@@ -253,36 +252,36 @@ startGUI = do
     return True
 
   -- mouse button release on canvas
-  -- canvas `on` buttonReleaseEvent $ do
-  --   b <- eventButton
-  --   case b of
-  --     LeftButton -> liftIO $ do
-  --       writeIORef movingGI False
-  --       es <- readIORef st
-  --       sq <- readIORef squareSelection
-  --       let (n,e) = editorGetSelected es
-  --       case (editorGetSelected es,sq) of
-  --         -- if release the left button when there's a square selection,
-  --         -- select the elements that are inside the selection
-  --         (([],[]), Just (x,y,w,h)) -> do
-  --           let graph = editorGetGraph es
-  --               (ngiM, egiM) = editorGetGI es
-  --               sNodes = map NodeId $ M.keys $
-  --                                     M.filter (\ngi -> let pos = position ngi
-  --                                                       in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) ngiM
-  --               sEdges = map EdgeId $ M.keys $
-  --                                     M.filter (\egi -> let pos = cPosition egi
-  --                                                       in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) egiM
-  --               newEs = editorSetSelected (sNodes, sEdges) $ es
-  --           writeIORef st newEs
-  --           updatePropMenu st currentC currentLC propWidgets propBoxes
-  --         ((n,e), Nothing) -> modifyIORef st (adjustEdges)
-  --         _ -> return ()
-  --     _ -> return ()
-  --   liftIO $ do
-  --     writeIORef squareSelection Nothing
-  --     Gtk.widgetQueueDraw canvas
-  --   return True
+  on canvas #buttonReleaseEvent $ \eventButton -> do
+    b <- get eventButton #button
+    case b of
+      1 -> liftIO $ do
+        writeIORef movingGI False
+        es <- readIORef st
+        sq <- readIORef squareSelection
+        let (n,e) = editorGetSelected es
+        case (editorGetSelected es,sq) of
+          -- if release the left button when there's a square selection,
+          -- select the elements that are inside the selection
+          (([],[]), Just (x,y,w,h)) -> do
+            let graph = editorGetGraph es
+                (ngiM, egiM) = editorGetGI es
+                sNodes = map NodeId $ M.keys $
+                                      M.filter (\ngi -> let pos = position ngi
+                                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) ngiM
+                sEdges = map EdgeId $ M.keys $
+                                      M.filter (\egi -> let pos = cPosition egi
+                                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) egiM
+                newEs = editorSetSelected (sNodes, sEdges) $ es
+            writeIORef st newEs
+            updatePropMenu st currentC currentLC propWidgets propBoxes
+          ((n,e), Nothing) -> modifyIORef st (adjustEdges)
+          _ -> return ()
+      _ -> return ()
+    liftIO $ do
+      writeIORef squareSelection Nothing
+      Gtk.widgetQueueDraw canvas
+    return True
 
   -- mouse wheel scroll on canvas
   on canvas #scrollEvent $ \eventScroll -> do
@@ -1095,13 +1094,11 @@ loadFile window loadF = do
 -- create a new node, auto-generating it's name and dimensions
 createNode' :: IORef EditorState -> GIPos -> NodeShape -> GIColor -> GIColor -> P.Context ->  IO ()
 createNode' st pos nshape color lcolor context = do
-  print "createNode'"
   es <- readIORef st
   let nid = head $ newNodes (editorGetGraph es)
       --content = "node " ++ show nid
-      content = "abs"
+      content = ""
   dim <- getStringDims content context
-  print dim
   writeIORef st $ createNode es pos dim content nshape color lcolor
 
 -- rename the selected itens
