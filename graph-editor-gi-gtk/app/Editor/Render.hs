@@ -14,6 +14,7 @@ import Foreign.Ptr (castPtr)
 
 import Graphics.Rendering.Pango.Cairo as GRPC
 import Graphics.Rendering.Pango.Layout as GRPL
+import Graphics.Rendering.Pango as GRP
 
 import qualified Data.Text as T
 import Data.List
@@ -50,7 +51,9 @@ renderNode node content selected = do
   setSourceRGB rl gl bl
   moveTo (x-(pw/2-2)) (y-(ph/2-2))
 
+  desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
   pL <- GRPC.createLayout content
+  liftIO $ GRPL.layoutSetFontDescription pL (Just desc)
   showLayout pL
 
 

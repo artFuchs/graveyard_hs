@@ -5,6 +5,7 @@ module Editor.GraphEditor
 
 import qualified GI.Gtk as Gtk
 import qualified GI.Gdk as Gdk
+import qualified GI.Pango as P
 import Data.GI.Base
 import Control.Monad
 import Control.Monad.IO.Class
@@ -13,6 +14,7 @@ import Graphics.Rendering.Cairo
 import Graphics.Rendering.Pango.Layout
 import Graphics.Rendering.Pango
 import Data.List
+import Data.Int
 import Data.Maybe
 import qualified Data.Text as T
 import qualified Control.Exception as E
@@ -35,14 +37,14 @@ import Editor.EditorState
 -- It contains the informations: name, color, and a integer that is the identifier
 type GraphStore = (String, String, Int)
 graphStoreName (n,c,i) = n
-graphStoreColor (n,c,i) = col
+graphStoreColor (n,c,i) = c
 graphStoreId (n,c,i) = i
 
 storeSetGraphStore :: Gtk.ListStore -> Gtk.TreeIter -> GraphStore -> IO ()
 storeSetGraphStore store iter (n,c,i) = do
   gv0 <- toGValue (Just n)
   gv1 <- toGValue (Just c)
-  gv2 <- toGValue (Just i)
+  gv2 <- toGValue ((fromIntegral i) :: Int32)
   #set store iter [0,1,2] [gv0,gv1,gv2]
 
 --------------------------------------------------------------------------------
@@ -121,103 +123,104 @@ startGUI = do
     es <- liftIO $ readIORef st
     sq <- liftIO $ readIORef squareSelection
     renderWithContext context $ drawGraph es sq canvas
+    return False
 
   -- mouse button pressed on canvas
-  -- on canvas #buttonPressEvent $ \eventButton -> do
-  --   b <- get eventButton #button
-  --   x <- get eventButton #x
-  --   y <- get eventButton #y
-  --   ms <- get eventButton #state
-  --   click <- get eventButton #type
-  --   es <- liftIO $ readIORef st
-  --   let z = editorGetZoom es
-  --       (px,py) = editorGetPan es
-  --       (x',y') = (x/z - px, y/z - py)
-  --   liftIO $ do
-  --     writeIORef oldPoint (x',y')
-  --     Gtk.widgetGrabFocus canvas
-  --   case (b, click == Gdk.EventType2buttonPress) of
-  --     -- double click with left button : rename selection
-  --     (Gdk.ModifierTypeButton1Mask, True) -> do
-  --       let (n,e) = editorGetSelected es
-  --       if null n && null e
-  --         then return ()
-  --         else liftIO $ Gtk.widgetGrabFocus entryName
-  --     -- left button: select nodes and edges
-  --     (Gdk.ModifierTypeButton1Mask, False)  -> liftIO $ do
-  --       let (oldSN,oldSE) = editorGetSelected es
-  --           graph = editorGetGraph es
-  --           gi = editorGetGI es
-  --           sNode = case selectNodeInPosition gi (x',y') of
-  --             Nothing -> []
-  --             Just nid -> [nid]
-  --           sEdge = case selectEdgeInPosition gi (x',y') of
-  --             Nothing -> []
-  --             Just eid -> [eid]
-  --       -- add/remove elements of selection
-  --       case (sNode, sEdge, Shift `elem` ms, Control `elem` ms) of
-  --         -- clicked in blank space with Shift not pressed
-  --         ([], [], False, _) -> do
-  --           modifyIORef st (editorSetSelected ([],[]))
-  --           writeIORef squareSelection $ Just (x',y',0,0)
-  --         -- selected nodes or edges with shift pressed:
-  --         (n, e, False, _) -> do
-  --           let nS = if null n then False else n!!0 `elem` oldSN
-  --               eS = if null e then False else e!!0 `elem` oldSE
-  --           if nS || eS
-  --             then return ()
-  --             else modifyIORef st (editorSetSelected (n, e))
-  --         -- selected nodes or edges with Shift pressed -> add to selection
-  --         (n, e, True, False) -> do
-  --           let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
-  --               jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
-  --           modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-  --         -- selected nodes or edges with Shift + Ctrl pressed -> remove from selection
-  --         (n, e, True, True) -> do
-  --           let jointSN = if null n then oldSN else delete (n!!0) oldSN
-  --               jointSE = if null e then oldSE else delete (e!!0) oldSE
-  --           modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
-  --       Gtk.widgetQueueDraw canvas
-  --       updatePropMenu st currentC currentLC propWidgets propBoxes
-  --     -- right button click: create nodes and insert edges
-  --     (Gdk.ModifierTypeButton2Mask, _) -> liftIO $ do
-  --       let g = editorGetGraph es
-  --           gi = editorGetGI es
-  --           dstNode = selectNodeInPosition gi (x',y')
-  --       context <- Gtk.widgetGetPangoContext canvas
-  --       stackUndo undoStack redoStack es
-  --       case (Gdk.ModifierTMask `elem` ms, dstNode) of
-  --         -- no selected node: create node
-  --         (False, Nothing) -> do
-  --           shape <- readIORef currentShape
-  --           c <- readIORef currentC
-  --           lc <- readIORef currentLC
-  --           createNode' st (x',y') context shape c lc
-  --           setChangeFlags window store changedProject changedGraph currentGraph True
-  --         -- one node selected: create edges targeting this node
-  --         (False, Just nid) -> do
-  --           estyle <- readIORef currentStyle
-  --           color <- readIORef currentLC
-  --           modifyIORef st (\es -> createEdges es nid estyle color)
-  --           setChangeFlags window store changedProject changedGraph currentGraph True
-  --         -- ctrl pressed: middle mouse button emulation
-  --         (True,_) -> return ()
-  --       Gtk.widgetQueueDraw canvas
-  --       updatePropMenu st currentC currentLC propWidgets propBoxes
-  --     _           -> return ()
-  --
-  --   return True
+  on canvas #buttonPressEvent $ \eventButton -> do
+    b <- get eventButton #button
+    x <- get eventButton #x
+    y <- get eventButton #y
+    ms <- get eventButton #state
+    click <- get eventButton #type
+    es <- liftIO $ readIORef st
+    let z = editorGetZoom es
+        (px,py) = editorGetPan es
+        (x',y') = (x/z - px, y/z - py)
+    liftIO $ do
+      writeIORef oldPoint (x',y')
+      Gtk.widgetGrabFocus canvas
+      case (b, click == Gdk.EventType2buttonPress) of
+        --double click with left button : rename selection
+        (1, True) -> do
+          let (n,e) = editorGetSelected es
+          if null n && null e
+            then return ()
+            else liftIO $ Gtk.widgetGrabFocus entryName
+        -- left button: select nodes and edges
+        (1, False)  -> liftIO $ do
+          let (oldSN,oldSE) = editorGetSelected es
+              graph = editorGetGraph es
+              gi = editorGetGI es
+              sNode = case selectNodeInPosition gi (x',y') of
+                Nothing -> []
+                Just nid -> [nid]
+              sEdge = case selectEdgeInPosition gi (x',y') of
+                  Nothing -> []
+                  Just eid -> [eid]
+          -- add/remove elements of selection
+          case (sNode, sEdge, Gdk.ModifierTypeShiftMask `elem` ms, Gdk.ModifierTypeControlMask `elem` ms) of
+            -- clicked in blank space with Shift not pressed
+            ([], [], False, _) -> do
+              modifyIORef st (editorSetSelected ([],[]))
+              writeIORef squareSelection $ Just (x',y',0,0)
+            -- selected nodes or edges with shift pressed:
+            (n, e, False, _) -> do
+              let nS = if null n then False else n!!0 `elem` oldSN
+                  eS = if null e then False else e!!0 `elem` oldSE
+              if nS || eS
+              then return ()
+              else modifyIORef st (editorSetSelected (n, e))
+            -- selected nodes or edges with Shift pressed -> add to selection
+            (n, e, True, False) -> do
+              let jointSN = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sNode ++ oldSN
+                  jointSE = foldl (\ns n -> if n `notElem` ns then n:ns else ns) [] $ sEdge ++ oldSE
+              modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
+            -- selected nodes or edges with Shift + Ctrl pressed -> remove from selection
+            (n, e, True, True) -> do
+              let jointSN = if null n then oldSN else delete (n!!0) oldSN
+                  jointSE = if null e then oldSE else delete (e!!0) oldSE
+              modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
+          Gtk.widgetQueueDraw canvas
+          updatePropMenu st currentC currentLC propWidgets propBoxes
+        -- right button click: create nodes and insert edges
+        (3, False) -> liftIO $ do
+          print "right"
+          let g = editorGetGraph es
+              gi = editorGetGI es
+              dstNode = selectNodeInPosition gi (x',y')
+          context <- Gtk.widgetGetPangoContext canvas
+          stackUndo undoStack redoStack es
+          case (Gdk.ModifierTypeControlMask `elem` ms, dstNode) of
+            -- no selected node: create node
+            (False, Nothing) -> do
+              shape <- readIORef currentShape
+              c <- readIORef currentC
+              lc <- readIORef currentLC
+              createNode' st (x',y') shape c lc context
+              --setChangeFlags window store changedProject changedGraph currentGraph True
+              -- one node selected: create edges targeting this node
+            (False, Just nid) -> do
+              estyle <- readIORef currentStyle
+              color <- readIORef currentLC
+              modifyIORef st (\es -> createEdges es nid estyle color)
+              --setChangeFlags window store changedProject changedGraph currentGraph True
+            -- ctrl pressed: middle mouse button emulation
+            (True,_) -> return ()
+          Gtk.widgetQueueDraw canvas
+          updatePropMenu st currentC currentLC propWidgets propBoxes
+        _           -> return ()
+      return True
 
   -- mouse motion on canvas
   on canvas #motionNotifyEvent $ \eventMotion -> do
-    ms <- get eventMotion #status
+    ms <- get eventMotion #state
     x <- get eventMotion #x
     y <- get eventMotion #y
     (ox,oy) <- liftIO $ readIORef oldPoint
     es <- liftIO $ readIORef st
     let leftButton = Gdk.ModifierTypeButton1Mask `elem` ms
         -- in case of the editor being used in a notebook or with a mouse with just two buttons, ctrl + right button can be used instead of the middle button.
-        middleButton = Gdk.ModifierTypeButton2Mask `elem` ms || Gdk.ModifierTypeButton3Mask `elem` ms && ModifierTypeControlMask `elem` ms
+        middleButton = Gdk.ModifierTypeButton2Mask `elem` ms || Gdk.ModifierTypeButton3Mask `elem` ms && Gdk.ModifierTypeControlMask `elem` ms
         (sNodes, sEdges) = editorGetSelected es
         z = editorGetZoom es
         (px,py) = editorGetPan es
@@ -233,7 +236,7 @@ startGUI = do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
         modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         mv <- readIORef movingGI
         if not mv
           then do
@@ -284,7 +287,7 @@ startGUI = do
   -- mouse wheel scroll on canvas
   on canvas #scrollEvent $ \eventScroll -> do
     d <- get eventScroll #direction
-    ms <- get eventScroll #status
+    ms <- get eventScroll #state
     case (Gdk.ModifierTypeControlMask `elem` ms, d) of
       -- when control is pressed,
       -- if the direction is up, then zoom in
@@ -297,7 +300,7 @@ startGUI = do
   -- keyboard
   -- on canvas #keyPressEvent $ \eventKey do
   --   k <- get eventKey #name
-  --   ms <- get eventKey #status
+  --   ms <- get eventKey #state
   --   liftIO $ do
   --     case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, T.unpack $ T.toLower k) of
   --       -- <delete> : delete selection
@@ -410,7 +413,7 @@ startGUI = do
   --                                 saveFile store saveProject fileName window True -- returns True if saved the file
   --
   -- -- new project action activated
-  -- new `on` menuItemActivated $ do
+  -- new `on` #activate $ do
   --   continue <- confirmOperation
   --   if continue
   --     then do
@@ -429,7 +432,7 @@ startGUI = do
   --     else return ()
   --
   -- -- open project
-  -- opn `on` menuItemActivated $ do
+  -- opn `on` #activate $ do
   --   continue <- confirmOperation
   --   if continue
   --     then do
@@ -455,7 +458,7 @@ startGUI = do
   --       else return ()
   --
   -- -- save project
-  -- svn `on` menuItemActivated $ do
+  -- svn `on` #activate $ do
   --   prepToSave
   --   saved <- saveFile store saveProject fileName window True
   --   if saved
@@ -463,7 +466,7 @@ startGUI = do
   --     else return ()
   --
   -- -- save project as
-  -- sva `on` menuItemActivated $ do
+  -- sva `on` #activate $ do
   --   prepToSave
   --   saved <- saveFileAs store saveProject fileName window True
   --   if saved
@@ -471,7 +474,7 @@ startGUI = do
   --     else return ()
   --
   -- -- open graph
-  -- opg `on`menuItemActivated $ do
+  -- opg `on`#activate $ do
   --   mg <- loadFile window loadGraph
   --   case mg of
   --     Just ((g,gi),path) -> do
@@ -488,7 +491,7 @@ startGUI = do
   --     _      -> return ()
   --
   -- -- save graph
-  -- svg `on` menuItemActivated $ do
+  -- svg `on` #activate $ do
   --   es <- readIORef st
   --   let g  = editorGetGraph es
   --       gi = editorGetGI es
@@ -496,60 +499,60 @@ startGUI = do
   --   return ()
 
   -- undo
-  udo `on` menuItemActivated $ do
-    applyUndo undoStack redoStack st
-    -- indicate changes
-    sst <- readIORef lastSavedState
-    [path] <- readIORef currentGraph
-    es <- readIORef st
-    let (g,gi) = (editorGetGraph es, editorGetGI es)
-        x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
-    setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
-    Gtk.widgetQueueDraw canvas
-
-  -- redo
-  rdo `on` menuItemActivated $ do
-    applyRedo undoStack redoStack st
-    -- indicate changes
-    sst <- readIORef lastSavedState
-    [path] <- readIORef currentGraph
-    es <- readIORef st
-    let (g,gi) = (editorGetGraph es, editorGetGI es)
-        x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
-    setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
-    Gtk.widgetQueueDraw canvas
+  -- on udo #activate $ do
+  --   applyUndo undoStack redoStack st
+  --   -- indicate changes
+  --   sst <- readIORef lastSavedState
+  --   [path] <- readIORef currentGraph
+  --   es <- readIORef st
+  --   let (g,gi) = (editorGetGraph es, editorGetGI es)
+  --       x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
+  --   --setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
+  --   Gtk.widgetQueueDraw canvas
+  --
+  -- -- redo
+  -- on rdo #activate $ do
+  --   applyRedo undoStack redoStack st
+  --   -- indicate changes
+  --   sst <- readIORef lastSavedState
+  --   path <- readIORef currentGraph
+  --   es <- readIORef st
+  --   let (g,gi) = (editorGetGraph es, editorGetGI es)
+  --       x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
+  --   --setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
+  --   Gtk.widgetQueueDraw canvas
 
   -- copy
-  cpy `on` menuItemActivated $ do
+  on cpy #activate $ do
     es <- readIORef st
     writeIORef clipboard $ copySelected es
 
   -- paste
-  pst `on` menuItemActivated $ do
+  on pst #activate $ do
     es <- readIORef st
     clip <- readIORef clipboard
     stackUndo undoStack redoStack es
-    setChangeFlags window store changedProject changedGraph currentGraph True
+    --setChangeFlags window store changedProject changedGraph currentGraph True
     modifyIORef st (pasteClipBoard clip)
     Gtk.widgetQueueDraw canvas
 
   -- cut
-  cut `on` menuItemActivated $ do
+  on cut #activate $ do
     es <- readIORef st
     writeIORef clipboard $ copySelected es
     modifyIORef st (\es -> deleteSelected es)
     stackUndo undoStack redoStack es
-    setChangeFlags window store changedProject changedGraph currentGraph True
+    --setChangeFlags window store changedProject changedGraph currentGraph True
     Gtk.widgetQueueDraw canvas
 
   -- select all
-  sla `on` menuItemActivated $ do
+  on sla #activate $ do
     modifyIORef st (\es -> let g = editorGetGraph es
                            in editorSetSelected (nodeIds g, edgeIds g) es)
     Gtk.widgetQueueDraw canvas
 
   -- select edges
-  sle `on` menuItemActivated $ do
+  on sle #activate $ do
     es <- readIORef st
     let selected = editorGetSelected es
         g = editorGetGraph es
@@ -560,7 +563,7 @@ startGUI = do
     Gtk.widgetQueueDraw canvas
 
   -- select nodes
-  sln `on` menuItemActivated $ do
+  on sln #activate $ do
     es <- readIORef st
     let selected = editorGetSelected es
         g = editorGetGraph es
@@ -571,40 +574,40 @@ startGUI = do
     Gtk.widgetQueueDraw canvas
 
   -- zoom in
-  zin `on` menuItemActivated $ do
+  zin `on` #activate $ do
     modifyIORef st (\es -> editorSetZoom (editorGetZoom es * 1.1) es )
     Gtk.widgetQueueDraw canvas
 
   -- zoom out
-  zut `on` menuItemActivated $ do
+  zut `on` #activate $ do
     modifyIORef st (\es -> let z = editorGetZoom es * 0.9 in if z >= 0.5 then editorSetZoom z es else es)
     Gtk.widgetQueueDraw canvas
 
-  z50 `on` menuItemActivated $ do
+  z50 `on` #activate $ do
     modifyIORef st (\es -> editorSetZoom 0.5 es )
     Gtk.widgetQueueDraw canvas
 
   -- reset zoom to defaults
-  zdf `on` menuItemActivated $ do
+  zdf `on` #activate $ do
     modifyIORef st (\es -> editorSetZoom 1.0 es )
     Gtk.widgetQueueDraw canvas
 
-  z150 `on` menuItemActivated $ do
+  z150 `on` #activate $ do
     modifyIORef st (\es -> editorSetZoom 1.5 es )
     Gtk.widgetQueueDraw canvas
 
-  z200 `on` menuItemActivated $ do
+  z200 `on` #activate $ do
     modifyIORef st (\es -> editorSetZoom 2.0 es )
     Gtk.widgetQueueDraw canvas
 
   -- reset view to defaults (reset zoom and pan)
-  vdf `on` menuItemActivated $ do
+  vdf `on` #activate $ do
     modifyIORef st (\es -> editorSetZoom 1 $ editorSetPan (0,0) es )
     Gtk.widgetQueueDraw canvas
 
   -- help
-  hlp `on` menuItemActivated $ do
-    widgetShowAll helpWindow
+  hlp `on` #activate $ do
+    #showAll helpWindow
 
   -- event bindings -- inspector panel -----------------------------------------
   -- pressed a key when editing the entryName
@@ -631,7 +634,10 @@ startGUI = do
   on colorBtn #colorSet $ do
     gtkcolor <- Gtk.colorButtonGetColor colorBtn
     es <- readIORef st
-    let color = ((fromIntegral $ get gtkcolor #red)/65535, (fromIntegral $ get gtkcolor #green)/65535, (fromIntegral$ get gtkcolor #blue)/65535)
+    r <- get gtkcolor #red
+    g <- get gtkcolor #green
+    b <- get gtkcolor #blue
+    let color = ((fromIntegral $ r)/65535, (fromIntegral $ g)/65535, (fromIntegral$ b)/65535)
         (nds,edgs) = editorGetSelected es
     writeIORef currentC color
     if null nds
@@ -640,14 +646,17 @@ startGUI = do
         let (ngiM, egiM) = editorGetGI es
             newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetColor color ngi else ngi) ngiM
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, egiM) es)
         Gtk.widgetQueueDraw canvas
 
   on lineColorBtn #colorSet $ do
     gtkcolor <- Gtk.colorButtonGetColor lineColorBtn
     es <- readIORef st
-    let color = ((fromIntegral $ get gtkcolor #red)/65535, (fromIntegral $ get gtkcolor #green)/65535, (fromIntegral$ get gtkcolor #blue)/65535)
+    r <- get gtkcolor #red
+    g <- get gtkcolor #green
+    b <- get gtkcolor #blue
+    let color = ((fromIntegral $ r)/65535, (fromIntegral $ g)/65535, (fromIntegral$ b)/65535)
         (nds,edgs) = editorGetSelected es
     writeIORef currentLC color
     if null nds && null edgs
@@ -657,95 +666,95 @@ startGUI = do
             newngiM = M.mapWithKey (\k ngi -> if NodeId k `elem` nds then nodeGiSetLineColor color ngi else ngi) ngiM
             newegiM = M.mapWithKey (\k egi -> if EdgeId k `elem` edgs then edgeGiSetColor color egi else egi) egiM
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> editorSetGI (newngiM, newegiM) es)
         Gtk.widgetQueueDraw canvas
 
   -- toogle the radio buttons for node shapes
   -- change the shape of the selected nodes and set the current shape for new nodes
-  radioCircle `on` toggled $ do
+  radioCircle `on` #toggled $ do
     writeIORef currentShape NCircle
     es <- readIORef st
-    active <- toggleButtonGetActive radioCircle
+    active <- get radioCircle #active
     let nds = fst $ editorGetSelected es
         giM = fst $ editorGetGI es
     if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NCircle) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NCircle)
         Gtk.widgetQueueDraw canvas
 
-  radioRect `on` toggled $ do
+  radioRect `on` #toggled $ do
     writeIORef currentShape NRect
     es <- readIORef st
-    active <- toggleButtonGetActive radioRect
+    active <- get radioRect #active
     let nds = fst $ editorGetSelected es
         giM = fst $ editorGetGI es
     if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NRect) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NRect)
         Gtk.widgetQueueDraw canvas
 
-  radioQuad `on` toggled $ do
+  radioQuad `on` #toggled $ do
     writeIORef currentShape NSquare
     es <- readIORef st
-    active <- toggleButtonGetActive radioQuad
+    active <- get radioQuad #active
     let nds = fst $ editorGetSelected es
         giM = fst $ editorGetGI es
     if not active || M.null (M.filterWithKey (\k gi -> NodeId k `elem` nds && shape gi /= NSquare) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeNodeShape es NSquare)
         Gtk.widgetQueueDraw canvas
 
   -- toogle the radio buttons for edge styles
   -- change the style of the selected edges and set the current style for new edges
-  radioNormal `on` toggled $ do
+  radioNormal `on` #toggled $ do
     writeIORef currentStyle ENormal
     es <- readIORef st
-    active <- toggleButtonGetActive radioNormal
+    active <- get radioNormal #active
     let edgs = snd $ editorGetSelected es
         giM = snd $ editorGetGI es
     if not active || M.null (M.filterWithKey (\k gi -> EdgeId k `elem` edgs && style gi /= ENormal) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ENormal)
         Gtk.widgetQueueDraw canvas
 
-  radioPointed `on` toggled $ do
+  radioPointed `on` #toggled $ do
     writeIORef currentStyle EPointed
     es <- readIORef st
-    active <- toggleButtonGetActive radioPointed
+    active <- get radioPointed #active
     let edgs = snd $ editorGetSelected es
         giM = snd $ editorGetGI es
     if not active || M.null (M.filterWithKey (\k gi -> EdgeId k `elem` edgs && style gi /= EPointed) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es EPointed)
         Gtk.widgetQueueDraw canvas
 
-  radioSlashed `on` toggled $ do
+  radioSlashed `on` #toggled $ do
     writeIORef currentStyle ESlashed
     es <- readIORef st
-    active <- toggleButtonGetActive radioSlashed
+    active <- get radioSlashed #active
     let edgs = snd $ editorGetSelected es
         giM = snd $ editorGetGI es
     if not active || M.null (M.filterWithKey (\k gi -> EdgeId k `elem` edgs && style gi /= ESlashed) giM)
       then return ()
       else do
         stackUndo undoStack redoStack es
-        setChangeFlags window store changedProject changedGraph currentGraph True
+        --setChangeFlags window store changedProject changedGraph currentGraph True
         modifyIORef st (\es -> changeEdgeStyle es ESlashed)
         Gtk.widgetQueueDraw canvas
 
@@ -846,7 +855,7 @@ startGUI = do
   on window #destroy Gtk.mainQuit
 
   -- run the preogram ----------------------------------------------------------
-  mainGUI
+  Gtk.main
 
 
 --------------------------------------------------------------------------------
@@ -867,7 +876,7 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
     (0,0) -> do
       (r, g, b)    <- readIORef currentC
       (r', g', b') <- readIORef currentLC
-      entrySetText entryName ""
+      set entryName [#text := ""]
       color <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
       lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
       Gtk.colorButtonSetColor colorBtn color
@@ -877,16 +886,16 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
       set frameStyle [#visible := True]
     (n,0) -> do
       let nid = nodeId (ns!!0)
-          name = if n == 1 then nodeInfo $ (ns!!0) else unifyNames (map nodeInfo ns)
+          name = T.pack $ if n == 1 then nodeInfo $ (ns!!0) else unifyNames (map nodeInfo ns)
           gi = getNodeGI (fromEnum nid) ngiM
           (r,g,b) = fillColor gi
           (r',g',b') = lineColor gi
           nodeShape = shape gi
-      lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
       color <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
+      lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
       set entryName [#text := name]
-      colorButtonSetColor colorBtn $ if n==1 then nodeColor else emptyColor
-      colorButtonSetColor lcolorBtn $ if n==1 then nodeLineC else emptyColor
+      Gtk.colorButtonSetColor colorBtn $ if n==1 then color else emptyColor
+      Gtk.colorButtonSetColor lcolorBtn $ if n==1 then lcolor else emptyColor
       case (n,nodeShape) of
         (1,NCircle) -> Gtk.toggleButtonSetActive (radioShapes!!0) True
         (1,NRect) -> Gtk.toggleButtonSetActive (radioShapes!!1) True
@@ -898,7 +907,7 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
       set frameStyle [#visible := False]
     (0,n) -> do
       let eid = edgeId (es!!0)
-          name = if n == 1 then edgeInfo (es!!0) else unifyNames (map edgeInfo es)
+          name = T.pack $ if n == 1 then edgeInfo (es!!0) else unifyNames (map edgeInfo es)
           gi = getEdgeGI (fromEnum eid) egiM
           (r,g,b) = color gi
           edgeStyle = style gi
@@ -915,9 +924,9 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
       set frameShape [#visible := False]
       set frameStyle [#visible := True]
     _ -> do
-      entrySetText entryName "----"
-      colorButtonSetColor colorBtn emptyColor
-      colorButtonSetColor lcolorBtn emptyColor
+      set entryName [#text := "----" ]
+      Gtk.colorButtonSetColor colorBtn emptyColor
+      Gtk.colorButtonSetColor lcolorBtn emptyColor
       set hBoxColor [#visible := True]
       set frameShape [#visible := True]
       set frameStyle [#visible := True]
@@ -925,7 +934,6 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
 -- draw a graph in the canvas --------------------------------------------------
 drawGraph :: EditorState -> Maybe (Double,Double,Double,Double) -> Gtk.DrawingArea -> Render ()
 drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
-  context <- liftIO $ widgetGetPangoContext canvas
   scale z z
   translate px py
 
@@ -936,7 +944,7 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
         egi  = M.lookup (fromEnum . edgeId   $ e) eGI
         selected = (edgeId e) `elem` sEdges
     case (egi, srcN, dstN) of
-      (Just gi, Just src, Just dst) -> renderEdge gi (edgeInfo e) selected src dst context
+      (Just gi, Just src, Just dst) -> renderEdge gi (edgeInfo e) selected src dst
       _ -> return ())
 
   -- draw the nodes
@@ -945,7 +953,7 @@ drawGraph (g, (nGI,eGI), (sNodes, sEdges), z, (px,py)) sq canvas = do
         selected = (nodeId n) `elem` (sNodes)
         info = nodeInfo n
     case (ngi) of
-      Just gi -> renderNode gi info selected context
+      Just gi -> renderNode gi info selected
       Nothing -> return ())
 
   -- draw the selectionBox
@@ -970,34 +978,34 @@ saveFile x saveF fileName window changeFN = do
       case tentativa of
         True -> return True
         False -> do
-          showError (Just window) $ "Couldn't write to file." ++ path
+          showError $ T.pack ("Couldn't write to file." ++ path)
           return False
     Nothing -> saveFileAs x saveF fileName window changeFN
 
 
 saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Gtk.Window -> Bool -> IO Bool
 saveFileAs x saveF fileName window changeFN = do
-  saveD <- createSaveDialog window
-  response <- dialogRun saveD
-  fn <- case response of
+  saveD <- createSaveDialog
+  response <- Gtk.dialogRun saveD
+  fn <- case toEnum . fromIntegral $  response of
     Gtk.ResponseTypeAccept -> do
-      filename <- fileChooserGetFilename saveD
+      filename <- Gtk.fileChooserGetFilename saveD
       case filename of
         Nothing -> do
-          widgetDestroy saveD
+          Gtk.widgetDestroy saveD
           return Nothing
         Just path -> do
           tentativa <- saveF x path
           case tentativa of
             True -> do
-              widgetDestroy saveD
+              Gtk.widgetDestroy saveD
               return $ Just path
             False -> do
-              widgetDestroy saveD
-              showError (Just window) $ "Couldn't write to file." ++ path
+              Gtk.widgetDestroy saveD
+              showError $ T.pack ("Couldn't write to file." ++ path)
               return Nothing
     _  -> do
-      widgetDestroy saveD
+      Gtk.widgetDestroy saveD
       return Nothing
   case (changeFN, fn) of
     (True, Just path) -> do
@@ -1007,50 +1015,44 @@ saveFileAs x saveF fileName window changeFN = do
 
 -- auxiliar save functions -----------------------------------------------------
 -- save project
-saveProject :: Gtk.ListStore -> String -> IO Bool
-saveProject model path = do
-  editorList <- listStoreToList model
-  let getWhatMatters = (\(name, es, _, _, _) -> (name, editorGetGraph es, editorGetGI es))
-      whatMatters = map getWhatMatters editorList
-      contents = map (\(name, g, gi) -> ( name
-                                        , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
-                                        , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
-                                        , gi )) whatMatters
-      writeProject = writeFile path $ show contents
-  tentativa <- E.try (writeProject)  :: IO (Either E.IOException ())
-  case tentativa of
-    Left _ -> return False
-    Right _ -> return True
-
--- save graph
-saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
-saveGraph (g,gi) path = do
-    let path' = if (tails path)!!(length path-3) == ".gr" then path else path ++ ".gr"
-        writeGraph = writeFile path' $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
-                                           , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
-                                           , gi)
-
-    tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
-    case tentativa of
-      Left _ -> return False
-      Right _ -> return True
-
-
+-- saveProject :: Gtk.ListStore -> String -> IO Bool
+-- saveProject model path = do
+--   editorList <- listStoreToList model
+--   let getWhatMatters = (\(name, es, _, _, _) -> (name, editorGetGraph es, editorGetGI es))
+--       whatMatters = map getWhatMatters editorList
+--       contents = map (\(name, g, gi) -> ( name
+--                                         , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+--                                         , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+--                                         , gi )) whatMatters
+--       writeProject = writeFile path $ show contents
+--   tentativa <- E.try (writeProject)  :: IO (Either E.IOException ())
+--   case tentativa of
+--     Left _ -> return False
+--     Right _ -> return True
+--
+-- -- save graph
+-- saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
+-- saveGraph (g,gi) path = do
+--     let path' = if (tails path)!!(length path-3) == ".gr" then path else path ++ ".gr"
+--         writeGraph = writeFile path' $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+--                                            , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+--                                            , gi)
+--
+--     tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
+--     case tentativa of
+--       Left _ -> return False
+--       Right _ -> return True
+--
+--
 -- load function ---------------------------------------------------------------
 loadFile :: Gtk.Window -> (String -> a) -> IO (Maybe (a,String))
 loadFile window loadF = do
-  loadD <- fileChooserDialogNew
-           (Just "Abrir Arquivo")
-           (Just window)
-           FileChooserActionOpen
-           [("Cancela", Gtk.ResponseTypeCancel), ("Abre",Gtk.ResponseTypeAccept)]
-  fileChooserSetDoOverwriteConfirmation loadD True
-  widgetShow loadD
-  response <- dialogRun loadD
-  case response of
+  loadD <- createLoadDialog
+  response <- Gtk.dialogRun loadD
+  case toEnum . fromIntegral $ response of
     Gtk.ResponseTypeAccept -> do
-      filename <- fileChooserGetFilename loadD
-      widgetDestroy loadD
+      filename <- Gtk.fileChooserGetFilename loadD
+      Gtk.widgetDestroy loadD
       case filename of
         Nothing -> do
           return Nothing
@@ -1058,50 +1060,52 @@ loadFile window loadF = do
           tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
           case tentativa of
             Left _ -> do
-              showError (Just window) "Não foi possivel ler o arquivo"
+              showError "Couldn't open the file"
               return Nothing
             Right content -> return $ Just (loadF content,path)
     _             -> do
-      widgetDestroy loadD
+      Gtk.widgetDestroy loadD
       return Nothing
-
--- auxiliar load functions -----------------------------------------------------
--- load project
-loadProject :: String -> [(String, EditorState)]
-loadProject content = editorList
-  where
-    contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
-    genNodes = map (\(nid, info) -> Node (NodeId nid) info)
-    genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
-    genProj = map (\(name,readNodes,readEdges,gi) ->
-                      let nds = genNodes readNodes
-                          eds = genEdges readEdges
-                          g = fromNodesAndEdges nds eds
-                      in (name, editorSetGI gi . editorSetGraph g $ emptyES) )
-    editorList = genProj contentList
-
--- load graph
-loadGraph :: String -> (Graph String String,GraphicalInfo)
-loadGraph contents = (g,gi)
-  where
-    (rns,res,gi) = read contents :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
-    ns = map (\(nid, info) -> Node (NodeId nid) info) rns
-    es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
-    g = fromNodesAndEdges ns es
+--
+-- -- auxiliar load functions -----------------------------------------------------
+-- -- load project
+-- loadProject :: String -> [(String, EditorState)]
+-- loadProject content = editorList
+--   where
+--     contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
+--     genNodes = map (\(nid, info) -> Node (NodeId nid) info)
+--     genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
+--     genProj = map (\(name,readNodes,readEdges,gi) ->
+--                       let nds = genNodes readNodes
+--                           eds = genEdges readEdges
+--                           g = fromNodesAndEdges nds eds
+--                       in (name, editorSetGI gi . editorSetGraph g $ emptyES) )
+--     editorList = genProj contentList
+--
+-- -- load graph
+-- loadGraph :: String -> (Graph String String,GraphicalInfo)
+-- loadGraph contents = (g,gi)
+--   where
+--     (rns,res,gi) = read contents :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
+--     ns = map (\(nid, info) -> Node (NodeId nid) info) rns
+--     es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
+--     g = fromNodesAndEdges ns es
 
 -- graph interaction
 -- create a new node, auto-generating it's name and dimensions
-createNode' :: IORef EditorState -> GIPos -> PangoContext -> NodeShape -> GIColor -> GIColor -> IO ()
-createNode' st pos context nshape color lcolor = do
+createNode' :: IORef EditorState -> GIPos -> NodeShape -> GIColor -> GIColor -> P.Context ->  IO ()
+createNode' st pos nshape color lcolor context = do
+  print "createNode'"
   es <- readIORef st
   let nid = head $ newNodes (editorGetGraph es)
       --content = "node " ++ show nid
-      content = ""
+      content = "abs"
   dim <- getStringDims content context
+  print dim
   writeIORef st $ createNode es pos dim content nshape color lcolor
 
 -- rename the selected itens
-renameSelected:: IORef EditorState -> String -> PangoContext -> IO()
+renameSelected:: IORef EditorState -> String -> P.Context -> IO()
 renameSelected state name context = do
   es <- readIORef state
   dim <- getStringDims name context
@@ -1117,11 +1121,16 @@ renameSelected state name context = do
 -- auxiliar function used by createNode' and renameSelected
 -- given a text, compute the size of it's bounding box
 -- uses the pango lib
-getStringDims :: String -> PangoContext -> IO (Double, Double)
+getStringDims :: String -> P.Context -> IO (Double, Double)
 getStringDims str context = do
-  pL <- layoutText context str
-  (_, PangoRectangle _ _ w h) <- layoutGetExtents pL
-  return (w+4, h+4)
+  desc <- P.fontDescriptionFromString "Sans Regular 10"
+  pL <- P.layoutNew context
+  P.layoutSetFontDescription pL (Just desc)
+  P.layoutSetText pL (T.pack str) (fromIntegral . length $ str)
+  (_,rect) <- P.layoutGetExtents pL
+  w <- get rect #width >>= (\n -> return . fromIntegral . quot n $ P.SCALE)
+  h <- get rect #height >>= (\n -> return . fromIntegral . quot n $ P.SCALE)
+  return (w +4, h + 4)
 
 
 -- Undo / Redo -----------------------------------------------------------------
@@ -1191,52 +1200,55 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
 -- change window name to indicate if the project was modified
 indicateProjChanged :: Gtk.Window -> Bool -> IO ()
 indicateProjChanged window True = do
-  title <- get window windowTitle
+  ttitle <- get window #title
+  let title = T.unpack . fromJust $ ttitle
   if title!!0 == '*'
     then return ()
-    else set window [windowTitle := '*':title]
+    else set window [#title := T.pack('*':title)]
 
 indicateProjChanged window False = do
-  i:title <- get window windowTitle
+  ttitle <- get window #title
+  let i:title = T.unpack . fromJust $ ttitle
   if i == '*'
-    then set window [windowTitle := title]
+    then set window [#title := T.pack title]
     else return ()
 
-indicateGraphChanged :: Gtk.ListStore -> Int -> Bool -> IO ()
-indicateGraphChanged store path True = do
-  (n,e,u,r,_) <- listStoreGetValue store path
-  listStoreSetValue store path (n,e,u,r,"yellow")
-
-indicateGraphChanged store path False = do
-  (n,e,u,r,_) <- listStoreGetValue store path
-  listStoreSetValue store path (n,e,u,r,"white")
+-- indicateGraphChanged :: Gtk.ListStore -> Gtk.TreeIter -> Bool -> IO ()
+-- indicateGraphChanged store iter True = do
+--   (n,_,i) <- listStoreGetValue store path
+--   storeSetGraphStore store iter (n,"yellow",i)
+--   --listStoreSetValue store path (n,e,u,r,"yellow")
+--
+-- indicateGraphChanged store iter False = do
+--   (n,_,i) <- listStoreGetValue store path
+--   storeSetGraphStore store iter (n,"white",i)
 
 
 -- change the flags that inform if the graphs and project were changed and inform the graphs
-setChangeFlags :: Gtk.Window -> Gtk.ListStore-> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
-setChangeFlags window store changedProject changedGraph currentPath True = do
-  [path] <- readIORef currentPath
-  modifyIORef changedGraph (\xs -> take path xs ++ [True] ++ drop (path+1) xs)
-  writeIORef changedProject True
-  indicateProjChanged window True
-  indicateGraphChanged store path True
-
-setChangeFlags window store changedProject changedGraph currentPath False = do
-  [path] <- readIORef currentPath
-  cg <- readIORef changedGraph
-  let cg' = take path cg ++ [False] ++ drop (path+1) cg
-      projRestored = and cg'
-  writeIORef changedGraph cg'
-  writeIORef changedProject projRestored
-  indicateProjChanged window projRestored
-  indicateGraphChanged store path False
+-- setChangeFlags :: Gtk.Window -> Gtk.ListStore-> IORef Bool -> IORef [Bool] -> IORef [Int] -> Bool -> IO ()
+-- setChangeFlags window store changedProject changedGraph currentPath True = do
+--   [path] <- readIORef currentPath
+--   modifyIORef changedGraph (\xs -> take path xs ++ [True] ++ drop (path+1) xs)
+--   writeIORef changedProject True
+--   indicateProjChanged window True
+--   indicateGraphChanged store path True
+--
+-- setChangeFlags window store changedProject changedGraph currentPath False = do
+--   [path] <- readIORef currentPath
+--   cg <- readIORef changedGraph
+--   let cg' = take path cg ++ [False] ++ drop (path+1) cg
+--       projRestored = and cg'
+--   writeIORef changedGraph cg'
+--   writeIORef changedProject projRestored
+--   indicateProjChanged window projRestored
+--   indicateGraphChanged store path False
 
 -- change updatedState
-updateSavedState :: IORef [DiaGraph] -> Gtk.ListStore -> IO ()
-updateSavedState sst store = do
-  list <- listStoreToList store
-  let newSavedState = map (\(_,es,_,_,_) -> (editorGetGraph es, editorGetGI es)) list
-  writeIORef sst newSavedState
+-- updateSavedState :: IORef [DiaGraph] -> Gtk.ListStore -> IO ()
+-- updateSavedState sst store = do
+--   list <- listStoreToList store
+--   let newSavedState = map (\(_,es,_,_,_) -> (editorGetGraph es, editorGetGI es)) list
+--   writeIORef sst newSavedState
 
 -- Tarefas ---------------------------------------------------------------------
 

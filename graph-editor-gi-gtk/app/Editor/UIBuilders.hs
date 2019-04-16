@@ -11,6 +11,7 @@ module Editor.UIBuilders
 , buildHelpWindow
 , showError
 , createSaveDialog
+, createLoadDialog
 , createCloseDialog
 ) where
 
@@ -343,6 +344,16 @@ createSaveDialog = do
   Gtk.dialogAddButton saveD "Save" (fromIntegral . fromEnum $ Gtk.ResponseTypeAccept)
   Gtk.dialogAddButton saveD "Cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeReject)
   return saveD
+
+createLoadDialog :: IO Gtk.FileChooserDialog
+createLoadDialog = do
+  loadD <- new Gtk.FileChooserDialog [ #action := Gtk.FileChooserActionOpen
+                                     , #createFolders := False
+                                     , #doOverwriteConfirmation := False
+                                     ]
+  Gtk.dialogAddButton loadD "Open" (fromIntegral . fromEnum $ Gtk.ResponseTypeAccept)
+  Gtk.dialogAddButton loadD "Cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeReject)
+  return loadD
 
 createCloseDialog :: T.Text -> IO Gtk.ResponseType
 createCloseDialog msg = do
