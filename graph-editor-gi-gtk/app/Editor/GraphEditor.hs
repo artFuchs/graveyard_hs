@@ -7,6 +7,7 @@ import qualified GI.Gtk as Gtk
 import qualified GI.Gdk as Gdk
 import qualified GI.Pango as P
 import Data.GI.Base
+import Data.GI.Base.GValue
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
@@ -36,17 +37,13 @@ import Editor.EditorState
 -- |GraphStore
 -- A tuple representing what is showed in each node of the tree in the treeview
 -- It contains the informations: name, color, and a integer that is the identifier
-type GraphStore = (String, String, Int)
-graphStoreName (n,c,i) = n
-graphStoreColor (n,c,i) = c
-graphStoreId (n,c,i) = i
+type GraphStore = (String, String)
 
 storeSetGraphStore :: Gtk.ListStore -> Gtk.TreeIter -> GraphStore -> IO ()
-storeSetGraphStore store iter (n,c,i) = do
+storeSetGraphStore store iter (n,c) = do
   gv0 <- toGValue (Just n)
   gv1 <- toGValue (Just c)
-  gv2 <- toGValue ((fromIntegral i) :: Int32)
-  #set store iter [0,1,2] [gv0,gv1,gv2]
+  #set store iter [0,1] [gv0,gv1]
 
 --------------------------------------------------------------------------------
 -- MODULE FUNCTIONS ------------------------------------------------------------
@@ -81,9 +78,11 @@ startGUI = do
   #showAll window
 
   -- init an model to display in the tree panel --------------------------------
-  store <- Gtk.listStoreNew [gtypeString, gtypeString, gtypeInt]
+  store <- Gtk.listStoreNew [gtypeString, gtypeString]
   fstIter <- Gtk.listStoreAppend store
-  storeSetGraphStore store fstIter ("new", "white", 0)
+  storeSetGraphStore store fstIter ("new", "white")
+  Gtk.treeIterFree fstIter
+
 
   projectCol <- Gtk.treeViewGetColumn treeview 0
   case projectCol of
@@ -95,11 +94,11 @@ startGUI = do
 
   ------------------------------------------------------------------------------
   -- init the editor variables  ------------------------------------------------
-  st              <- newIORef emptyES -- editor state: all the necessary info to draw the graph
+  st              <- newIORef emptyES -- actual state: all the necessary info to draw the graph
   oldPoint        <- newIORef (0.0,0.0) -- last point where a mouse button was pressed
   squareSelection <- newIORef Nothing -- selection box : Maybe (x,y,w,h)
-  undoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)])
-  redoStack       <- newIORef ([] :: [(Graph String String, GraphicalInfo)])
+  undoStack       <- newIORef ([] :: [DiaGraph])
+  redoStack       <- newIORef ([] :: [DiaGraph])
   movingGI        <- newIORef False -- if the user started moving some object - necessary to add a position to the undoStack
   currentShape    <- newIORef NCircle -- the shape that all new nodes must have
   currentStyle    <- newIORef ENormal -- the style that all new edges must have
@@ -107,13 +106,11 @@ startGUI = do
   currentLC       <- newIORef (0,0,0) -- the color to init new edges and the line and text of new nodes
   clipboard       <- newIORef DG.empty -- clipboard - DiaGraph
   fileName        <- newIORef (Nothing :: Maybe String) -- name of the opened file
-  currentGraph    <- newIORef fstIter -- current graph being edited
-  states          <- newIORef $ M.fromList [(0,emptyES)]
-  undoStacks      <- newIORef $ M.fromList [(0,[] :: [(Graph String String, GraphicalInfo)])]
-  redoStacks      <- newIORef $ M.fromList [(0,[] :: [(Graph String String, GraphicalInfo)])]
+  currentGraph    <- newIORef 0 -- current graph being edited
+  graphStates     <- newIORef $ M.fromList [(0, (emptyES,[],[]) :: (EditorState,[DiaGraph],[DiaGraph]) )] -- map of states foreach graph in the editor
   changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
   changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the 'currentGraph' to True
-  lastSavedState  <- newIORef ([] :: [DiaGraph])
+
 
 
   ------------------------------------------------------------------------------
@@ -335,8 +332,6 @@ startGUI = do
     k <- get eventKey #keyval >>= return . chr . fromIntegral
     ms <- get eventKey #state
     context <- Gtk.widgetGetPangoContext canvas
-    print k
-    return False
     case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, toLower k) of
       -- CTRL + <+>/<->/<=> : zoom controls
       (True,_,'+') -> Gtk.menuItemActivate zin
@@ -345,26 +340,17 @@ startGUI = do
       -- CTRL + <0> : reset pan & zoom
       (True,_,'0') -> Gtk.menuItemActivate vdf
       -- CTRL + N : create a new graph in the treeView
-      -- (True, False, "n") -> buttonClicked btnNew
+      (True, False, 'n') -> Gtk.buttonClicked btnNew
       -- CTRL + W : remove a graph from the treeView
-      -- (True, False, "w") -> buttonClicked btnRmv
+      (True, False, 'w') -> Gtk.buttonClicked btnRmv
       -- CTRL + SHIFT + N : create a new file
-      -- (True, True, "n") -> do
-      -- modifyIORef st (\es -> (G.empty, (M.empty, M.empty),([],[]),1.0,(0.0,0.0)))
-      -- listStoreClear store
-      -- listStoreAppend store ("new",emptyES,[], [], "white")
-      -- writeIORef changedProject False
-      -- writeIORef fileName Nothing
-      -- writeIORef undoStack []
-      -- writeIORef redoStack []
-      -- set window [windowTitle := "Graph Editor"]
-      -- Gtk.widgetQueueDraw canvas
+      (True, True, 'n') -> Gtk.menuItemActivate new
       -- CTRL + SHIFT + S : save file as
-      -- (True, True, "s") -> menuItemEmitActivate sva
-      -- -- CTRL + S : save file
-      -- (True, False, "s") -> menuItemEmitActivate svn
-      -- -- CTRL + O : open file
-      -- (True, False, "o") -> menuItemEmitActivate opn
+      (True, True, 's') -> Gtk.menuItemActivate sva
+      -- CTRL + S : save file
+      (True, False, 's') -> Gtk.menuItemActivate svn
+      -- CTRL + O : open file
+      (True, False, 'o') -> Gtk.menuItemActivate opn
       -- CTRL + Z/R : undo/redo
       (True, False, 'z') -> Gtk.menuItemActivate udo
       (True, False, 'r') -> Gtk.menuItemActivate rdo
@@ -502,28 +488,28 @@ startGUI = do
   --   return ()
 
   -- undo
-  -- on udo #activate $ do
-  --   applyUndo undoStack redoStack st
-  --   -- indicate changes
-  --   sst <- readIORef lastSavedState
-  --   [path] <- readIORef currentGraph
-  --   es <- readIORef st
-  --   let (g,gi) = (editorGetGraph es, editorGetGI es)
-  --       x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
-  --   --setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
-  --   Gtk.widgetQueueDraw canvas
-  --
-  -- -- redo
-  -- on rdo #activate $ do
-  --   applyRedo undoStack redoStack st
-  --   -- indicate changes
-  --   sst <- readIORef lastSavedState
-  --   path <- readIORef currentGraph
-  --   es <- readIORef st
-  --   let (g,gi) = (editorGetGraph es, editorGetGI es)
-  --       x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
-  --   --setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
-  --   Gtk.widgetQueueDraw canvas
+  on udo #activate $ do
+    applyUndo undoStack redoStack st
+    -- indicate changes
+    --sst <- readIORef lastSavedState
+    --[path] <- readIORef currentGraph
+    -- es <- readIORef st
+    --let (g,gi) = (editorGetGraph es, editorGetGI es)
+    --     x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
+    --setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
+    Gtk.widgetQueueDraw canvas
+
+  -- redo
+  on rdo #activate $ do
+    applyRedo undoStack redoStack st
+    -- indicate changes
+    -- sst <- readIORef lastSavedState
+    -- path <- readIORef currentGraph
+    -- es <- readIORef st
+    -- let (g,gi) = (editorGetGraph es, editorGetGI es)
+    --     x = if length sst > path then sst!!path else (G.empty,(M.empty,M.empty))
+    --setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
+    Gtk.widgetQueueDraw canvas
 
   -- copy
   on cpy #activate $ do
@@ -614,22 +600,21 @@ startGUI = do
 
   -- event bindings -- inspector panel -----------------------------------------
   -- pressed a key when editing the entryName
-  -- entryName `on` keyPressEvent $ do
-  --   k <- eventKeyName
-  --   let setName = liftIO $ do
-  --         es <- readIORef st
-  --         stackUndo undoStack redoStack es
-  --         setChangeFlags window store changedProject changedGraph currentGraph True
-  --         name <- entryGetText entryName :: IO String
-  --         context <- widgetGetPangoContext canvas
-  --         renameSelected st name context
-  --         Gtk.widgetQueueDraw canvas
-  --   -- if it's Return, then change the name of the selected elements
-  --   case T.unpack k of
-  --     "Return" -> setName
-  --     "KP_Enter" -> setName
-  --     _       -> return ()
-  --   return False
+  on entryName #keyPressEvent $ \eventKey -> do
+    k <- get eventKey #keyval >>= return . chr . fromIntegral
+    let setName = do es <- readIORef st
+                     stackUndo undoStack redoStack es
+                     --setChangeFlags window store changedProject changedGraph currentGraph True
+                     name <- Gtk.entryGetText entryName >>= return . T.unpack
+                     context <- Gtk.widgetGetPangoContext canvas
+                     renameSelected st name context
+                     Gtk.widgetQueueDraw canvas
+  -- if it's Return, then change the name of the selected elements
+    case k of
+       '\65293' -> setName
+       '\65421' -> setName
+       _       -> return ()
+    return False
 
   -- select a fill color or line color
   -- change the selection fill color or line color and
@@ -764,42 +749,48 @@ startGUI = do
   -- event bindings for the graphs' tree ---------------------------------------
 
   -- auxiliar
-  -- let loadFromStore path = do
-  --                     (_,newEs, newU, newR, _) <- listStoreGetValue store path
-  --                     writeIORef st newEs
-  --                     writeIORef undoStack newU
-  --                     writeIORef redoStack newR
-  --                     writeIORef currentGraph [path]
+  let loadFromStore index = do
+                      states <- readIORef graphStates
+                      let maybeState = M.lookup index states
+                      case maybeState of
+                        Just (es,u,r) -> do
+                          writeIORef st es
+                          writeIORef undoStack u
+                          writeIORef redoStack r
+                          writeIORef currentGraph index
+                        Nothing -> return ()
 
 
-  -- changed the selected graph
-  -- treeview `on` cursorChanged $ do
-  --   selection <- treeViewGetSelection treeview
-  --   sel <- treeSelectionGetSelected selection
+  --changed the selected graph
+  -- on treeview #cursorChanged $ do
+  --   selection <- Gtk.treeViewGetSelection treeview
+  --   (sel,model,iter) <- Gtk.treeSelectionGetSelected selection
   --   case sel of
-  --     Nothing -> return ()
-  --     Just it -> do
-  --       [path] <- treeModelGetPath store it
-  --       [currentPath] <- readIORef currentGraph
-  --       if currentPath == path
+  --     False -> return ()
+  --     True -> do
+  --       cIndex <- readIORef currentGraph
+  --       val <- Gtk.treeModelGetValue model iter 2
+  --       index <- get_int32 val >>= return . fromIntegral
+  --       if cIndex == index
   --         then return ()
   --         else do
   --           -- update the current graph in the tree
   --           currentES <- readIORef st
   --           u <- readIORef undoStack
   --           r <- readIORef redoStack
-  --           gs <- listStoreGetValue store currentPath
-  --           let (name, color) = (graphStoreName gs, graphStoreColor gs)
-  --           listStoreSetValue store currentPath (name,currentES, u, r, color)
+  --           modifyIORef graphStates (M.insert index (currentES,u,r))
   --           -- load the selected graph from the tree
-  --           loadFromStore path
+  --           loadFromStore index
   --           -- update canvas
   --           Gtk.widgetQueueDraw canvas
 
   -- pressed the 'new' button
   -- on btnNew #clicked $ do
-  --   iter <- gtk.listStoreAppend store
-  --   storeSetGraphStore store iter ("new","green",1)
+  --   states <- readIORef graphStates
+  --   let newKey = maximum (M.keys states) + 1
+  --   iter <- Gtk.listStoreAppend store
+  --   storeSetGraphStore store iter ("new","green", newKey)
+  --   modifyIORef graphStates (M.insert newKey (emptyES,[],[]))
   --   --modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
   --   return ()
   --
