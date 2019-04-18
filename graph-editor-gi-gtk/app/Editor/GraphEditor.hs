@@ -65,7 +65,7 @@ startGUI = do
 
   -- main window ---------------------------------------------------------------
   -- creates the menu bar
-  (menubar,(new,opn,svn,sva,opg,svg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
+  (menubar,(new,opn,svn,sva,svg,opg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
   -- creates the inspector panel
   (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeMenu
   let
@@ -418,32 +418,36 @@ startGUI = do
     set window [#title := "Graph Editor"]
     Gtk.widgetQueueDraw canvas
     -- else return ()
-  --
+
   -- open project
-  -- opn `on` #activate $ do
-  --   continue <- confirmOperation
-  --   if continue
-  --     then do
-  --       mg <- loadFile window loadProject
-  --       case mg of
-  --         Just (list,fn) -> do
-  --           if length list > 0
-  --             then do
-  --               listStoreClear store
-  --               let plist = map (\(n,e) -> (n,e,[],[],"white")) list
-  --               forM plist (listStoreAppend store)
-  --               let (name,es) = list!!0
-  --               writeIORef st es
-  --               writeIORef fileName $ Just fn
-  --               writeIORef undoStack []
-  --               writeIORef redoStack []
-  --               writeIORef changedProject False
-  --               writeIORef changedGraph [False]
-  --               set window [windowTitle := "Graph Editor - " ++ fn]
-  --               Gtk.widgetQueueDraw canvas
-  --             else return ()
-  --         Nothing -> return ()
-  --       else return ()
+  on opn #activate $ do
+    --continue <- confirmOperation
+    -- if continue
+    -- then do
+    mg <- loadFile window loadProject
+    case mg of
+      Nothing -> return ()
+      Just (list,fn) -> do
+        if length list > 0
+          then do
+            Gtk.listStoreClear store
+            let nameList = map (\(n,i) -> (n,"white",i)) $ zip (map fst list) [0..]
+                statesList = map (\(es,i) -> (i, (es,[],[]))) $ zip (map snd list) [0..]
+            forM nameList $ \elem -> do
+              iter <- Gtk.listStoreAppend store
+              storeSetGraphStore store iter elem
+            let (_,es) = list!!0
+            writeIORef st es
+            writeIORef fileName $ Just fn
+            writeIORef undoStack []
+            writeIORef redoStack []
+            writeIORef graphStates $ M.fromList statesList
+            writeIORef changedProject False
+            writeIORef changedGraph [False]
+            set window [#title := T.pack ("Graph Editor - " ++ fn)]
+            Gtk.widgetQueueDraw canvas
+          else return ()
+  -- else return ()
   --
   -- -- save project
   -- svn `on` #activate $ do
@@ -461,22 +465,29 @@ startGUI = do
   --     then afterSave
   --     else return ()
   --
-  -- -- open graph
-  -- opg `on`#activate $ do
-  --   mg <- loadFile window loadGraph
-  --   case mg of
-  --     Just ((g,gi),path) -> do
-  --       let splitAtToken str tkn = splitAt (1 + (fromMaybe (-1) $ findIndex (==tkn) str)) str
-  --           getLastPart str = let splited = (splitAtToken str '/') in if fst splited == "" then str else getLastPart (snd splited)
-  --           getName str = if (tails str)!!(length str - 3) == ".gr" then take (length str - 3) str else str
-  --       listStoreAppend store (getName . getLastPart $ path, editorSetGI gi . editorSetGraph g $ emptyES, [],[],"green")
-  --       size <- listStoreGetSize store
-  --       treeViewSetCursor treeview [size-1] Nothing
-  --       modifyIORef changedGraph (\xs -> xs ++ [True])
-  --       writeIORef changedProject True
-  --       indicateProjChanged window True
-  --       Gtk.widgetQueueDraw canvas
-  --     _      -> return ()
+  -- open graph
+  on opg #activate $ do
+    mg <- loadFile window loadGraph
+    case mg of
+      Just ((g,gi),path) -> do
+        let splitAtToken str tkn = splitAt (1 + (fromMaybe (-1) $ findIndex (==tkn) str)) str
+            getLastPart str = let splited = (splitAtToken str '/') in if fst splited == "" then str else getLastPart (snd splited)
+            getName str = if (tails str)!!(length str - 3) == ".gr" then take (length str - 3) str else str
+        -- add the loaded diagraph to the graphStates
+        newKey <- readIORef graphStates >>= return . (+1) . maximum . M.keys
+        modifyIORef graphStates $ M.insert newKey (editorSetGI gi . editorSetGraph g $ emptyES, [],[])
+        -- update the treeview
+        iter <- Gtk.listStoreAppend store
+        storeSetGraphStore store iter (getName . getLastPart $ path, "green", newKey)
+        path <- Gtk.treeModelGetPath store iter
+        Gtk.treeViewSetCursor treeview path (Nothing :: Maybe Gtk.TreeViewColumn) False
+        {--
+        modifyIORef changedGraph (\xs -> xs ++ [True])
+        writeIORef changedProject True
+        indicateProjChanged window True
+        --}
+        Gtk.widgetQueueDraw canvas
+      _      -> return ()
   --
   -- -- save graph
   -- svg `on` #activate $ do
