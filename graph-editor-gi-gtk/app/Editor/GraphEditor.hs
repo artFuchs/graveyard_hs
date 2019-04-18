@@ -36,14 +36,16 @@ import Editor.EditorState
 --------------------------------------------------------------------------------
 -- |GraphStore
 -- A tuple representing what is showed in each node of the tree in the treeview
--- It contains the informations: name, color, and a integer that is the identifier
-type GraphStore = (String, String)
+-- It contains the informations: name, color, and a integer that is the identifier of the graph
+type GraphStore = (String, String, Int32)
 
 storeSetGraphStore :: Gtk.ListStore -> Gtk.TreeIter -> GraphStore -> IO ()
-storeSetGraphStore store iter (n,c) = do
+storeSetGraphStore store iter (n,c,i) = do
   gv0 <- toGValue (Just n)
   gv1 <- toGValue (Just c)
-  #set store iter [0,1] [gv0,gv1]
+  gv2 <- toGValue i
+  #set store iter [0,1,2] [gv0,gv1,gv2]
+
 
 --------------------------------------------------------------------------------
 -- MODULE FUNCTIONS ------------------------------------------------------------
@@ -78,11 +80,9 @@ startGUI = do
   #showAll window
 
   -- init an model to display in the tree panel --------------------------------
-  store <- Gtk.listStoreNew [gtypeString, gtypeString]
+  store <- Gtk.listStoreNew [gtypeString, gtypeString, gtypeInt]
   fstIter <- Gtk.listStoreAppend store
-  storeSetGraphStore store fstIter ("new", "white")
-  Gtk.treeIterFree fstIter
-
+  storeSetGraphStore store fstIter ("new", "white", 0)
 
   projectCol <- Gtk.treeViewGetColumn treeview 0
   case projectCol of
@@ -110,8 +110,6 @@ startGUI = do
   graphStates     <- newIORef $ M.fromList [(0, (emptyES,[],[]) :: (EditorState,[DiaGraph],[DiaGraph]) )] -- map of states foreach graph in the editor
   changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
   changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the 'currentGraph' to True
-
-
 
   ------------------------------------------------------------------------------
   -- EVENT BINDINGS ------------------------------------------------------------
@@ -401,26 +399,27 @@ startGUI = do
   --                                 prepToSave
   --                                 saveFile store saveProject fileName window True -- returns True if saved the file
   --
-  -- -- new project action activated
-  -- new `on` #activate $ do
-  --   continue <- confirmOperation
-  --   if continue
-  --     then do
-  --       writeIORef fileName Nothing
-  --       treeViewSetCursor treeview [0] Nothing
-  --       listStoreClear store
-  --       listStoreAppend store ("new", emptyES, [], [], "white")
-  --       writeIORef st emptyES
-  --       writeIORef undoStack []
-  --       writeIORef redoStack []
-  --       writeIORef lastSavedState []
-  --       writeIORef changedProject False
-  --       writeIORef changedGraph [False]
-  --       set window [windowTitle := "Graph Editor"]
-  --       Gtk.widgetQueueDraw canvas
-  --     else return ()
+  -- new project action activated
+  on new #activate $ do
+    --continue <- confirmOperation
+    --if continue then
+    --  do
+    writeIORef fileName Nothing
+    Gtk.listStoreClear store
+    iter <- Gtk.listStoreAppend store
+    storeSetGraphStore store iter ("new", "white", 0)
+    writeIORef st emptyES
+    writeIORef undoStack []
+    writeIORef redoStack []
+    writeIORef graphStates (M.fromList [(0,(emptyES,[],[]))])
+    --writeIORef lastSavedState []
+    writeIORef changedProject False
+    writeIORef changedGraph [False]
+    set window [#title := "Graph Editor"]
+    Gtk.widgetQueueDraw canvas
+    -- else return ()
   --
-  -- -- open project
+  -- open project
   -- opn `on` #activate $ do
   --   continue <- confirmOperation
   --   if continue
@@ -761,81 +760,60 @@ startGUI = do
                         Nothing -> return ()
 
 
-  --changed the selected graph
-  -- on treeview #cursorChanged $ do
-  --   selection <- Gtk.treeViewGetSelection treeview
-  --   (sel,model,iter) <- Gtk.treeSelectionGetSelected selection
-  --   case sel of
-  --     False -> return ()
-  --     True -> do
-  --       cIndex <- readIORef currentGraph
-  --       val <- Gtk.treeModelGetValue model iter 2
-  --       index <- get_int32 val >>= return . fromIntegral
-  --       if cIndex == index
-  --         then return ()
-  --         else do
-  --           -- update the current graph in the tree
-  --           currentES <- readIORef st
-  --           u <- readIORef undoStack
-  --           r <- readIORef redoStack
-  --           modifyIORef graphStates (M.insert index (currentES,u,r))
-  --           -- load the selected graph from the tree
-  --           loadFromStore index
-  --           -- update canvas
-  --           Gtk.widgetQueueDraw canvas
+  -- changed the selected graph
+  on treeview #cursorChanged $ do
+    selection <- Gtk.treeViewGetSelection treeview
+    (sel,model,iter) <- Gtk.treeSelectionGetSelected selection
+    case sel of
+      False -> return ()
+      True -> do
+        cIndex <- readIORef currentGraph
+        val <- Gtk.treeModelGetValue model iter 2
+        index <- fromGValue val :: IO Int32
+        if cIndex == index
+          then return ()
+          else do
+            -- update the current graph in the tree
+            currentES <- readIORef st
+            u <- readIORef undoStack
+            r <- readIORef redoStack
+            modifyIORef graphStates (M.insert cIndex (currentES,u,r))
+            -- load the selected graph from the tree
+            loadFromStore index
+            -- update canvas
+            Gtk.widgetQueueDraw canvas
 
   -- pressed the 'new' button
-  -- on btnNew #clicked $ do
-  --   states <- readIORef graphStates
-  --   let newKey = maximum (M.keys states) + 1
-  --   iter <- Gtk.listStoreAppend store
-  --   storeSetGraphStore store iter ("new","green", newKey)
-  --   modifyIORef graphStates (M.insert newKey (emptyES,[],[]))
-  --   --modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
-  --   return ()
-  --
-  -- -- pressed the 'remove' button
-  -- on btnRmv #clicked $ do
-  --   selection <- treeViewGetSelection treeview
-  --   sel <- treeSelectionGetSelected selection
-  --   case sel of
-  --     Nothing -> return ()
-  --     Just it -> do
-  --       size <- listStoreGetSize store
-  --       [path] <- treeModelGetPath store it
-  --       case (size>1, path==size-1) of
-  --         (True, True) -> do
-  --           treeViewSetCursor treeview [path-1] Nothing
-  --           listStoreRemove store path
-  --           modifyIORef changedGraph (\cg -> take path cg)
-  --         (True, False) -> do
-  --           listStoreRemove store path
-  --           loadFromStore path -- load the graph of the next entry
-  --           modifyIORef changedGraph (\cg -> take path cg ++ drop (path+1) cg)
-  --         (False, True) -> do
-  --           listStoreSetValue store 0 ("new",emptyES,[],[],"green")
-  --           writeIORef changedGraph [False]
-  --           writeIORef st emptyES
-  --         _ -> return ()
-  --
-  --       widgetQueueDraw canvas
+  on btnNew #clicked $ do
+    states <- readIORef graphStates
+    let newKey = maximum (M.keys states) + 1
+    iter <- Gtk.listStoreAppend store
+    storeSetGraphStore store iter ("new","green", newKey)
+    modifyIORef graphStates (M.insert newKey (emptyES,[],[]))
+    --modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
+    return ()
+
+  -- pressed the 'remove' button
+  on btnRmv #clicked $ do
+    selection <- Gtk.treeViewGetSelection treeview
+    (sel,model,iter) <- Gtk.treeSelectionGetSelected selection
+    case sel of
+      False -> return ()
+      True -> do
+        stillIn <- Gtk.listStoreRemove store iter
+        return ()
 
   -- edited a graph name
-  -- on treeRenderer #edited $ \[path] newName -> do
-  --   (oldName, color) <- listStoreGetValue store path
-  --   listStoreSetValue store path (newName, color)
-  --   writeIORef changedProject True
-  --   indicateProjChanged window True
-  --
-  -- -- remove menuItem "insert Emoji" cause it causes the program to crash
-  -- treeRenderer `on` editingStarted $ \widget path -> do
-  --   let entry = castToEntry widget
-  --   entry `on` entryPopulatePopup $ \menu -> do
-  --     items <- containerGetChildren menu
-  --     containerRemove menu (items!!(length items -1))
-  --     widgetShowAll menu
-  --   return ()
-
+  on treeRenderer #edited $ \pathStr newName -> do
+    path <- Gtk.treePathNewFromString pathStr
+    (v,iter) <- Gtk.treeModelGetIter store path
+    if v
+      then do
+        gval <- toGValue (Just newName)
+        Gtk.listStoreSet store iter [0] [gval]
+        -- writeIORef changedProject True
+        -- indicateProjChanged window True
+      else return ()
 
   -- event bindings for the main window ----------------------------------------
   -- when click in the close button, the application must close
@@ -1060,30 +1038,30 @@ loadFile window loadF = do
     _             -> do
       Gtk.widgetDestroy loadD
       return Nothing
---
--- -- auxiliar load functions -----------------------------------------------------
--- -- load project
--- loadProject :: String -> [(String, EditorState)]
--- loadProject content = editorList
---   where
---     contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
---     genNodes = map (\(nid, info) -> Node (NodeId nid) info)
---     genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
---     genProj = map (\(name,readNodes,readEdges,gi) ->
---                       let nds = genNodes readNodes
---                           eds = genEdges readEdges
---                           g = fromNodesAndEdges nds eds
---                       in (name, editorSetGI gi . editorSetGraph g $ emptyES) )
---     editorList = genProj contentList
---
+
+-- auxiliar load functions -----------------------------------------------------
+-- load project
+loadProject :: String -> [(String, EditorState)]
+loadProject content = editorList
+  where
+    contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
+    genNodes = map (\(nid, info) -> Node (NodeId nid) info)
+    genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
+    genProj = map (\(name,readNodes,readEdges,gi) ->
+                      let nds = genNodes readNodes
+                          eds = genEdges readEdges
+                          g = fromNodesAndEdges nds eds
+                      in (name, editorSetGI gi . editorSetGraph g $ emptyES) )
+    editorList = genProj contentList
+
 -- -- load graph
--- loadGraph :: String -> (Graph String String,GraphicalInfo)
--- loadGraph contents = (g,gi)
---   where
---     (rns,res,gi) = read contents :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
---     ns = map (\(nid, info) -> Node (NodeId nid) info) rns
---     es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
---     g = fromNodesAndEdges ns es
+loadGraph :: String -> (Graph String String,GraphicalInfo)
+loadGraph contents = (g,gi)
+  where
+    (rns,res,gi) = read contents :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
+    ns = map (\(nid, info) -> Node (NodeId nid) info) rns
+    es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
+    g = fromNodesAndEdges ns es
 
 -- graph interaction
 -- create a new node, auto-generating it's name and dimensions
