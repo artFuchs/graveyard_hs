@@ -358,17 +358,15 @@ startGUI = do
   -- event bindings for the menu toolbar ---------------------------------------
 
   -- auxiliar functions to create/open/save the project
-  -- auxiliar function to prepare the treeStore to save
-  -- let prepToSave = do currentES <- readIORef st
-  --                     undo <- readIORef undoStack
-  --                     redo <- readIORef redoStack
-  --                     iter <- readIORef currentGraph
-  --                     gs <- listStoreGetValue store path
-  --                     let (name, c) = (graphStoreName gs, graphStoreColor gs)
-  --                     storeSetGraphStore store iter (name,curre)
-  --                     listStoreSetValue store path (name, currentES, undo, redo, c)
-  --
-  -- -- auxiliar function to clean the flags after saving
+      -- auxiliar function to prepare the treeStore to save
+  let prepToSave = do es <- readIORef st
+                      undo <- readIORef undoStack
+                      redo <- readIORef redoStack
+                      index <- readIORef currentGraph
+                      modifyIORef graphStates $ M.insert index (es,undo,redo)
+
+
+    -- auxiliar function to clean the flags after saving
   -- let afterSave = do  size <- listStoreGetSize store
   --                     writeIORef changedProject False
   --                     writeIORef changedGraph (take size (repeat False))
@@ -447,24 +445,49 @@ startGUI = do
             set window [#title := T.pack ("Graph Editor - " ++ fn)]
             Gtk.widgetQueueDraw canvas
           else return ()
-  -- else return ()
-  --
-  -- -- save project
-  -- svn `on` #activate $ do
-  --   prepToSave
-  --   saved <- saveFile store saveProject fileName window True
-  --   if saved
-  --     then do afterSave
-  --     else return ()
-  --
-  -- -- save project as
-  -- sva `on` #activate $ do
-  --   prepToSave
-  --   saved <- saveFileAs store saveProject fileName window True
-  --   if saved
-  --     then afterSave
-  --     else return ()
-  --
+
+  let getListStoreValues vals iter = do
+          valN <- Gtk.treeModelGetValue store iter 0 >>= (\n -> fromGValue n :: IO (Maybe String)) >>= return . fromJust
+          valI <- Gtk.treeModelGetValue store iter 2 >>= fromGValue
+          continue <- Gtk.treeModelIterNext store iter
+          let newVals = (valN,valI) : vals
+          if continue
+            then getListStoreValues newVals iter
+            else return newVals
+
+      getStructsToSave = do
+          (valid, fstIter) <- Gtk.treeModelGetIterFirst store
+          if not valid
+            then return []
+            else do
+              treeNodeList <- getListStoreValues [] fstIter
+              states <- readIORef graphStates
+              let ids = map snd treeNodeList
+                  editors = map (\iD -> let (es,_,_) = fromJust $ M.lookup iD states in es) ids
+                  structs = zip (map fst treeNodeList) editors
+              return structs
+
+
+  -- save project
+  on svn #activate $ do
+    prepToSave
+    structs <- getStructsToSave
+    saved <- saveFile structs saveProject fileName window True
+    return ()
+    -- if saved
+    --   then do afterSave
+    --   else return ()
+
+  -- save project as
+  sva `on` #activate $ do
+    prepToSave
+    structs <- getStructsToSave
+    saved <- saveFileAs structs saveProject fileName window True
+    return ()
+    -- if saved
+    --   then afterSave
+    --   else return ()
+
   -- open graph
   on opg #activate $ do
     mg <- loadFile window loadGraph
@@ -488,14 +511,14 @@ startGUI = do
         --}
         Gtk.widgetQueueDraw canvas
       _      -> return ()
-  --
-  -- -- save graph
-  -- svg `on` #activate $ do
-  --   es <- readIORef st
-  --   let g  = editorGetGraph es
-  --       gi = editorGetGI es
-  --   saveFileAs (g,gi) saveGraph fileName window False
-  --   return ()
+
+  -- save graph
+  on svg #activate $ do
+    es <- readIORef st
+    let g  = editorGetGraph es
+        gi = editorGetGI es
+    saveFileAs (g,gi) saveGraph fileName window False
+    return ()
 
   -- undo
   on udo #activate $ do
@@ -998,33 +1021,32 @@ saveFileAs x saveF fileName window changeFN = do
 
 -- auxiliar save functions -----------------------------------------------------
 -- save project
--- saveProject :: Gtk.ListStore -> String -> IO Bool
--- saveProject model path = do
---   editorList <- listStoreToList model
---   let getWhatMatters = (\(name, es, _, _, _) -> (name, editorGetGraph es, editorGetGI es))
---       whatMatters = map getWhatMatters editorList
---       contents = map (\(name, g, gi) -> ( name
---                                         , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
---                                         , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
---                                         , gi )) whatMatters
---       writeProject = writeFile path $ show contents
---   tentativa <- E.try (writeProject)  :: IO (Either E.IOException ())
---   case tentativa of
---     Left _ -> return False
---     Right _ -> return True
+saveProject :: [(String,EditorState)] -> String -> IO Bool
+saveProject esList path = do
+  let getWhatMatters = (\(name, es) -> (name, editorGetGraph es, editorGetGI es))
+      whatMatters = map getWhatMatters esList
+      contents = map (\(name, g, gi) -> ( name
+                                        , map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+                                        , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+                                        , gi )) whatMatters
+      writeProject = writeFile path $ show contents
+  saveTry <- E.try (writeProject)  :: IO (Either E.IOException ())
+  case saveTry of
+    Left _ -> return False
+    Right _ -> return True
 --
--- -- save graph
--- saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
--- saveGraph (g,gi) path = do
---     let path' = if (tails path)!!(length path-3) == ".gr" then path else path ++ ".gr"
---         writeGraph = writeFile path' $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
---                                            , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
---                                            , gi)
---
---     tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
---     case tentativa of
---       Left _ -> return False
---       Right _ -> return True
+-- save graph
+saveGraph :: (Graph String String ,GraphicalInfo) -> String -> IO Bool
+saveGraph (g,gi) path = do
+    let path' = if (tails path)!!(length path-3) == ".gr" then path else path ++ ".gr"
+        writeGraph = writeFile path' $ show ( map (\n -> (nodeId n, nodeInfo n) ) $ nodes g
+                                           , map (\e -> (edgeId e, sourceId e, targetId e, edgeInfo e)) $ edges g
+                                           , gi)
+
+    tentativa <- E.try (writeGraph)  :: IO (Either E.IOException ())
+    case tentativa of
+      Left _ -> return False
+      Right _ -> return True
 --
 --
 -- load function ---------------------------------------------------------------
