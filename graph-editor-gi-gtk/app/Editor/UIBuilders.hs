@@ -12,7 +12,7 @@ module Editor.UIBuilders
 , showError
 , createSaveDialog
 , createLoadDialog
-, createCloseDialog
+, createConfirmDialog
 ) where
 
 import qualified GI.Gtk as Gtk
@@ -355,8 +355,8 @@ createLoadDialog = do
   Gtk.dialogAddButton loadD "Cancel" (fromIntegral . fromEnum $ Gtk.ResponseTypeReject)
   return loadD
 
-createCloseDialog :: T.Text -> IO Gtk.ResponseType
-createCloseDialog msg = do
+createConfirmDialog :: T.Text -> IO Gtk.ResponseType
+createConfirmDialog msg = do
   closeD <- new Gtk.MessageDialog
             [ #text := msg
             , #messageType := Gtk.MessageTypeWarning

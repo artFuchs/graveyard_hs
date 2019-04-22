@@ -384,71 +384,7 @@ startGUI = do
                         Nothing -> set window [#title := "Graph Editor"]
                         Just fn -> set window [#title := T.pack ("Graph Editor - " ++ fn)]
 
-  -- -- auxiliar function to check if the project was changed
-  -- -- it does the checking and if no, ask the user if them want to save.
-  -- -- returns True if there's no changes, if the user don't wanted to save or if he wanted and the save operation was successfull
-  -- -- returns False if the user wanted to save and the save operation failed or opted to cancel.
-  -- let confirmOperation = do changed <- readIORef changedProject
-  --                           response <- if changed
-  --                             then createCloseDialog (Just window) "The project was changed, wants to save?"
-  --                             else return ResponseNo
-  --                           case response of
-  --                             ResponseCancel -> return False
-  --                             r -> case r of
-  --                               ResponseNo -> return True
-  --                               ResponseYes -> do
-  --                                 prepToSave
-  --                                 saveFile store saveProject fileName window True -- returns True if saved the file
-  --
-  -- new project action activated
-  on new #activate $ do
-    --continue <- confirmOperation
-    --if continue then
-    --  do
-    writeIORef fileName Nothing
-    Gtk.listStoreClear store
-    iter <- Gtk.listStoreAppend store
-    storeSetGraphStore store iter ("new", "white", 0)
-    writeIORef st emptyES
-    writeIORef undoStack []
-    writeIORef redoStack []
-    writeIORef graphStates (M.fromList [(0,(emptyES,[],[]))])
-    --writeIORef lastSavedState []
-    writeIORef changedProject False
-    writeIORef changedGraph [False]
-    set window [#title := "Graph Editor"]
-    Gtk.widgetQueueDraw canvas
-    -- else return ()
-
-  -- open project
-  on opn #activate $ do
-    --continue <- confirmOperation
-    -- if continue
-    -- then do
-    mg <- loadFile window loadProject
-    case mg of
-      Nothing -> return ()
-      Just (list,fn) -> do
-        if length list > 0
-          then do
-            Gtk.listStoreClear store
-            let nameList = map (\(n,i) -> (n,"white",i)) $ zip (map fst list) [0..]
-                statesList = map (\(es,i) -> (i, (es,[],[]))) $ zip (map snd list) [0..]
-            forM nameList $ \elem -> do
-              iter <- Gtk.listStoreAppend store
-              storeSetGraphStore store iter elem
-            let (_,es) = list!!0
-            writeIORef st es
-            writeIORef fileName $ Just fn
-            writeIORef undoStack []
-            writeIORef redoStack []
-            writeIORef graphStates $ M.fromList statesList
-            writeIORef changedProject False
-            writeIORef changedGraph [False]
-            set window [#title := T.pack ("Graph Editor - " ++ fn)]
-            Gtk.widgetQueueDraw canvas
-          else return ()
-
+  -- the next 2 are auxiliar functions to get the structures needed to save the project
   let getListStoreValues vals iter = do
           valN <- Gtk.treeModelGetValue store iter 0 >>= (\n -> fromGValue n :: IO (Maybe String)) >>= return . fromJust
           valI <- Gtk.treeModelGetValue store iter 2 >>= fromGValue
@@ -458,7 +394,7 @@ startGUI = do
             then getListStoreValues newVals iter
             else return newVals
 
-      getStructsToSave = do
+  let getStructsToSave = do
           (valid, fstIter) <- Gtk.treeModelGetIterFirst store
           if not valid
             then return []
@@ -470,6 +406,72 @@ startGUI = do
                   structs = zip (map fst treeNodeList) editors
               return structs
 
+  -- auxiliar function to check if the project was changed
+  -- it does the checking and if no, ask the user if them want to save.
+  -- returns True if there's no changes, if the user don't wanted to save or if he wanted and the save operation was successfull
+  -- returns False if the user wanted to save and the save operation failed or opted to cancel.
+  let confirmOperation = do changed <- readIORef changedProject
+                            response <- if changed
+                              then createConfirmDialog "The project was changed, want to save?"
+                              else return Gtk.ResponseTypeNo
+                            case response of
+                              Gtk.ResponseTypeCancel -> return False
+                              r -> case r of
+                                Gtk.ResponseTypeNo -> return True
+                                Gtk.ResponseTypeYes -> do
+                                  prepToSave
+                                  structs <- getStructsToSave
+                                  saveFile structs saveProject fileName window True -- returns True if saved the file
+
+  -- new project action activated
+  on new #activate $ do
+    continue <- confirmOperation
+    if continue
+      then do
+        writeIORef fileName Nothing
+        Gtk.listStoreClear store
+        iter <- Gtk.listStoreAppend store
+        storeSetGraphStore store iter ("new", "white", 0)
+        writeIORef st emptyES
+        writeIORef undoStack []
+        writeIORef redoStack []
+        writeIORef graphStates (M.fromList [(0,(emptyES,[],[]))])
+        --writeIORef lastSavedState []
+        writeIORef changedProject False
+        writeIORef changedGraph [False]
+        set window [#title := "Graph Editor"]
+        Gtk.widgetQueueDraw canvas
+      else return ()
+
+  -- open project
+  on opn #activate $ do
+    continue <- confirmOperation
+    if continue
+      then do
+        mg <- loadFile window loadProject
+        case mg of
+          Nothing -> return ()
+          Just (list,fn) -> do
+            if length list > 0
+              then do
+                Gtk.listStoreClear store
+                let nameList = map (\(n,i) -> (n,"white",i)) $ zip (map fst list) [0..]
+                    statesList = map (\(es,i) -> (i, (es,[],[]))) $ zip (map snd list) [0..]
+                forM nameList $ \elem -> do
+                  iter <- Gtk.listStoreAppend store
+                  storeSetGraphStore store iter elem
+                let (_,es) = list!!0
+                writeIORef st es
+                writeIORef fileName $ Just fn
+                writeIORef undoStack []
+                writeIORef redoStack []
+                writeIORef graphStates $ M.fromList statesList
+                writeIORef changedProject False
+                writeIORef changedGraph [False]
+                set window [#title := T.pack ("Graph Editor - " ++ fn)]
+                Gtk.widgetQueueDraw canvas
+              else return ()
+      else return ()
 
   -- save project
   on svn #activate $ do
@@ -505,11 +507,9 @@ startGUI = do
         storeSetGraphStore store iter (getName . getLastPart $ path, "green", newKey)
         path <- Gtk.treeModelGetPath store iter
         Gtk.treeViewSetCursor treeview path (Nothing :: Maybe Gtk.TreeViewColumn) False
-        {--
         modifyIORef changedGraph (\xs -> xs ++ [True])
         writeIORef changedProject True
         indicateProjChanged window True
-        --}
         Gtk.widgetQueueDraw canvas
       _      -> return ()
 
@@ -853,14 +853,13 @@ startGUI = do
 
   -- event bindings for the main window ----------------------------------------
   -- when click in the close button, the application must close
-  -- window `on` deleteEvent $ do
-  --   continue <- liftIO $ confirmOperation
-  --   if continue
-  --     then do
-  --       liftIO mainQuit
-  --       return False
-  --     else return True]
-  on window #destroy Gtk.mainQuit
+  on window #deleteEvent $ return $ do
+    continue <- confirmOperation
+    if continue
+      then do
+        Gtk.mainQuit
+        return False
+      else return True
 
   -- run the preogram ----------------------------------------------------------
   Gtk.main
