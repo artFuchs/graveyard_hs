@@ -834,8 +834,9 @@ startGUI = do
     case sel of
       False -> return ()
       True -> do
-        stillIn <- Gtk.listStoreRemove store iter
-        return ()
+        index <- Gtk.treeModelGetValue store iter 2 >>= fromGValue
+        Gtk.listStoreRemove store iter
+        modifyIORef graphStates $ M.delete index
 
   -- edited a graph name
   on treeRenderer #edited $ \pathStr newName -> do
