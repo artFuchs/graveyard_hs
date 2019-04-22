@@ -847,8 +847,8 @@ startGUI = do
       then do
         gval <- toGValue (Just newName)
         Gtk.listStoreSet store iter [0] [gval]
-        -- writeIORef changedProject True
-        -- indicateProjChanged window True
+        writeIORef changedProject True
+        indicateProjChanged window True
       else return ()
 
   -- event bindings for the main window ----------------------------------------
