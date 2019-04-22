@@ -654,12 +654,12 @@ startGUI = do
   -- change the selection fill color or line color and
   -- set the current fill or line color as the selected color
   on colorBtn #colorSet $ do
-    gtkcolor <- Gtk.colorButtonGetColor colorBtn
+    gtkcolor <- Gtk.colorChooserGetRgba colorBtn
     es <- readIORef st
     r <- get gtkcolor #red
     g <- get gtkcolor #green
     b <- get gtkcolor #blue
-    let color = ((fromIntegral $ r)/65535, (fromIntegral $ g)/65535, (fromIntegral$ b)/65535)
+    let color = (r,g,b)
         (nds,edgs) = editorGetSelected es
     writeIORef currentC color
     if null nds
@@ -673,12 +673,12 @@ startGUI = do
         Gtk.widgetQueueDraw canvas
 
   on lineColorBtn #colorSet $ do
-    gtkcolor <- Gtk.colorButtonGetColor lineColorBtn
+    gtkcolor <- Gtk.colorChooserGetRgba lineColorBtn
     es <- readIORef st
     r <- get gtkcolor #red
     g <- get gtkcolor #green
     b <- get gtkcolor #blue
-    let color = ((fromIntegral $ r)/65535, (fromIntegral $ g)/65535, (fromIntegral$ b)/65535)
+    let color = (r,g,b)
         (nds,edgs) = editorGetSelected es
     writeIORef currentLC color
     if null nds && null edgs
@@ -872,7 +872,7 @@ startGUI = do
 -- update the inspector --------------------------------------------------------
 updatePropMenu :: IORef EditorState -> IORef (Double,Double,Double) -> IORef (Double,Double,Double) -> (Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton]) -> (Gtk.Box, Gtk.Frame, Gtk.Frame)-> IO ()
 updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShapes, radioStyles) (hBoxColor, frameShape, frameStyle) = do
-  emptyColor <- new Gdk.Color [#red := 49151, #blue := 49151, #green := 49151]
+  emptyColor <- new Gdk.RGBA [#red := 0.5, #blue := 0.5, #green := 0.5, #alpha := 1.0]
   est <- readIORef st
   let g = editorGetGraph est
       ns = filter (\n -> elem (nodeId n) $ fst $ editorGetSelected est) $ nodes g
@@ -884,10 +884,10 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
       (r, g, b)    <- readIORef currentC
       (r', g', b') <- readIORef currentLC
       set entryName [#text := ""]
-      color <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
-      lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
-      Gtk.colorButtonSetColor colorBtn color
-      Gtk.colorButtonSetColor lcolorBtn lcolor
+      color <- new Gdk.RGBA [#red := r, #green := g, #blue := b, #alpha:=1.0]
+      lcolor <- new Gdk.RGBA [#red := r', #green := g', #blue := b', #alpha:=1.0]
+      Gtk.colorChooserSetRgba colorBtn color
+      Gtk.colorChooserSetRgba lcolorBtn lcolor
       set hBoxColor [#visible := True]
       set frameShape [#visible := True]
       set frameStyle [#visible := True]
@@ -898,11 +898,11 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
           (r,g,b) = fillColor gi
           (r',g',b') = lineColor gi
           nodeShape = shape gi
-      color <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
-      lcolor <- new Gdk.Color [#red := round (r'*65535), #green := round (g'*65535), #blue := round (b'*65535)]
+      color <- new Gdk.RGBA [#red := r, #green := g, #blue := b, #alpha := 1.0]
+      lcolor <- new Gdk.RGBA [#red := r', #green := g', #blue := b', #alpha := 1.0]
       set entryName [#text := name]
-      Gtk.colorButtonSetColor colorBtn $ if n==1 then color else emptyColor
-      Gtk.colorButtonSetColor lcolorBtn $ if n==1 then lcolor else emptyColor
+      Gtk.colorChooserSetRgba colorBtn $ if n==1 then color else emptyColor
+      Gtk.colorChooserSetRgba lcolorBtn $ if n==1 then lcolor else emptyColor
       case (n,nodeShape) of
         (1,NCircle) -> Gtk.toggleButtonSetActive (radioShapes!!0) True
         (1,NRect) -> Gtk.toggleButtonSetActive (radioShapes!!1) True
@@ -918,9 +918,9 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
           gi = getEdgeGI (fromEnum eid) egiM
           (r,g,b) = color gi
           edgeStyle = style gi
-      edgeColor <- new Gdk.Color [#red := round (r*65535), #green := round (g*65535), #blue := round (b*65535)]
+      edgeColor <- new Gdk.RGBA [#red := r, #green := g, #blue := b]
       set entryName [#text := name]
-      Gtk.colorButtonSetColor lcolorBtn $ if n == 1 then edgeColor else emptyColor
+      Gtk.colorChooserSetRgba lcolorBtn $ if n == 1 then edgeColor else emptyColor
       case (n,edgeStyle) of
         (1,ENormal) -> Gtk.toggleButtonSetActive (radioStyles!!0) True
         (1,EPointed) -> Gtk.toggleButtonSetActive (radioStyles!!1) True
@@ -932,8 +932,8 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
       set frameStyle [#visible := True]
     _ -> do
       set entryName [#text := "----" ]
-      Gtk.colorButtonSetColor colorBtn emptyColor
-      Gtk.colorButtonSetColor lcolorBtn emptyColor
+      Gtk.colorChooserSetRgba colorBtn emptyColor
+      Gtk.colorChooserSetRgba lcolorBtn emptyColor
       set hBoxColor [#visible := True]
       set frameShape [#visible := True]
       set frameStyle [#visible := True]
