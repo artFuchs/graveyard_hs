@@ -385,21 +385,22 @@ startGUI = do
                         Just fn -> set window [#title := T.pack ("Graph Editor - " ++ fn)]
 
   -- the next 2 are auxiliar functions to get the structures needed to save the project
-  let getListStoreValues vals iter = do
+  let getListStoreValues iter = do
           valN <- Gtk.treeModelGetValue store iter 0 >>= (\n -> fromGValue n :: IO (Maybe String)) >>= return . fromJust
           valI <- Gtk.treeModelGetValue store iter 2 >>= fromGValue
           continue <- Gtk.treeModelIterNext store iter
-          let newVals = (valN,valI) : vals
           if continue
-            then getListStoreValues newVals iter
-            else return newVals
+            then do
+              newVals <- getListStoreValues iter
+              return $ (valN, valI) : newVals
+            else return $ (valN, valI) : []
 
   let getStructsToSave = do
           (valid, fstIter) <- Gtk.treeModelGetIterFirst store
           if not valid
             then return []
             else do
-              treeNodeList <- getListStoreValues [] fstIter
+              treeNodeList <- getListStoreValues fstIter
               states <- readIORef graphStates
               let ids = map snd treeNodeList
                   editors = map (\iD -> let (es,_,_) = fromJust $ M.lookup iD states in es) ids
@@ -457,14 +458,15 @@ startGUI = do
                 Gtk.listStoreClear store
                 let nameList = map (\(n,i) -> (n,"white",i)) $ zip (map fst list) [0..]
                     statesList = map (\(es,i) -> (i, (es,[],[]))) $ zip (map snd list) [0..]
-                forM nameList $ \elem -> do
+                forM nameList $ \element -> do
                   iter <- Gtk.listStoreAppend store
-                  storeSetGraphStore store iter elem
+                  storeSetGraphStore store iter element
                 let (_,es) = list!!0
                 writeIORef st es
-                writeIORef fileName $ Just fn
                 writeIORef undoStack []
                 writeIORef redoStack []
+                writeIORef fileName $ Just fn
+                writeIORef currentGraph 0
                 writeIORef graphStates $ M.fromList statesList
                 writeIORef changedProject False
                 writeIORef changedGraph [False]
@@ -918,7 +920,7 @@ updatePropMenu st currentC currentLC (entryName, colorBtn, lcolorBtn, radioShape
           gi = getEdgeGI (fromEnum eid) egiM
           (r,g,b) = color gi
           edgeStyle = style gi
-      edgeColor <- new Gdk.RGBA [#red := r, #green := g, #blue := b]
+      edgeColor <- new Gdk.RGBA [#red := r, #green := g, #blue := b, #alpha := 1.0]
       set entryName [#text := name]
       Gtk.colorChooserSetRgba lcolorBtn $ if n == 1 then edgeColor else emptyColor
       case (n,edgeStyle) of
