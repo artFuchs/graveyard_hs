@@ -94,28 +94,11 @@ renderRectangle (x,y,w,h) (r,g,b) (lr,lg,lb) selected = do
 renderEdge :: EdgeGI -> String -> Bool -> NodeGI -> NodeGI -> Render ()
 renderEdge edge content selected nodeSrc nodeDst = do
   if nodeSrc == nodeDst
-    then renderLoop edge selected nodeSrc
-    else renderNormalEdge edge selected nodeSrc nodeDst
-  -- draw Label
-  if null content
-    then  return ()
-    else  do
-      pL <- GRPC.createLayout content
-      desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
-      liftIO $ GRPL.layoutSetFontDescription pL (Just desc)
-      (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
-      let (x,y) = position nodeSrc
-          (u,v) = cPosition edge
-          a = angle (x,y) (u,v)
-          minD = max pw ph
-          labelPos = pointAt (a - pi/2) ( minD+2 ) (u, v)
-          (r,g,b) = color edge
-      setSourceRGB r g b
-      moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
-      showLayout pL
+    then renderLoop edge content selected nodeSrc
+    else renderNormalEdge edge content selected nodeSrc nodeDst
 
-renderNormalEdge :: EdgeGI -> Bool -> NodeGI -> NodeGI -> Render ()
-renderNormalEdge edge selected nodeSrc nodeDst = do
+renderNormalEdge :: EdgeGI -> String -> Bool -> NodeGI -> NodeGI -> Render ()
+renderNormalEdge edge content selected nodeSrc nodeDst = do
   -- calculate the intersection points of the edge with the source and target nodes
   let (x1, y1) = position nodeSrc
       (pw, ph) = dims nodeSrc
@@ -139,37 +122,61 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
         NRect-> intersectLineRect (xe,ye) (x2,y2,pw2+3,ph2+3)
         NSquare -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
 
-      (r,g,b) = color edge
+  let (r,g,b) = color edge
 
-  if selected
-    then do
+  -- draw a bold line/curve to highlight the edge if it is selected
+  case (selected, centered edge) of
+    (False, _) -> return ()
+    (True, True) -> do
       setLineWidth 6
       setSourceRGB 0.29 0.56 0.85
       moveTo x1' y1'
-      lineTo xe ye
       lineTo x2' y2'
       stroke
-    else return ()
+    (True, False) -> do
+      setLineWidth 6
+      setSourceRGB 0.29 0.56 0.85
+      let aglobal = angle (x1',y1') (x2', y2')
+          d = pointDistance (x1',y1') (x2',y2')
+          p1 = pointAt (pi+aglobal) (d/4) (xe,ye)
+          p2 = pointAt (aglobal) (d/4) (xe,ye)
+      moveTo x1' y1'
+      curveTo x1' y1' (fst p1) (snd p1) xe ye
+      curveTo (fst p2) (snd p2) x2' y2' x2' y2'
+      stroke
 
-  -- draw a line representing the edge
+  -- draw the edge
   setLineWidth 2
   setSourceRGB r g b
-  case style edge of
-    ENormal -> do
-      moveTo x1' y1'
-      lineTo xe  ye
-      lineTo x2' y2'
-      stroke
-    EPointed -> do
-      drawPointedLine (x1',y1') (xe,ye)
-      drawPointedLine (xe,ye) (x2',y2')
-    ESlashed -> do
-      drawSlashedLine (x1',y1') (xe,ye)
-      drawSlashedLine (xe,ye) (x2',y2')
+  if centered edge
+    then do
+      case style edge of
+        ENormal -> do
+          moveTo x1' y1'
+          lineTo x2' y2'
+          stroke
+        EPointed -> drawPointedLine (x1',y1') (x2',y2')
+        ESlashed -> drawSlashedLine (x1',y1') (x2',y2')
+    else do
+      let aglobal = angle (x1',y1') (x2', y2')
+          d = pointDistance (x1',y1') (x2',y2')
+          p1 = pointAt (pi+aglobal) (d/4) (xe,ye)
+          p2 = pointAt (aglobal) (d/4) (xe,ye)
+      case style edge of
+        ENormal -> do
+          moveTo x1' y1'
+          curveTo x1' y1' (fst p1) (snd p1) xe ye
+          curveTo (fst p2) (snd p2) x2' y2' x2' y2'
+          stroke
+        EPointed -> do
+          drawPointedCurve (x1',y1') (x1',y1') p1 (xe,ye)
+          drawPointedCurve (xe,ye) p2 (x2',y2') (x2',y2')
+        ESlashed -> do
+          drawSlashedCurve (x1',y1') (x1',y1') p1 (xe,ye)
+          drawSlashedCurve (xe,ye) p2 (x2',y2') (x2',y2')
 
   -- draws an arrow pointing to the target node
-  let a = (angle (xe,ye) (x2,y2))
-      d = pointDistance (xe,ye) (x2,y2)
+  let a = (angle (xe,ye) (x2',y2'))
       (xa1,ya1) = (x2',y2')
       (xa2,ya2) = pointAt (a+7*pi/8) 10 (x2',y2')
       (xa3,ya3) = pointAt (a-7*pi/8) 10 (x2',y2')
@@ -182,8 +189,24 @@ renderNormalEdge edge selected nodeSrc nodeDst = do
   arc xe  ye 2 0 (2*pi)
   fill
 
-renderLoop:: EdgeGI -> Bool -> NodeGI -> Render ()
-renderLoop edge selected node = do
+  -- draw Label
+  if null content
+    then  return ()
+    else  do
+      pL <- GRPC.createLayout content
+      desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
+      liftIO $ GRPL.layoutSetFontDescription pL (Just desc)
+      (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+      let a = angle (x1,y1) (x2,y2)
+          (x0,y0) = multPoint (quadrant a) (pw/2,ph/2)
+          minD = (abs $ tan(a)*x0 + y0) / sqrt(tan(a)*tan(a) + 1)
+          labelPos = pointAt (a - pi/2) (minD+8) (xe, ye)
+      setSourceRGB r g b
+      moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
+      showLayout pL
+
+renderLoop:: EdgeGI -> String -> Bool -> NodeGI -> Render ()
+renderLoop edge content selected node = do
   let (xe, ye) = cPosition edge
       (x,y) = position node
       a = angle (x,y) (xe, ye)
@@ -225,6 +248,22 @@ renderLoop edge selected node = do
   -- draws a circle to show the edge's control point
   arc f g 2 0 (2*pi)
   fill
+
+  -- draw Label
+  if null content
+    then  return ()
+    else  do
+      pL <- GRPC.createLayout content
+      desc <- liftIO $ GRP.fontDescriptionFromString "Sans Regular 10"
+      liftIO $ GRPL.layoutSetFontDescription pL (Just desc)
+      (_, PangoRectangle px py pw ph) <- liftIO $ layoutGetExtents pL
+      let a = angle (x,y) (xe,ye) + pi/2
+          (x0,y0) = multPoint (quadrant a) (pw/2,ph/2)
+          minD = (abs $ tan(a)*x0 + y0) / sqrt(tan(a)*tan(a) + 1)
+          labelPos = pointAt (a-pi/2) ( minD+8 ) (xe, ye)
+      setSourceRGB rl gl bl
+      moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
+      showLayout pL
 
 drawPointedLine :: (Double,Double) -> (Double,Double) -> Render ()
 drawPointedLine p1@(x1,y1) p2@(x2,y2)= do
