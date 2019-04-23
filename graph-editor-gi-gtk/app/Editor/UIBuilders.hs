@@ -27,7 +27,7 @@ import Control.Monad.IO.Class
 -- the canvas in the center,
 -- the inspector panel in the right
 -- and the menubar in the top of the window
-buildMainWindow maybeMenuBar frameProps treePanel = do
+buildMainWindow menuBar frameProps treePanel = do
   -- main window
   window <- new Gtk.Window [ #title         := "Graph Editor"
                           , #defaultWidth  := 640
@@ -42,9 +42,7 @@ buildMainWindow maybeMenuBar frameProps treePanel = do
   Gtk.containerAdd window vBoxMain
 
   -- adds the menubar
-  case maybeMenuBar of
-    Just x -> Gtk.boxPackStart vBoxMain x False False 0
-    Nothing -> return ()
+  Gtk.boxPackStart vBoxMain menuBar False False 0
 
   -- creates a HPane to add the treeView in the left
   hPaneTree <- new Gtk.Paned [ #orientation := Gtk.OrientationHorizontal ]
@@ -106,7 +104,7 @@ buildMenubar = do
 
   helpItem <- Gtk.builderGetObject builder  "help_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
 
-  return (Just menubar, fileItems, editItems, viewItems, helpItem)
+  return (menubar, fileItems, editItems, viewItems, helpItem)
 
 -- creates the inspector for typed graphs
 buildTypeMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
