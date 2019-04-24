@@ -550,7 +550,8 @@ startGUI = do
   -- copy
   on cpy #activate $ do
     es <- readIORef st
-    writeIORef clipboard $ copySelected es
+    let copy = copySelected es
+    writeIORef clipboard $ copy
 
   -- paste
   on pst #activate $ do
@@ -1201,7 +1202,9 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
     upd (a,b) = (20+a-minX, 20+b-minY)
     cNgiM' = M.map (\gi -> nodeGiSetPosition (upd $ position gi) gi) cNgiM
     cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
-    (newGraph, (newngiM,newegiM)) = diagrUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
+    (newGraph, (newngiM,newegiM)) = diagrDisjointUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
+
+
 
 -- change window name to indicate if the project was modified
 indicateProjChanged :: Gtk.Window -> Bool -> IO ()
