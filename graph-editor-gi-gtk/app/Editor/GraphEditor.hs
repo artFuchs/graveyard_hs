@@ -67,7 +67,7 @@ startGUI = do
   -- creates the menu bar
   (menubar,(new,opn,svn,sva,svg,opg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
   -- creates the inspector panel
-  (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeMenu
+  (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeInspector
   let
     propWidgets = (entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
@@ -110,7 +110,7 @@ startGUI = do
   graphStates     <- newIORef $ M.fromList [(0, (emptyES,[],[]) :: (EditorState,[DiaGraph],[DiaGraph]) )] -- map of states foreach graph in the editor
   changedProject  <- newIORef False -- set this flag as True when the graph is changed somehow
   changedGraph    <- newIORef [False] -- when modify a graph, set the flag in the 'currentGraph' to True
-  lastSavedState  <- newIORef ([] :: [DiaGraph])
+  lastSavedState  <- newIORef (M.empty :: M.Map Int32 DiaGraph)
 
   ------------------------------------------------------------------------------
   -- EVENT BINDINGS ------------------------------------------------------------
@@ -371,7 +371,7 @@ startGUI = do
   let afterSave = do  writeIORef changedProject False
                       states <- readIORef graphStates
                       writeIORef changedGraph (take (length states) (repeat False))
-                      writeIORef lastSavedState (map (\(es,_,_) -> (editorGetGraph es, editorGetGI es)) $ M.elems states)
+                      writeIORef lastSavedState (M.map (\(es,_,_) -> (editorGetGraph es, editorGetGI es)) states)
                       -- forM [0..(size-1)] $ \i -> let (n,e,u,r,_) = list!!i in listStoreSetValue store i (n,e,u,r,"white")
                       gvColor <- toGValue (Just "white" :: Maybe String)
                       Gtk.treeModelForeach store $ \model path iter -> do
@@ -437,7 +437,7 @@ startGUI = do
         writeIORef undoStack []
         writeIORef redoStack []
         writeIORef graphStates (M.fromList [(0,(emptyES,[],[]))])
-        --writeIORef lastSavedState []
+        writeIORef lastSavedState M.empty
         writeIORef changedProject False
         writeIORef changedGraph [False]
         set window [#title := "Graph Editor"]
@@ -528,10 +528,12 @@ startGUI = do
     applyUndo undoStack redoStack st
     -- indicate changes
     sst <- readIORef lastSavedState
-    index <- readIORef currentGraph >>= return . fromIntegral
+    index <- readIORef currentGraph
     es <- readIORef st
     let (g,gi) = (editorGetGraph es, editorGetGI es)
-        x = if length sst > index then sst!!index else (G.empty,(M.empty,M.empty))
+        x = case M.lookup (fromIntegral index) $ sst of
+              Just diag -> diag
+              Nothing -> DG.empty
     setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     Gtk.widgetQueueDraw canvas
 
@@ -540,10 +542,12 @@ startGUI = do
     applyRedo undoStack redoStack st
     -- indicate changes
     sst <- readIORef lastSavedState
-    index <- readIORef currentGraph >>= return . fromIntegral
+    index <- readIORef currentGraph
     es <- readIORef st
     let (g,gi) = (editorGetGraph es, editorGetGI es)
-        x = if length sst > index then sst!!index else (G.empty,(M.empty,M.empty))
+        x = case M.lookup (fromIntegral index) $ sst of
+              Just diag -> diag
+              Nothing -> DG.empty
     setChangeFlags window store changedProject changedGraph currentGraph $ not (isDiaGraphEqual (g,gi) x)
     Gtk.widgetQueueDraw canvas
 
@@ -646,7 +650,7 @@ startGUI = do
                      context <- Gtk.widgetGetPangoContext canvas
                      renameSelected st name context
                      Gtk.widgetQueueDraw canvas
-  -- if it's Return, then change the name of the selected elements
+  -- if it's Return or Enter (Numpad), then change the name of the selected elements
     case k of
        '\65293' -> setName
        '\65421' -> setName
@@ -818,20 +822,17 @@ startGUI = do
             modifyIORef graphStates (M.insert cIndex (currentES,u,r))
             -- load the selected graph from the tree
             loadFromStore index
-            -- update canvas
             Gtk.widgetQueueDraw canvas
 
-  -- pressed the 'new' button
+  -- pressed the 'new' button on the treeview area
   on btnNew #clicked $ do
     states <- readIORef graphStates
     let newKey = maximum (M.keys states) + 1
     iter <- Gtk.listStoreAppend store
     storeSetGraphStore store iter ("new","green", newKey)
     modifyIORef graphStates (M.insert newKey (emptyES,[],[]))
-    --modifyIORef lastSavedState (\sst -> sst ++ [DG.empty])
-    return ()
 
-  -- pressed the 'remove' button
+  -- pressed the 'remove' button on the treeview area
   on btnRmv #clicked $ do
     selection <- Gtk.treeViewGetSelection treeview
     (sel,model,iter) <- Gtk.treeSelectionGetSelected selection
@@ -1248,11 +1249,10 @@ setChangeFlags window store changedProject changedGraph currentGraph changed = d
 
 
 -- change updatedState
-updateSavedState :: IORef [DiaGraph] -> IORef (M.Map Int32 (EditorState, [DiaGraph], [DiaGraph])) -> IO ()
+updateSavedState :: IORef (M.Map Int32 DiaGraph) -> IORef (M.Map Int32 (EditorState, [DiaGraph], [DiaGraph])) -> IO ()
 updateSavedState sst graphStates = do
   states <- readIORef graphStates
-  let newSavedState = map (\(es,_,_) -> (editorGetGraph es, editorGetGI es)) $ M.elems states
-  writeIORef sst newSavedState
+  writeIORef sst $ (M.map (\(es,_,_) -> (editorGetGraph es, editorGetGI es) ) states)
 
 -- Tarefas ---------------------------------------------------------------------
 
