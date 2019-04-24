@@ -4,9 +4,9 @@
 module Editor.UIBuilders
 ( buildMainWindow
 , buildMenubar
-, buildTypeMenu
-, buildHostMenu
-, buildRuleMenu
+, buildTypeInspector
+, buildHostInspector
+, buildRuleInspector
 , buildTreePanel
 , buildHelpWindow
 , showError
@@ -107,8 +107,8 @@ buildMenubar = do
   return (menubar, fileItems, editItems, viewItems, helpItem)
 
 -- creates the inspector for typed graphs
-buildTypeMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
-buildTypeMenu = do
+buildTypeInspector :: IO (Gtk.Frame, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
+buildTypeInspector = do
   frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn ]
   mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
                          , #spacing := 8
@@ -179,8 +179,8 @@ buildTypeMenu = do
   return (frame, typeEntry, colorButton, lineColorButton, radioShapes, radioStyles, (colorBox, frameShape, frameStyle))
 
 -- creates the inspector for the host graph
-buildHostMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
-buildHostMenu = do
+buildHostInspector :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
+buildHostInspector = do
   frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn]
   mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
                          , #spacing := 8
@@ -222,8 +222,8 @@ buildHostMenu = do
 
   return (frame, labelEntry, nodeTypeComboBox, edgeTypeComboBox, (nodeTypeBox, edgeTypeBox))
 
-buildRuleMenu :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
-buildRuleMenu = do
+buildRuleInspector :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
+buildRuleInspector = do
   frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn]
   mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
                          , #spacing := 8
@@ -278,8 +278,10 @@ buildRuleMenu = do
 buildTreePanel = do
   return () :: IO ()
   mainBox <- new Gtk.Box [#orientation := Gtk.OrientationVertical, #spacing := 0]
+  scrolledwin <- new Gtk.ScrolledWindow []
+  Gtk.boxPackStart mainBox scrolledwin True True 0
   treeview <- new Gtk.TreeView [#headersVisible := True]
-  Gtk.boxPackStart mainBox treeview True True 0
+  Gtk.containerAdd scrolledwin treeview
 
   col <- new Gtk.TreeViewColumn [#title := "project"]
   Gtk.treeViewAppendColumn treeview col
