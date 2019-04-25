@@ -7,6 +7,7 @@ module Editor.Helper
 , midPoint
 , pointInsideRectangle
 , pointAt
+, toPolarFrom
 , angle
 , quadrant
 , applyPair
@@ -40,6 +41,12 @@ midPoint (x1,y1) (x2,y2) = (x1 + (x2-x1)/2, y1 + (y2-y1)/2)
 -- | given an angle, distance and a initial point, calculates a new point.
 pointAt :: Double -> Double -> (Double,Double) -> (Double,Double)
 pointAt ang dist (x,y) = (x + dist*cos(ang), y + dist*sin(ang))
+
+toPolarFrom :: (Double,Double) -> (Double,Double) -> (Double,Double)
+toPolarFrom  (xRef,yRef) (x,y) =
+  let ang  = angle (xRef,yRef) (x,y)
+      dist = pointDistance  (xRef,yRef) (x,y)
+  in (ang,dist)
 
 -- | check if a point is inside a rectangle
 -- considers the rectangle position as it's center

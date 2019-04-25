@@ -151,7 +151,7 @@ startGUI = do
               sNode = case selectNodeInPosition gi (x',y') of
                 Nothing -> []
                 Just nid -> [nid]
-              sEdge = case selectEdgeInPosition gi (x',y') of
+              sEdge = case selectEdgeInPosition graph gi (x',y') of
                   Nothing -> []
                   Just eid -> [eid]
           -- add/remove elements of selection
@@ -272,7 +272,7 @@ startGUI = do
                 newEs = editorSetSelected (sNodes, sEdges) $ es
             writeIORef st newEs
             updatePropMenu st currentC currentLC propWidgets propBoxes
-          ((n,e), Nothing) -> modifyIORef st (adjustEdges)
+          ((n,e), Nothing) -> return () --modifyIORef st (adjustEdges)
           _ -> return ()
       _ -> return ()
     liftIO $ do

@@ -104,7 +104,9 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
       (pw, ph) = dims nodeSrc
       (x2, y2) = position nodeDst
       (pw2, ph2) = dims nodeDst
-      (xe, ye) = cPosition edge
+      (ae,de) = cPosition edge
+      ang = angle (x1,y1) (x2,y2)
+      (xe, ye) = pointAt (ae+ang) de (midPoint (x1,y1) (x2,y2))
       (x1', y1') = case shape nodeSrc of
         NCircle ->
           let d1 = pointDistance (x1,y1) (xe,ye)
@@ -207,15 +209,13 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
 
 renderLoop:: EdgeGI -> String -> Bool -> NodeGI -> Render ()
 renderLoop edge content selected node = do
-  let (xe, ye) = cPosition edge
+  let (a, d) = cPosition edge
       (x,y) = position node
-      a = angle (x,y) (xe, ye)
-      d = pointDistance (x,y) (xe,ye)
-      (f,g) = pointAt a d (x,y)
+      (xe, ye) = pointAt a d (x,y)
       p1 = pointAt (a+pi/8) (d/8) (x,y)
-      p2 = pointAt (a+pi/2) (d/1.5) (f,g)
+      p2 = pointAt (a+pi/2) (d/1.5) (xe,ye)
       p1' = pointAt (a-pi/8) (d/8) (x,y)
-      p2' = pointAt (a-pi/2) (d/1.5) (f,g)
+      p2' = pointAt (a-pi/2) (d/1.5) (xe,ye)
       (rl,gl,bl) = color edge
 
   if selected
@@ -246,7 +246,7 @@ renderLoop edge content selected node = do
       drawSlashedCurve (x,y) p1 p2 (xe,ye)
       drawSlashedCurve (x,y) p1' p2' (xe,ye)
   -- draws a circle to show the edge's control point
-  arc f g 2 0 (2*pi)
+  arc xe ye 2 0 (2*pi)
   fill
 
   -- draw Label

@@ -91,12 +91,27 @@ selectNodeInPosition (nodesG,_) (x,y) =
                               NSquare -> pointInsideRectangle (x,y) (nx,ny,l,l) )
 
 -- check if a given point is close of an edge control point
-selectEdgeInPosition:: GraphicalInfo -> (Double,Double) -> Maybe EdgeId
-selectEdgeInPosition (_,edgesG) (x,y) =
-  case find (\e -> isSelected (snd e)) $ (M.toList edgesG) of
+selectEdgeInPosition:: Graph String String -> GraphicalInfo -> (Double,Double) -> Maybe EdgeId
+selectEdgeInPosition g (nodesGi,edgesGi) (x,y) =
+  case find (\e -> isSelected e) $ edges g of
     Nothing -> Nothing
-    Just (k,a) -> Just $ EdgeId k
-  where isSelected = (\e -> pointDistance (x,y) (cPosition e) < 5)
+    Just e -> Just $ edgeId e
+  where
+    isSelected = (\e -> pointDistance (x,y) (edgePos e) < 5)
+    edgePos e =
+      let
+        eid = edgeId e
+        srcPos = position . getNodeGI (fromEnum $ sourceId e) $ nodesGi
+        dstPos = position . getNodeGI (fromEnum $ targetId e) $ nodesGi
+        gi = getEdgeGI (fromEnum $ eid) edgesGi
+        (ae, de) = cPosition gi
+      in if sourceId e /= targetId e
+        then
+          let pmid = midPoint srcPos dstPos
+              (ang, dist) = toPolarFrom srcPos dstPos
+          in pointAt (ae+ang) de pmid
+        else pointAt ae de srcPos
+
 
 -- create/delete operations ----------------------------------------------------
 -- create a new node with it's default Info and GraphicalInfo
@@ -120,8 +135,8 @@ createEdges es dstNode estyle ecolor = editorSetGraph newGraph . editorSetGI (ng
         create = (\(g,giM,eids) nid -> let
                                     eid = head $ newEdges g
                                     ng = insertEdgeWithPayload eid nid dstNode "" g
-                                    (newPos,center) = if (dstNode == nid) then (newLoopPos nid (g,(ngiM,egiM)),False) else newEdgePos nid dstNode (g,(ngiM,egiM))
-                                    negi = EdgeGI {cPosition = newPos, color = ecolor, centered = center, style = estyle}
+                                    newPos = if (dstNode == nid) then newLoopPos nid (g,(ngiM,egiM)) else newEdgePos nid dstNode (g,(ngiM,egiM))
+                                    negi = EdgeGI {cPosition = newPos, color = ecolor, centered = False, style = estyle}
                                   in (ng, M.insert (fromEnum eid) negi giM, eid:eids))
 
 -- delete the selection
@@ -148,39 +163,28 @@ edgesFromTo (n, context) (n', _) = foldl edgesTo [] econtexts
 
 
 -- calculate a position for the new edge
-newEdgePos :: NodeId -> NodeId -> (Graph a b, GraphicalInfo) -> ((Double,Double),Bool)
-newEdgePos nid nid' (g, giM)= (pos,isMid)
-  where getPos = \n -> position . getNodeGI (fromEnum n) $ fst giM
-        (srcPos,dstPos) = applyPair getPos (nid,nid')
-        mContextSrc = lookupNodeInContext nid g
-        mContextTgt = lookupNodeInContext nid' g
-        k = case (mContextSrc,mContextTgt) of
-          (Just csrc, Just ctgt) -> let thisLength = genericLength (edgesFromTo csrc ctgt)
-                                        otherLength = length (edgesFromTo ctgt csrc)
-                                    in thisLength + if otherLength > 0 then 1 else 0
-          _ -> 0
-        mid = midPoint srcPos dstPos
-        (pos,isMid) = if k == 0
-          then (mid,True)
-          else let a = angle srcPos dstPos
-               in (pointAt (a + pi/2) (30*k) mid, False)
+newEdgePos :: NodeId -> NodeId -> (Graph a b, GraphicalInfo) -> (Double,Double)
+newEdgePos nid nid' (g, giM)= (-pi/2,30*k)
+  where
+    mContextSrc = lookupNodeInContext nid g
+    mContextTgt = lookupNodeInContext nid' g
+    k = case (mContextSrc,mContextTgt) of
+      (Just csrc, Just ctgt) -> let thisLength = genericLength (edgesFromTo csrc ctgt)
+                                    otherLength = length (edgesFromTo ctgt csrc)
+                                in thisLength + if otherLength > 0 then 1 else 0
+      _ -> 0
+
 
 -- calculate a position fot the new loop
 newLoopPos :: NodeId -> (Graph a b, GraphicalInfo) -> (Double,Double)
-newLoopPos nid (g, giM)= pos
- where getPos = \n -> position . getNodeGI (fromEnum n) $ fst giM
-       nodePos =  getPos nid
-       mContext = lookupNodeInContext nid g
-       k = case mContext of
-         Just c -> genericLength $ edgesFromTo c c
-         _ -> 0
-       mid = addPoint nodePos (0,-50)
-       pos = if k == 0
-         then mid
-         else addPoint mid (0, (-20) * k)
+newLoopPos nid (g, giM)= (-pi/2,50+30*k)
+ where
+   k = case lookupNodeInContext nid g of
+     Just c -> genericLength $ edgesFromTo c c
+     _ -> 0
 
 moveNodes:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
-moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
+moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,egiM)  es
   where
       (sNodes, sEdges) = editorGetSelected es
       graph = editorGetGraph es
@@ -191,41 +195,34 @@ moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
                                          (ox, oy) = position gi
                                      in M.insert nid (nodeGiSetPosition (addPoint (position gi) (deltaX,deltaY)) gi) giMap
       movedNGIs = foldl moveN ngiM sNodes
-      -- move the edges that are between the moved nodes
-      moveE = \giMap edge -> let
-                                a = sourceId edge
-                                b = targetId edge
-                                getPos = \(NodeId nid) -> position . getNodeGI nid $ movedNGIs
-                                aPos = getPos a
-                                bPos = getPos b
-                                eid = fromEnum $ edgeId edge
-                                gi = getEdgeGI eid egiM
-                                (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
-                                getOldPos = \(NodeId nid) -> position . getNodeGI nid $ ngiM
-                                oldAPos = getOldPos a
-                                oldBPos = getOldPos b
-                                oldMid = (midPoint oldAPos oldBPos)
-                                diff = (fst (cPosition gi) - fst oldMid, snd (cPosition gi) - snd oldMid)
-                             in case (edgeId edge `elem` sEdges, a == b, any (`elem` sNodes) [a,b]) of
-                                (False, True, True) -> M.insert eid (edgeGiSetPosition (xd,yd) gi) giMap
-                                (False, False, True) -> M.insert eid (edgeGiSetPosition (addPoint (midPoint aPos bPos) diff) gi) giMap
-                                _ -> giMap
-      movedEGIs = foldl moveE egiM (edges graph)
 
 moveEdges:: EditorState -> (Double,Double) -> (Double,Double) -> EditorState
 moveEdges es (xold,yold) (xnew,ynew) = editorSetGI (ngi,newegi) es
   where graph = editorGetGraph es
         (sNodes,sEdges) = editorGetSelected es
-        (deltaX, deltaY) = (xnew-xold,ynew-yold)
+        delta = (xnew-xold,ynew-yold)
         (ngi,egi) = editorGetGI es
         moveE = (\egiM eid -> case lookupEdge eid graph of
-          Just edge -> let  gi = getEdgeGI (fromEnum $ eid) egi
-                            (xe, ye) = cPosition gi
-                            newPos = (xe+deltaX, ye+deltaY)
-                            srcPos = position . getNodeGI (fromEnum $ sourceId edge) $ ngi
-                            dstPos = position . getNodeGI (fromEnum $ targetId edge) $ ngi
-                            mustCenter = pointLineDistance newPos srcPos dstPos < 10
-                       in M.insert (fromEnum eid) (edgeGiSetCentered mustCenter . edgeGiSetPosition newPos $ gi) egiM
+          Just edge -> if sourceId edge /= targetId edge
+            then
+              let srcPos = position . getNodeGI (fromEnum $ sourceId edge) $ ngi
+                  dstPos = position . getNodeGI (fromEnum $ targetId edge) $ ngi
+                  pmid = midPoint srcPos dstPos
+                  (ang, dist) = toPolarFrom srcPos dstPos
+                  gi = getEdgeGI (fromEnum $ eid) egi
+                  (ae, de) = cPosition gi
+                  edgePos = pointAt (ae+ang) de pmid
+                  edgePos' = addPoint delta edgePos
+                  a' = angle pmid edgePos' - ang
+                  d' = pointDistance pmid edgePos'
+              in M.insert (fromEnum eid) (edgeGiSetPosition (a',d') $ gi) egiM
+            else
+              let nodePos = position . getNodeGI (fromEnum $ sourceId edge) $ ngi
+                  gi = getEdgeGI (fromEnum $ eid) egi
+                  (ae, de) = cPosition gi
+                  edgePos = addPoint delta $ pointAt ae de nodePos
+                  (a,d) = toPolarFrom nodePos edgePos
+              in M.insert (fromEnum eid) (edgeGiSetPosition (a,d) gi) egiM
           Nothing -> egiM)
         newegi = foldl moveE egi sEdges
 
