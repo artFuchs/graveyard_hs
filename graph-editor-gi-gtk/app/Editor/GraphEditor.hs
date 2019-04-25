@@ -1055,7 +1055,7 @@ saveGraph (g,gi) path = do
 --
 --
 -- load function ---------------------------------------------------------------
-loadFile :: Gtk.Window -> (String -> a) -> IO (Maybe (a,String))
+loadFile :: Gtk.Window -> (String -> Maybe a) -> IO (Maybe (a,String))
 loadFile window loadF = do
   loadD <- createLoadDialog
   response <- Gtk.dialogRun loadD
@@ -1072,17 +1072,22 @@ loadFile window loadF = do
             Left _ -> do
               showError "Couldn't open the file"
               return Nothing
-            Right content -> return $ Just (loadF content,path)
+            Right content -> case loadF content of
+              Nothing -> do
+                showError "Couldn't read the file"
+                return Nothing
+              Just x -> return $ Just (x, path)
     _             -> do
       Gtk.widgetDestroy loadD
       return Nothing
 
 -- auxiliar load functions -----------------------------------------------------
 -- load project
-loadProject :: String -> [(String, EditorState)]
+type NList = [(Int,String)]
+type EList = [(Int,Int,Int,String)]
+loadProject :: String -> Maybe [(String, EditorState)]
 loadProject content = editorList
   where
-    contentList = read content :: [(String, [(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)]
     genNodes = map (\(nid, info) -> Node (NodeId nid) info)
     genEdges = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info)
     genProj = map (\(name,readNodes,readEdges,gi) ->
@@ -1090,16 +1095,20 @@ loadProject content = editorList
                           eds = genEdges readEdges
                           g = fromNodesAndEdges nds eds
                       in (name, editorSetGI gi . editorSetGraph g $ emptyES) )
-    editorList = genProj contentList
-
+    editorList = case reads content :: [([(String, NList, EList, GraphicalInfo)], String)] of
+      [(contentList,"")] -> Just $ genProj contentList
+      _ -> Nothing
 -- -- load graph
-loadGraph :: String -> (Graph String String,GraphicalInfo)
-loadGraph contents = (g,gi)
+loadGraph :: String -> Maybe (Graph String String,GraphicalInfo)
+loadGraph contents = result
   where
-    (rns,res,gi) = read contents :: ([(Int, String)], [(Int,Int,Int,String)], GraphicalInfo)
-    ns = map (\(nid, info) -> Node (NodeId nid) info) rns
-    es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
-    g = fromNodesAndEdges ns es
+    result = case reads contents :: [( (NList, EList, GraphicalInfo), String)] of
+      [((rns,res,gi), "")] -> let ns = map (\(nid, info) -> Node (NodeId nid) info) rns
+                                  es = map (\(eid, src, dst, info) -> Edge (EdgeId eid) (NodeId src) (NodeId dst) info) res
+                                  g = fromNodesAndEdges ns es
+                              in Just (g,gi)
+      _ -> Nothing
+
 
 -- graph interaction
 -- create a new node, auto-generating it's name and dimensions
