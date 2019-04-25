@@ -200,7 +200,7 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
       let a = angle (x1,y1) (x2,y2)
           (x0,y0) = multPoint (quadrant a) (pw/2,ph/2)
           minD = (abs $ tan(a)*x0 + y0) / sqrt(tan(a)*tan(a) + 1)
-          labelPos = pointAt (a - pi/2) (minD+8) (xe, ye)
+          labelPos = pointAt (a + pi/2) (minD+8) (xe, ye)
       setSourceRGB r g b
       moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
       showLayout pL

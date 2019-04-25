@@ -163,7 +163,7 @@ newEdgePos nid nid' (g, giM)= (pos,isMid)
         (pos,isMid) = if k == 0
           then (mid,True)
           else let a = angle srcPos dstPos
-               in (pointAt (a + pi/2) (20*k) mid, False)
+               in (pointAt (a + pi/2) (30*k) mid, False)
 
 -- calculate a position fot the new loop
 newLoopPos :: NodeId -> (Graph a b, GraphicalInfo) -> (Double,Double)
@@ -186,12 +186,12 @@ moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
       graph = editorGetGraph es
       (ngiM,egiM) = editorGetGI es
       (deltaX, deltaY) = (xnew-xold, ynew-yold)
-      -- move os nodos
+      -- move the nodes
       moveN = \giMap (NodeId nid) -> let gi = getNodeGI nid giMap
                                          (ox, oy) = position gi
-                                     in M.insert nid (nodeGiSetPosition (ox+deltaX,oy+deltaY) gi) giMap
+                                     in M.insert nid (nodeGiSetPosition (addPoint (position gi) (deltaX,deltaY)) gi) giMap
       movedNGIs = foldl moveN ngiM sNodes
-      -- move as arestas que estão entre os nodos movidos
+      -- move the edges that are between the moved nodes
       moveE = \giMap edge -> let
                                 a = sourceId edge
                                 b = targetId edge
@@ -201,9 +201,14 @@ moveNodes es (xold,yold) (xnew,ynew) = editorSetGI (movedNGIs,movedEGIs)  es
                                 eid = fromEnum $ edgeId edge
                                 gi = getEdgeGI eid egiM
                                 (xd,yd) = addPoint (cPosition gi) (deltaX,deltaY)
-                             in case (edgeId edge `elem` sEdges, a == b, any (`elem` sNodes) [a,b], centered gi) of
-                                (False, True, True, _) -> M.insert eid (edgeGiSetPosition (xd,yd) gi) giMap
-                                (False, False, True, True) -> M.insert eid (edgeGiSetPosition (midPoint aPos bPos) gi) giMap
+                                getOldPos = \(NodeId nid) -> position . getNodeGI nid $ ngiM
+                                oldAPos = getOldPos a
+                                oldBPos = getOldPos b
+                                oldMid = (midPoint oldAPos oldBPos)
+                                diff = (fst (cPosition gi) - fst oldMid, snd (cPosition gi) - snd oldMid)
+                             in case (edgeId edge `elem` sEdges, a == b, any (`elem` sNodes) [a,b]) of
+                                (False, True, True) -> M.insert eid (edgeGiSetPosition (xd,yd) gi) giMap
+                                (False, False, True) -> M.insert eid (edgeGiSetPosition (addPoint (midPoint aPos bPos) diff) gi) giMap
                                 _ -> giMap
       movedEGIs = foldl moveE egiM (edges graph)
 
