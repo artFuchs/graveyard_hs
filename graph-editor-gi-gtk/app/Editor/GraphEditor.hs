@@ -151,7 +151,7 @@ startGUI = do
               sNode = case selectNodeInPosition gi (x',y') of
                 Nothing -> []
                 Just nid -> [nid]
-              sEdge = case selectEdgeInPosition gi (x',y') of
+              sEdge = case selectEdgeInPosition graph gi (x',y') of
                   Nothing -> []
                   Just eid -> [eid]
           -- add/remove elements of selection
@@ -266,13 +266,12 @@ startGUI = do
                 sNodes = map NodeId $ M.keys $
                                       M.filter (\ngi -> let pos = position ngi
                                                         in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) ngiM
-                sEdges = map EdgeId $ M.keys $
-                                      M.filter (\egi -> let pos = cPosition egi
-                                                        in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) egiM
+                sEdges = map edgeId $ filter (\e -> let pos = getEdgePosition graph (ngiM,egiM) e
+                                                    in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ edges graph
                 newEs = editorSetSelected (sNodes, sEdges) $ es
             writeIORef st newEs
             updatePropMenu st currentC currentLC propWidgets propBoxes
-          ((n,e), Nothing) -> modifyIORef st (adjustEdges)
+          ((n,e), Nothing) -> return ()
           _ -> return ()
       _ -> return ()
     liftIO $ do

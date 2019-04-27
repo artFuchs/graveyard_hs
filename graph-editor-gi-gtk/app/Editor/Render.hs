@@ -104,7 +104,9 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
       (pw, ph) = dims nodeSrc
       (x2, y2) = position nodeDst
       (pw2, ph2) = dims nodeDst
-      (xe, ye) = cPosition edge
+      (ae,de) = cPosition edge
+      ang = angle (x1,y1) (x2,y2)
+      (xe, ye) = pointAt (ae+ang) de (midPoint (x1,y1) (x2,y2))
       (x1', y1') = case shape nodeSrc of
         NCircle ->
           let d1 = pointDistance (x1,y1) (xe,ye)
@@ -123,9 +125,10 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
         NSquare -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
 
   let (r,g,b) = color edge
+      centered = (xe,ye) == midPoint (x1,y1) (x2,y2)
 
   -- draw a bold line/curve to highlight the edge if it is selected
-  case (selected, centered edge) of
+  case (selected, centered) of
     (False, _) -> return ()
     (True, True) -> do
       setLineWidth 6
@@ -148,7 +151,7 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
   -- draw the edge
   setLineWidth 2
   setSourceRGB r g b
-  if centered edge
+  if centered
     then do
       case style edge of
         ENormal -> do
@@ -200,22 +203,20 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
       let a = angle (x1,y1) (x2,y2)
           (x0,y0) = multPoint (quadrant a) (pw/2,ph/2)
           minD = (abs $ tan(a)*x0 + y0) / sqrt(tan(a)*tan(a) + 1)
-          labelPos = pointAt (a + pi/2) (minD+8) (xe, ye)
+          labelPos = pointAt (a - pi/2) (minD+8) (xe, ye)
       setSourceRGB r g b
       moveTo (fst labelPos - pw/2) (snd labelPos - ph/2)
       showLayout pL
 
 renderLoop:: EdgeGI -> String -> Bool -> NodeGI -> Render ()
 renderLoop edge content selected node = do
-  let (xe, ye) = cPosition edge
+  let (a, d) = cPosition edge
       (x,y) = position node
-      a = angle (x,y) (xe, ye)
-      d = pointDistance (x,y) (xe,ye)
-      (f,g) = pointAt a d (x,y)
+      (xe, ye) = pointAt a d (x,y)
       p1 = pointAt (a+pi/8) (d/8) (x,y)
-      p2 = pointAt (a+pi/2) (d/1.5) (f,g)
+      p2 = pointAt (a+pi/2) (d/1.5) (xe,ye)
       p1' = pointAt (a-pi/8) (d/8) (x,y)
-      p2' = pointAt (a-pi/2) (d/1.5) (f,g)
+      p2' = pointAt (a-pi/2) (d/1.5) (xe,ye)
       (rl,gl,bl) = color edge
 
   if selected
@@ -246,7 +247,7 @@ renderLoop edge content selected node = do
       drawSlashedCurve (x,y) p1 p2 (xe,ye)
       drawSlashedCurve (x,y) p1' p2' (xe,ye)
   -- draws a circle to show the edge's control point
-  arc f g 2 0 (2*pi)
+  arc xe ye 2 0 (2*pi)
   fill
 
   -- draw Label
