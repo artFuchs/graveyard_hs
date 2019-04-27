@@ -17,6 +17,7 @@ module Editor.EditorState
 , editorSetPan
 , selectNodeInPosition
 , selectEdgeInPosition
+, getEdgePosition
 , createNode
 , createEdges
 , deleteSelected
@@ -90,28 +91,33 @@ selectNodeInPosition (nodesG,_) (x,y) =
                               NRect -> pointInsideRectangle (x,y) (nx,ny,w,h)
                               NSquare -> pointInsideRectangle (x,y) (nx,ny,l,l) )
 
+
 -- check if a given point is close of an edge control point
 selectEdgeInPosition:: Graph String String -> GraphicalInfo -> (Double,Double) -> Maybe EdgeId
-selectEdgeInPosition g (nodesGi,edgesGi) (x,y) =
+selectEdgeInPosition g gi (x,y) =
   case find (\e -> isSelected e) $ edges g of
     Nothing -> Nothing
     Just e -> Just $ edgeId e
   where
     isSelected = (\e -> pointDistance (x,y) (edgePos e) < 5)
-    edgePos e =
-      let
-        eid = edgeId e
-        srcPos = position . getNodeGI (fromEnum $ sourceId e) $ nodesGi
-        dstPos = position . getNodeGI (fromEnum $ targetId e) $ nodesGi
-        gi = getEdgeGI (fromEnum $ eid) edgesGi
-        (ae, de) = cPosition gi
-      in if sourceId e /= targetId e
-        then
-          let pmid = midPoint srcPos dstPos
-              (ang, dist) = toPolarFrom srcPos dstPos
-          in pointAt (ae+ang) de pmid
-        else pointAt ae de srcPos
+    edgePos e = getEdgePosition g gi e
 
+-- get edge position in cartesian coordinate system
+getEdgePosition:: Graph String String -> GraphicalInfo -> Edge String -> (Double,Double)
+getEdgePosition g (nodesGi, edgesGi) e = pos
+  where
+    eid = edgeId e
+    gi = getEdgeGI (fromEnum $ eid) edgesGi
+    srcPos = position . getNodeGI (fromEnum $ sourceId e) $ nodesGi
+    dstPos = position . getNodeGI (fromEnum $ targetId e) $ nodesGi
+    (ae, de) = cPosition gi
+    pos = if sourceId e /= targetId e
+      then
+        let pmid = midPoint srcPos dstPos
+            (ang, dist) = toPolarFrom srcPos dstPos
+        in pointAt (ae+ang) de pmid
+      else
+        pointAt ae de srcPos
 
 -- create/delete operations ----------------------------------------------------
 -- create a new node with it's default Info and GraphicalInfo
