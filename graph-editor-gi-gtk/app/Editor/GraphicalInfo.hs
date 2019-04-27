@@ -18,7 +18,6 @@ module Editor.GraphicalInfo
 , nodeGiSetShape
 , edgeGiSetPosition
 , edgeGiSetColor
-, edgeGiSetCentered
 , edgeGiSetStyle
 )where
 
@@ -60,11 +59,9 @@ data EdgeStyle = ENormal | EPointed | ESlashed deriving (Eq ,Show, Read)
 -- contains:
 -- cPosition - position of the control points.
 -- color - line and label color.
--- centered - if the control point of the edge must be kept on the center of two nodes or not.
 -- style - specifies how the edge is rendered: if as a solid line, as a slashed line or as a pointed line.
 data EdgeGI = EdgeGI { cPosition :: GIPos
                      , color :: GIColor
-                     , centered :: Bool
                      , style :: EdgeStyle
                      } deriving (Eq, Show, Read)
 -- contrutores
@@ -79,7 +76,6 @@ newNodeGI = NodeGI  { position = (0,0)
 newEdgeGI :: EdgeGI
 newEdgeGI = EdgeGI { cPosition = (0,0)
                    , color = (0,0,0)
-                   , centered = True
                    , style = ENormal
                    }
 
@@ -128,27 +124,17 @@ nodeGiSetShape s gi = NodeGI { position = position gi
 edgeGiSetPosition :: (Double,Double) -> EdgeGI -> EdgeGI
 edgeGiSetPosition pos gi = EdgeGI { cPosition = pos
                                   , color = color gi
-                                  , centered = centered gi
                                   , style = style gi
                                   }
 
 edgeGiSetColor :: (Double,Double,Double) -> EdgeGI -> EdgeGI
 edgeGiSetColor col gi = EdgeGI { cPosition = cPosition gi
                                   , color = col
-                                  , centered = centered gi
                                   , style = style gi
                                   }
-
-edgeGiSetCentered :: Bool -> EdgeGI -> EdgeGI
-edgeGiSetCentered c gi = EdgeGI { cPosition = cPosition gi
-                                , color = color gi
-                                , centered = c
-                                , style = style gi
-                                }
 
 edgeGiSetStyle :: EdgeStyle -> EdgeGI -> EdgeGI
 edgeGiSetStyle s gi = EdgeGI { cPosition = cPosition gi
                              , color = color gi
-                             , centered = centered gi
                              , style = s
                              }

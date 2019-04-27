@@ -271,7 +271,7 @@ startGUI = do
                 newEs = editorSetSelected (sNodes, sEdges) $ es
             writeIORef st newEs
             updatePropMenu st currentC currentLC propWidgets propBoxes
-          ((n,e), Nothing) -> return () --modifyIORef st (adjustEdges)
+          ((n,e), Nothing) -> return ()
           _ -> return ()
       _ -> return ()
     liftIO $ do

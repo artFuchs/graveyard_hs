@@ -23,7 +23,6 @@ module Editor.EditorState
 , deleteSelected
 , moveNodes
 , moveEdges
-, adjustEdges
 , changeNodeShape
 , changeEdgeStyle
 ) where
@@ -142,7 +141,7 @@ createEdges es dstNode estyle ecolor = editorSetGraph newGraph . editorSetGI (ng
                                     eid = head $ newEdges g
                                     ng = insertEdgeWithPayload eid nid dstNode "" g
                                     newPos = if (dstNode == nid) then newLoopPos nid (g,(ngiM,egiM)) else newEdgePos nid dstNode (g,(ngiM,egiM))
-                                    negi = EdgeGI {cPosition = newPos, color = ecolor, centered = False, style = estyle}
+                                    negi = EdgeGI {cPosition = newPos, color = ecolor, style = estyle}
                                   in (ng, M.insert (fromEnum eid) negi giM, eid:eids))
 
 -- delete the selection
@@ -231,22 +230,6 @@ moveEdges es (xold,yold) (xnew,ynew) = editorSetGI (ngi,newegi) es
               in M.insert (fromEnum eid) (edgeGiSetPosition (a,d) gi) egiM
           Nothing -> egiM)
         newegi = foldl moveE egi sEdges
-
--- adjust the selected edges positions if the propriety centered is True
-adjustEdges:: EditorState -> EditorState
-adjustEdges es = editorSetGI (ngiM,newEgiM) es
-  where graph = editorGetGraph es
-        (ngiM,egiM) = editorGetGI es
-        adjust = (\giM eid -> case lookupEdge eid graph of
-          Nothing -> giM
-          Just edge -> let
-                          srcPos = position $ getNodeGI (fromEnum $ sourceId edge) ngiM
-                          dstPos = position $ getNodeGI (fromEnum $ targetId edge) ngiM
-                          gi = getEdgeGI (fromEnum eid) egiM
-                        in if centered gi
-                          then M.insert (fromEnum eid) (edgeGiSetPosition (midPoint srcPos dstPos) gi) giM
-                          else giM)
-        newEgiM = foldl adjust egiM (snd . editorGetSelected $ es)
 
 -- change the selected nodes shape
 changeNodeShape :: EditorState -> NodeShape -> EditorState

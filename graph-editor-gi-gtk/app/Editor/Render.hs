@@ -125,9 +125,10 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
         NSquare -> let l = max pw2 ph2 in intersectLineRect (xe,ye) (x2,y2,l+3,l+3)
 
   let (r,g,b) = color edge
+      centered = (xe,ye) == midPoint (x1,y1) (x2,y2)
 
   -- draw a bold line/curve to highlight the edge if it is selected
-  case (selected, centered edge) of
+  case (selected, centered) of
     (False, _) -> return ()
     (True, True) -> do
       setLineWidth 6
@@ -150,7 +151,7 @@ renderNormalEdge edge content selected nodeSrc nodeDst = do
   -- draw the edge
   setLineWidth 2
   setSourceRGB r g b
-  if centered edge
+  if centered
     then do
       case style edge of
         ENormal -> do
