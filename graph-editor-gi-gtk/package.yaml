@@ -41,10 +41,12 @@ executables:
     - cairo
     - pango
     - gi-cairo
+    - gi-pango
     - haskell-gi-base
     - transformers
     - prettyprinter
     - parallel
+    - containers
 
 tests:
   graph-editor-gi-gtk-test:
