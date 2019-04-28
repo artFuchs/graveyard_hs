@@ -36,13 +36,13 @@ import Editor.EditorState
 --------------------------------------------------------------------------------
 -- |GraphStore
 -- A tuple representing what is showed in each node of the tree in the treeview
--- It contains the informations: name, color, and a integer that is the identifier of the graph
-type GraphStore = (String, String, Int32)
+-- It contains the informations: name, graph changed (0 - no, 1 - yes, 2 - is new), and a integer that is the identifier of the graph
+type GraphStore = (String, Int32, Int32)
 
 storeSetGraphStore :: Gtk.ListStore -> Gtk.TreeIter -> GraphStore -> IO ()
 storeSetGraphStore store iter (n,c,i) = do
   gv0 <- toGValue (Just n)
-  gv1 <- toGValue (Just c)
+  gv1 <- toGValue c
   gv2 <- toGValue i
   #set store iter [0,1,2] [gv0,gv1,gv2]
 
@@ -65,7 +65,7 @@ startGUI = do
 
   -- main window ---------------------------------------------------------------
   -- creates the menu bar
-  (menubar,(new,opn,svn,sva,svg,opg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
+  (menubar,(newm,opn,svn,sva,svg,opg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
   -- creates the inspector panel
   (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeInspector
   let
@@ -80,17 +80,34 @@ startGUI = do
   #showAll window
 
   -- init an model to display in the tree panel --------------------------------
-  store <- Gtk.listStoreNew [gtypeString, gtypeString, gtypeInt]
+  store <- Gtk.listStoreNew [gtypeString, gtypeInt, gtypeInt]
   fstIter <- Gtk.listStoreAppend store
-  storeSetGraphStore store fstIter ("new", "white", 0)
+  Gtk.treeViewSetModel treeview (Just store)
+  storeSetGraphStore store fstIter ("new", 0, 0)
 
   projectCol <- Gtk.treeViewGetColumn treeview 0
+
   case projectCol of
     Nothing -> return ()
     Just col -> do
-      Gtk.treeViewSetModel treeview (Just store)
       #addAttribute col treeRenderer "text" 0
-      #addAttribute col treeRenderer "background" 1
+      Gtk.treeViewColumnSetCellDataFunc col treeRenderer $ Just (\column renderer model iter -> do
+        changed <- Gtk.treeModelGetValue model iter 1 >>= \gv -> (fromGValue gv :: IO Int32)
+        renderer' <- castTo Gtk.CellRendererText renderer
+        case (renderer', changed) of
+          (Just r,1) -> do
+            color <- new Gdk.RGBA [#red:=1, #green:=0.5, #blue:=0.1, #alpha:=1]
+            set r [ #cellBackgroundRgba := color, #foreground := "black"]
+          (Just r,2) -> do
+            color <- new Gdk.RGBA [#red:=0, #green:=1, #blue:=0, #alpha:=1]
+            set r [ #cellBackgroundRgba := color, #foreground := "black" ]
+          (Just r,_) -> do
+            color <- new Gdk.RGBA [#alpha:=0]
+            set r [ #cellBackgroundRgba := color ]
+            Gtk.clearCellRendererTextForeground r
+          (Nothing,_) -> return ()
+        )
+
 
   ------------------------------------------------------------------------------
   -- init the editor variables  ------------------------------------------------
@@ -342,7 +359,7 @@ startGUI = do
       -- CTRL + W : remove a graph from the treeView
       (True, False, 'w') -> Gtk.buttonClicked btnRmv
       -- CTRL + SHIFT + N : create a new file
-      (True, True, 'n') -> Gtk.menuItemActivate new
+      (True, True, 'n') -> Gtk.menuItemActivate newm
       -- CTRL + SHIFT + S : save file as
       (True, True, 's') -> Gtk.menuItemActivate sva
       -- CTRL + S : save file
@@ -371,10 +388,9 @@ startGUI = do
                       states <- readIORef graphStates
                       writeIORef changedGraph (take (length states) (repeat False))
                       writeIORef lastSavedState (M.map (\(es,_,_) -> (editorGetGraph es, editorGetGI es)) states)
-                      -- forM [0..(size-1)] $ \i -> let (n,e,u,r,_) = list!!i in listStoreSetValue store i (n,e,u,r,"white")
-                      gvColor <- toGValue (Just "white" :: Maybe String)
+                      gvChanged <- toGValue (0::Int32)
                       Gtk.treeModelForeach store $ \model path iter -> do
-                        Gtk.listStoreSetValue store iter 1 gvColor
+                        Gtk.listStoreSetValue store iter 1 gvChanged
                         return False
                       indicateProjChanged window False
                       updateSavedState lastSavedState graphStates
@@ -424,14 +440,14 @@ startGUI = do
                                   saveFile structs saveProject fileName window True -- returns True if saved the file
 
   -- new project action activated
-  on new #activate $ do
+  on newm #activate $ do
     continue <- confirmOperation
     if continue
       then do
         writeIORef fileName Nothing
         Gtk.listStoreClear store
         iter <- Gtk.listStoreAppend store
-        storeSetGraphStore store iter ("new", "white", 0)
+        storeSetGraphStore store iter ("new", 0, 0)
         writeIORef st emptyES
         writeIORef undoStack []
         writeIORef redoStack []
@@ -455,7 +471,7 @@ startGUI = do
             if length list > 0
               then do
                 Gtk.listStoreClear store
-                let nameList = map (\(n,i) -> (n,"white",i)) $ zip (map fst list) [0..]
+                let nameList = map (\(n,i) -> (n,0,i)) $ zip (map fst list) [0..]
                     statesList = map (\(es,i) -> (i, (es,[],[]))) $ zip (map snd list) [0..]
                 forM nameList $ \element -> do
                   iter <- Gtk.listStoreAppend store
@@ -505,7 +521,7 @@ startGUI = do
         modifyIORef graphStates $ M.insert newKey (editorSetGI gi . editorSetGraph g $ emptyES, [],[])
         -- update the treeview
         iter <- Gtk.listStoreAppend store
-        storeSetGraphStore store iter (getName . getLastPart $ path, "green", newKey)
+        storeSetGraphStore store iter (getName . getLastPart $ path, 2, newKey)
         path <- Gtk.treeModelGetPath store iter
         Gtk.treeViewSetCursor treeview path (Nothing :: Maybe Gtk.TreeViewColumn) False
         modifyIORef changedGraph (\xs -> xs ++ [True])
@@ -828,7 +844,7 @@ startGUI = do
     states <- readIORef graphStates
     let newKey = maximum (M.keys states) + 1
     iter <- Gtk.listStoreAppend store
-    storeSetGraphStore store iter ("new","green", newKey)
+    storeSetGraphStore store iter ("new",2, newKey)
     modifyIORef graphStates (M.insert newKey (emptyES,[],[]))
 
   -- pressed the 'remove' button on the treeview area
@@ -1233,12 +1249,12 @@ indicateProjChanged window False = do
 
 indicateGraphChanged :: Gtk.ListStore -> Gtk.TreeIter -> Bool -> IO ()
 indicateGraphChanged store iter True = do
-  gvcolor <- toGValue (Just "yellow" :: Maybe String)
-  Gtk.listStoreSetValue store iter 1 gvcolor
+  gvchanged <- toGValue (1::Int32)
+  Gtk.listStoreSetValue store iter 1 gvchanged
 
 indicateGraphChanged store iter False = do
-  gvcolor <- toGValue (Just "white" :: Maybe String)
-  Gtk.listStoreSetValue store iter 1 gvcolor
+  gvchanged <- toGValue (0::Int32)
+  Gtk.listStoreSetValue store iter 1 gvchanged
 
 -- change the flags that inform if the graphs and project were changed and inform the graphs
 setChangeFlags :: Gtk.Window -> Gtk.ListStore -> IORef Bool -> IORef [Bool] -> IORef Int32 -> Bool -> IO ()
