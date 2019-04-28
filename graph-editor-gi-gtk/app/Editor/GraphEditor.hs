@@ -428,7 +428,7 @@ startGUI = do
   -- returns False if the user wanted to save and the save operation failed or opted to cancel.
   let confirmOperation = do changed <- readIORef changedProject
                             response <- if changed
-                              then createConfirmDialog "The project was changed, want to save?"
+                              then createConfirmDialog window "The project was changed, want to save?"
                               else return Gtk.ResponseTypeNo
                             case response of
                               Gtk.ResponseTypeCancel -> return False
@@ -1004,14 +1004,14 @@ saveFile x saveF fileName window changeFN = do
       case tentativa of
         True -> return True
         False -> do
-          showError $ T.pack ("Couldn't write to file." ++ path)
+          showError window $ T.pack ("Couldn't write to file." ++ path)
           return False
     Nothing -> saveFileAs x saveF fileName window changeFN
 
 
 saveFileAs :: a -> (a -> String -> IO Bool) -> IORef (Maybe String) -> Gtk.Window -> Bool -> IO Bool
 saveFileAs x saveF fileName window changeFN = do
-  saveD <- createSaveDialog
+  saveD <- createSaveDialog window
   response <- Gtk.dialogRun saveD
   fn <- case toEnum . fromIntegral $  response of
     Gtk.ResponseTypeAccept -> do
@@ -1028,7 +1028,7 @@ saveFileAs x saveF fileName window changeFN = do
               return $ Just path
             False -> do
               Gtk.widgetDestroy saveD
-              showError $ T.pack ("Couldn't write to file." ++ path)
+              showError window $ T.pack ("Couldn't write to file." ++ path)
               return Nothing
     _  -> do
       Gtk.widgetDestroy saveD
@@ -1072,7 +1072,7 @@ saveGraph (g,gi) path = do
 -- load function ---------------------------------------------------------------
 loadFile :: Gtk.Window -> (String -> Maybe a) -> IO (Maybe (a,String))
 loadFile window loadF = do
-  loadD <- createLoadDialog
+  loadD <- createLoadDialog window
   response <- Gtk.dialogRun loadD
   case toEnum . fromIntegral $ response of
     Gtk.ResponseTypeAccept -> do
@@ -1085,11 +1085,11 @@ loadFile window loadF = do
           tentativa <- E.try (readFile path) :: IO (Either E.IOException String)
           case tentativa of
             Left _ -> do
-              showError "Couldn't open the file"
+              showError window "Couldn't open the file"
               return Nothing
             Right content -> case loadF content of
               Nothing -> do
-                showError "Couldn't read the file"
+                showError window "Couldn't read the file"
                 return Nothing
               Just x -> return $ Just (x, path)
     _             -> do
