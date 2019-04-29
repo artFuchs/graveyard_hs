@@ -247,7 +247,7 @@ startGUI = do
       -- if left button is pressed with some elements selected, then move them
       (True, False, n, e) -> liftIO $ do
         modifyIORef st (\es -> moveNodes es (ox,oy) (x',y'))
-        modifyIORef st (\es -> moveEdges es (ox,oy) (x',y'))
+        modifyIORef st (\es -> if (>0) . length . fst . editorGetSelected $ es then es else moveEdges es (ox,oy) (x',y'))
         writeIORef oldPoint (x',y')
         setChangeFlags window store changedProject changedGraph currentGraph True
         mv <- readIORef movingGI
@@ -1222,12 +1222,12 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
   where
     graph = editorGetGraph es
     (ngiM, egiM) = editorGetGI es
-    minX = minimum $ map (fst . position) (M.elems cNgiM)
-    minY = minimum $ map (snd . position) (M.elems cNgiM)
+    allPositions = concat (map position (M.elems cNgiM), map (getEdgePosition cGraph (cNgiM, cEgiM)) (edges cGraph))
+    minX = minimum $ map fst allPositions
+    minY = minimum $ map snd allPositions
     upd (a,b) = (20+a-minX, 20+b-minY)
     cNgiM' = M.map (\gi -> nodeGiSetPosition (upd $ position gi) gi) cNgiM
-    cEgiM' = M.map (\gi -> edgeGiSetPosition (upd $ cPosition gi) gi) cEgiM
-    (newGraph, (newngiM,newegiM)) = diagrDisjointUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM'))
+    (newGraph, (newngiM,newegiM)) = diagrDisjointUnion (graph,(ngiM,egiM)) (cGraph,(cNgiM', cEgiM))
 
 
 
