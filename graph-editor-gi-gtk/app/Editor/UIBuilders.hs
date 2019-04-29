@@ -3,7 +3,6 @@
 -- | This module contains the UI definition
 module Editor.UIBuilders
 ( buildMainWindow
-, buildMenubar
 , buildTypeInspector
 , buildHostInspector
 , buildRuleInspector
@@ -23,53 +22,23 @@ import Data.Maybe
 import Data.GI.Base
 import Control.Monad.IO.Class
 
--- builds the main window, containing the treepanel in the left,
--- the canvas in the center,
--- the inspector panel in the right
--- and the menubar in the top of the window
 buildMainWindow = do
-  -- main window
   return () :: IO ()
-  window <- new Gtk.Window [ #title         := "Graph Editor"
-                          , #defaultWidth  := 640
-                          , #defaultHeight := 480
-                          ]
+  builder <- new Gtk.Builder []
+  Gtk.builderAddFromFile builder "./Resources/window.ui"
+  window  <- Gtk.builderGetObject builder "window" >>= unsafeCastTo Gtk.Window . fromJust
+  mainBox <- Gtk.builderGetObject builder "mainBox" >>= unsafeCastTo Gtk.Box . fromJust
+  treeFrame <- Gtk.builderGetObject builder "treeFrame" >>= unsafeCastTo Gtk.Frame . fromJust
+  canvasFrame <- Gtk.builderGetObject builder "canvasFrame" >>= unsafeCastTo Gtk.Frame . fromJust
+  inspectorFrame <- Gtk.builderGetObject builder "inspectorFrame" >>= unsafeCastTo Gtk.Frame . fromJust
 
-    -- creates a vBox to separate the editor and the menubar
-  vBoxMain <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
-                          , #spacing := 0
-                          ]
-
-  Gtk.containerAdd window vBoxMain
-
-  -- creates a HPane to add the treeView in the left
-  hPaneTree <- new Gtk.Paned [ #orientation := Gtk.OrientationHorizontal ]
-  Gtk.boxPackEnd vBoxMain hPaneTree True True 0
-
-  -- creates a HPane to add the canvas in the left and the inspector panel in the right
-  hPaneMain <- new Gtk.Paned [ #orientation := Gtk.OrientationHorizontal ]
-  Gtk.panedPack2 hPaneTree hPaneMain True False
-
-  -- creates a frame to englobe the canvas
-  frameCanvas <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn ]
-  Gtk.panedPack1 hPaneMain frameCanvas True True
   -- creates a blank canvas
   canvas <- new Gtk.DrawingArea []
-  Gtk.containerAdd frameCanvas canvas
+  Gtk.containerAdd canvasFrame canvas
   Gtk.widgetSetCanFocus canvas True
   Gtk.widgetSetEvents canvas [toEnum $ fromEnum Gdk.EventMaskAllEventsMask - fromEnum Gdk.EventMaskSmoothScrollMask]
 
-  return (window, canvas, vBoxMain, hPaneTree, hPaneMain)
-
-
-
--- create the menu toolbar
-buildMenubar = do
-  return () :: IO ()
-  builder <- new Gtk.Builder []
-  Gtk.builderAddFromFile builder "./Resources/menubar.ui"
   menubar  <- Gtk.builderGetObject builder "menubar1" >>= unsafeCastTo Gtk.MenuBar . fromJust
-
 
   newItem <- Gtk.builderGetObject builder "new_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   openItem <- Gtk.builderGetObject builder "open_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
@@ -79,6 +48,7 @@ buildMenubar = do
   openGraphItem <- Gtk.builderGetObject builder "open_graph_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   let fileItems = (newItem,openItem,saveItem,saveAsItem,saveGraphItem,openGraphItem)
 
+  delItem <- Gtk.builderGetObject builder  "delete_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   undoItem <- Gtk.builderGetObject builder  "undo_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   redoItem <- Gtk.builderGetObject builder  "redo_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   copyItem <- Gtk.builderGetObject builder  "copy_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
@@ -87,7 +57,7 @@ buildMenubar = do
   sallItem <- Gtk.builderGetObject builder  "sall_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   snodesItem <- Gtk.builderGetObject builder  "snodes_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   sedgesItem <- Gtk.builderGetObject builder  "sedges_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
-  let editItems = (undoItem,redoItem,copyItem,pasteItem,cutItem,sallItem,snodesItem,sedgesItem)
+  let editItems = (delItem, undoItem,redoItem,copyItem,pasteItem,cutItem,sallItem,snodesItem,sedgesItem)
 
   zoomInItem <- Gtk.builderGetObject builder  "zoomin_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
   zoomOutItem <- Gtk.builderGetObject builder  "zoomout_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
@@ -99,17 +69,17 @@ buildMenubar = do
   let viewItems = (zoomInItem,zoomOutItem,zoom50Item,zoom100Item,zoom150Item,zoom200Item,resetViewItem)
 
   helpItem <- Gtk.builderGetObject builder  "help_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  aboutItem <- Gtk.builderGetObject builder  "about_item" >>= unsafeCastTo Gtk.MenuItem . fromJust
+  let helpItems = (helpItem, aboutItem)
 
-  return (menubar, fileItems, editItems, viewItems, helpItem)
+  return (window, canvas, mainBox, treeFrame, inspectorFrame, fileItems, editItems, viewItems, helpItems)
 
 -- creates the inspector for typed graphs
-buildTypeInspector :: IO (Gtk.Frame, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
+buildTypeInspector :: IO (Gtk.Box, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
 buildTypeInspector = do
-  frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn ]
   mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
                          , #spacing := 8
                          ]
-  Gtk.containerAdd frame mainBox
 
   -- creates the title label
   inspectorLabel <- new Gtk.Label [ #label := "Inspector" ]
@@ -172,7 +142,7 @@ buildTypeInspector = do
   Gtk.boxPackStart edgeStyleBox radioSlashed True True 0
   let radioStyles = [radioNormal, radioPointed, radioSlashed]
 
-  return (frame, typeEntry, colorButton, lineColorButton, radioShapes, radioStyles, (colorBox, frameShape, frameStyle))
+  return (mainBox, typeEntry, colorButton, lineColorButton, radioShapes, radioStyles, (colorBox, frameShape, frameStyle))
 
 -- creates the inspector for the host graph
 buildHostInspector :: IO (Gtk.Frame, Gtk.Entry, Gtk.ComboBoxText, Gtk.ComboBoxText, (Gtk.Box, Gtk.Box))
@@ -273,9 +243,7 @@ buildRuleInspector = do
 -- creates the treePanel
 buildTreePanel = do
   return () :: IO ()
-  frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn]
   mainBox <- new Gtk.Box [#orientation := Gtk.OrientationVertical, #spacing := 0]
-  Gtk.containerAdd frame mainBox
 
   scrolledwin <- new Gtk.ScrolledWindow []
   Gtk.boxPackStart mainBox scrolledwin True True 0
@@ -294,7 +262,7 @@ buildTreePanel = do
   btnRmv <- new Gtk.Button [#label := "Remove Graph"]
   Gtk.boxPackStart mainBox btnRmv False False 0
 
-  return (frame, treeview, renderer, btnNew, btnRmv)
+  return (mainBox, treeview, renderer, btnNew, btnRmv)
 
 
 

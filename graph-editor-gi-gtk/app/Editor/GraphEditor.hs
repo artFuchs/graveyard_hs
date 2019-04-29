@@ -66,20 +66,21 @@ startGUI = do
   -- main window ---------------------------------------------------------------
   -- creates the main window, containing the canvas and the slots to place the panels
   -- shows the main window
-  (window, canvas, mainBox, treePane, mainPane) <- buildMainWindow
-  -- creates the menu bar and att to the window
-  (menubar,(newm,opn,svn,sva,svg,opg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
-  Gtk.boxPackStart mainBox menubar False False 0
+  (window, canvas, mainBox, treeFrame, inspectorFrame, fileItems, editItems, viewItems, helpItems) <- buildMainWindow
+  let (newm,opn,svn,sva,svg,opg) = fileItems
+      (del,udo,rdo,cpy,pst,cut,sla,sln,sle) = editItems
+      (zin,zut,z50,zdf,z150,z200,vdf) = viewItems
+      (hlp,abt) = helpItems
+  -- creates the tree panel
+  (treeBox, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
+  Gtk.containerAdd treeFrame treeBox
   -- creates the inspector panel and add to the window
-  (inspFrame, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeInspector
-  Gtk.panedPack2 mainPane inspFrame False True
+  (inspBox, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeInspector
+  Gtk.containerAdd inspectorFrame inspBox
   let
     inspWidgets = (entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
-  -- creates the tree panel
-  (treeFrame, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
-  Gtk.panedPack1 treePane treeFrame False True
   #showAll window
 
   -- init an model to display in the tree panel --------------------------------
@@ -316,67 +317,67 @@ startGUI = do
     return True
 
   -- keyboard
-  on canvas #keyPressEvent $ \eventKey -> do
-    k <- get eventKey #keyval >>= return . chr . fromIntegral
-    ms <- get eventKey #state
-    case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, toLower k) of
-      -- <delete> | <Ctrl> + D : delete selection
-      (False,False,'\65535') -> do
-        es <- readIORef st
-        stackUndo undoStack redoStack es
-        modifyIORef st (\es -> deleteSelected es)
-        setChangeFlags window store changedProject changedGraph currentGraph True
-        Gtk.widgetQueueDraw canvas
-      (True,False,'d') -> do
-        es <- readIORef st
-        stackUndo undoStack redoStack es
-        modifyIORef st (\es -> deleteSelected es)
-        setChangeFlags window store changedProject changedGraph currentGraph True
-        Gtk.widgetQueueDraw canvas
-      -- CTRL + [SHIFT] + A : [de]select all
-      (True, True, 'a') -> do
-        modifyIORef st $ editorSetSelected ([],[])
-        Gtk.widgetQueueDraw canvas
-      (True, False, 'a') -> do
-        modifyIORef st (\es -> let g = editorGetGraph es in editorSetSelected (nodeIds g, edgeIds g) es)
-        Gtk.widgetQueueDraw canvas
-      -- F2 - rename selection
-      (False,False,'\65471') -> Gtk.widgetGrabFocus entryName
-      -- CTRL + C/V/X : copy/paste/cut
-      (True, False, 'c') -> Gtk.menuItemActivate cpy
-      (True, False, 'v') -> Gtk.menuItemActivate pst
-      (True, False, 'x') -> Gtk.menuItemActivate cut
-      _       -> return ()
-    return True
+  -- on canvas #keyPressEvent $ \eventKey -> do
+  --   k <- get eventKey #keyval >>= return . chr . fromIntegral
+  --   ms <- get eventKey #state
+  --   case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, toLower k) of
+  --     -- <delete> | <Ctrl> + D : delete selection
+  --     (False,False,'\65535') -> do
+  --       es <- readIORef st
+  --       stackUndo undoStack redoStack es
+  --       modifyIORef st (\es -> deleteSelected es)
+  --       setChangeFlags window store changedProject changedGraph currentGraph True
+  --       Gtk.widgetQueueDraw canvas
+  --     (True,False,'d') -> do
+  --       es <- readIORef st
+  --       stackUndo undoStack redoStack es
+  --       modifyIORef st (\es -> deleteSelected es)
+  --       setChangeFlags window store changedProject changedGraph currentGraph True
+  --       Gtk.widgetQueueDraw canvas
+  --     -- CTRL + [SHIFT] + A : [de]select all
+  --     (True, True, 'a') -> do
+  --       modifyIORef st $ editorSetSelected ([],[])
+  --       Gtk.widgetQueueDraw canvas
+  --     (True, False, 'a') -> do
+  --       modifyIORef st (\es -> let g = editorGetGraph es in editorSetSelected (nodeIds g, edgeIds g) es)
+  --       Gtk.widgetQueueDraw canvas
+  --     -- F2 - rename selection
+  --     (False,False,'\65471') -> Gtk.widgetGrabFocus entryName
+  --     -- CTRL + C/V/X : copy/paste/cut
+  --     (True, False, 'c') -> Gtk.menuItemActivate cpy
+  --     (True, False, 'v') -> Gtk.menuItemActivate pst
+  --     (True, False, 'x') -> Gtk.menuItemActivate cut
+  --     _       -> return ()
+  --   return True
 
-  on window #keyPressEvent $ \eventKey -> do
-    k <- get eventKey #keyval >>= return . chr . fromIntegral
-    ms <- get eventKey #state
-    context <- Gtk.widgetGetPangoContext canvas
-    case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, toLower k) of
-      -- CTRL + <+>/<->/<=> : zoom controls
-      (True,_,'+') -> Gtk.menuItemActivate zin
-      (True,_,'-') -> Gtk.menuItemActivate zut
-      (True,_,'=') -> Gtk.menuItemActivate zdf
-      -- CTRL + <0> : reset pan & zoom
-      (True,_,'0') -> Gtk.menuItemActivate vdf
-      -- CTRL + N : create a new graph in the treeView
-      (True, False, 'n') -> Gtk.buttonClicked btnNew
-      -- CTRL + W : remove a graph from the treeView
-      (True, False, 'w') -> Gtk.buttonClicked btnRmv
-      -- CTRL + SHIFT + N : create a new file
-      (True, True, 'n') -> Gtk.menuItemActivate newm
-      -- CTRL + SHIFT + S : save file as
-      (True, True, 's') -> Gtk.menuItemActivate sva
-      -- CTRL + S : save file
-      (True, False, 's') -> Gtk.menuItemActivate svn
-      -- CTRL + O : open file
-      (True, False, 'o') -> Gtk.menuItemActivate opn
-      -- CTRL + Z/R : undo/redo
-      (True, False, 'z') -> Gtk.menuItemActivate udo
-      (True, False, 'r') -> Gtk.menuItemActivate rdo
-      _ -> return ()
-    return False
+  -- on window #keyPressEvent $ \eventKey -> do
+  --   k <- get eventKey #keyval >>= return . chr . fromIntegral
+  --   ms <- get eventKey #state
+  --   context <- Gtk.widgetGetPangoContext canvas
+  --   case (Gdk.ModifierTypeControlMask `elem` ms, Gdk.ModifierTypeShiftMask `elem` ms, toLower k) of
+  --     -- CTRL + <+>/<->/<=> : zoom controls
+  --     (True,_,'+') -> Gtk.menuItemActivate zin
+  --     (True,_,'-') -> Gtk.menuItemActivate zut
+  --     (True,_,'=') -> Gtk.menuItemActivate zdf
+  --     -- CTRL + <0> : reset pan & zoom
+  --     (True,_,'0') -> Gtk.menuItemActivate vdf
+  --     -- CTRL + N : create a new graph in the treeView
+  --     (True, False, 'n') -> Gtk.buttonClicked btnNew
+  --     -- CTRL + W : remove a graph from the treeView
+  --     (True, False, 'w') -> Gtk.buttonClicked btnRmv
+  --     -- CTRL + SHIFT + N : create a new file
+  --     (True, True, 'n') -> Gtk.menuItemActivate newm
+  --     -- CTRL + SHIFT + S : save file as
+  --     (True, True, 's') -> Gtk.menuItemActivate sva
+  --     -- CTRL + S : save file
+  --     (True, False, 's') -> Gtk.menuItemActivate svn
+  --     -- CTRL + O : open file
+  --     (True, False, 'o') -> Gtk.menuItemActivate opn
+  --     -- CTRL + Z/R : undo/redo
+  --     (True, False, 'z') -> Gtk.menuItemActivate udo
+  --     (True, False, 'r') -> Gtk.menuItemActivate rdo
+  --     _ -> return ()
+  --   return False
 
   -- event bindings for the menu toolbar ---------------------------------------
 
@@ -543,6 +544,15 @@ startGUI = do
         gi = editorGetGI es
     saveFileAs (g,gi) saveGraph fileName window False
     return ()
+
+  -- delete item
+  on del #activate $ do
+    es <- readIORef st
+    stackUndo undoStack redoStack es
+    modifyIORef st (\es -> deleteSelected es)
+    setChangeFlags window store changedProject changedGraph currentGraph True
+    Gtk.widgetQueueDraw canvas
+
 
   -- undo
   on udo #activate $ do
