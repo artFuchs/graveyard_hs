@@ -571,6 +571,7 @@ startGUI = do
     es <- readIORef st
     let copy = copySelected es
     writeIORef clipboard $ copy
+    print copy
 
   -- paste
   on pst #activate $ do
@@ -1222,7 +1223,7 @@ pasteClipBoard (cGraph, (cNgiM, cEgiM)) es = editorSetGI (newngiM,newegiM) . edi
   where
     graph = editorGetGraph es
     (ngiM, egiM) = editorGetGI es
-    allPositions = concat (map position (M.elems cNgiM), map (getEdgePosition cGraph (cNgiM, cEgiM)) (edges cGraph))
+    allPositions = concat [map position (M.elems cNgiM), map (getEdgePosition cGraph (cNgiM, cEgiM)) (edges cGraph)]
     minX = minimum $ map fst allPositions
     minY = minimum $ map snd allPositions
     upd (a,b) = (20+a-minX, 20+b-minY)
