@@ -27,8 +27,9 @@ import Control.Monad.IO.Class
 -- the canvas in the center,
 -- the inspector panel in the right
 -- and the menubar in the top of the window
-buildMainWindow menuBar frameProps treePanel = do
+buildMainWindow = do
   -- main window
+  return () :: IO ()
   window <- new Gtk.Window [ #title         := "Graph Editor"
                           , #defaultWidth  := 640
                           , #defaultHeight := 480
@@ -41,18 +42,13 @@ buildMainWindow menuBar frameProps treePanel = do
 
   Gtk.containerAdd window vBoxMain
 
-  -- adds the menubar
-  Gtk.boxPackStart vBoxMain menuBar False False 0
-
   -- creates a HPane to add the treeView in the left
   hPaneTree <- new Gtk.Paned [ #orientation := Gtk.OrientationHorizontal ]
-  Gtk.boxPackStart vBoxMain hPaneTree True True 0
-  Gtk.panedPack1 hPaneTree treePanel False True
+  Gtk.boxPackEnd vBoxMain hPaneTree True True 0
 
   -- creates a HPane to add the canvas in the left and the inspector panel in the right
   hPaneMain <- new Gtk.Paned [ #orientation := Gtk.OrientationHorizontal ]
   Gtk.panedPack2 hPaneTree hPaneMain True False
-  Gtk.panedPack2 hPaneMain frameProps False True
 
   -- creates a frame to englobe the canvas
   frameCanvas <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn ]
@@ -63,7 +59,7 @@ buildMainWindow menuBar frameProps treePanel = do
   Gtk.widgetSetCanFocus canvas True
   Gtk.widgetSetEvents canvas [toEnum $ fromEnum Gdk.EventMaskAllEventsMask - fromEnum Gdk.EventMaskSmoothScrollMask]
 
-  return (window, canvas, hPaneMain)
+  return (window, canvas, vBoxMain, hPaneTree, hPaneMain)
 
 
 
@@ -277,7 +273,10 @@ buildRuleInspector = do
 -- creates the treePanel
 buildTreePanel = do
   return () :: IO ()
+  frame <- new Gtk.Frame [ #shadowType := Gtk.ShadowTypeIn]
   mainBox <- new Gtk.Box [#orientation := Gtk.OrientationVertical, #spacing := 0]
+  Gtk.containerAdd frame mainBox
+
   scrolledwin <- new Gtk.ScrolledWindow []
   Gtk.boxPackStart mainBox scrolledwin True True 0
   treeview <- new Gtk.TreeView [#headersVisible := True]
@@ -295,7 +294,7 @@ buildTreePanel = do
   btnRmv <- new Gtk.Button [#label := "Remove Graph"]
   Gtk.boxPackStart mainBox btnRmv False False 0
 
-  return (mainBox, treeview, renderer, btnNew, btnRmv)
+  return (frame, treeview, renderer, btnNew, btnRmv)
 
 
 

@@ -64,19 +64,22 @@ startGUI = do
   helpWindow <- buildHelpWindow
 
   -- main window ---------------------------------------------------------------
-  -- creates the menu bar
+  -- creates the main window, containing the canvas and the slots to place the panels
+  -- shows the main window
+  (window, canvas, mainBox, treePane, mainPane) <- buildMainWindow
+  -- creates the menu bar and att to the window
   (menubar,(newm,opn,svn,sva,svg,opg),(udo,rdo,cpy,pst,cut,sla,sln,sle),(zin,zut,z50,zdf,z150,z200,vdf),hlp) <- buildMenubar
-  -- creates the inspector panel
-  (frameProps, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeInspector
+  Gtk.boxPackStart mainBox menubar False False 0
+  -- creates the inspector panel and add to the window
+  (inspFrame, entryName, colorBtn, lineColorBtn, radioShapes, radioStyles, propBoxes) <- buildTypeInspector
+  Gtk.panedPack2 mainPane inspFrame False True
   let
-    propWidgets = (entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
+    inspWidgets = (entryName, colorBtn, lineColorBtn, radioShapes, radioStyles)
     [radioCircle, radioRect, radioQuad] = radioShapes
     [radioNormal, radioPointed, radioSlashed] = radioStyles
   -- creates the tree panel
-  (treePanel, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
-  -- creates the main window, containing the canvas and the built panels
-  (window, canvas, _) <- buildMainWindow menubar frameProps treePanel
-  -- shows the main window
+  (treeFrame, treeview, treeRenderer, btnNew, btnRmv) <- buildTreePanel
+  Gtk.panedPack1 treePane treeFrame False True
   #showAll window
 
   -- init an model to display in the tree panel --------------------------------
@@ -92,6 +95,8 @@ startGUI = do
     Just col -> do
       #addAttribute col treeRenderer "text" 0
       Gtk.treeViewColumnSetCellDataFunc col treeRenderer $ Just (\column renderer model iter -> do
+        -- render the cellBackground with different colors if there is was a change of some kind
+        -- and render the foreground with black to ensure that the user theme will not cause problems
         changed <- Gtk.treeModelGetValue model iter 1 >>= \gv -> (fromGValue gv :: IO Int32)
         renderer' <- castTo Gtk.CellRendererText renderer
         case (renderer', changed) of
@@ -102,8 +107,9 @@ startGUI = do
             color <- new Gdk.RGBA [#red:=0, #green:=1, #blue:=0, #alpha:=1]
             set r [ #cellBackgroundRgba := color, #foreground := "black" ]
           (Just r,_) -> do
-            color <- new Gdk.RGBA [#alpha:=0]
-            set r [ #cellBackgroundRgba := color ]
+            -- color <- new Gdk.RGBA [#alpha:=0]
+            -- set r [ #cellBackgroundRgba := color ]
+            Gtk.clearCellRendererCellBackground r
             Gtk.clearCellRendererTextForeground r
           (Nothing,_) -> return ()
         )
@@ -195,7 +201,7 @@ startGUI = do
                   jointSE = if null e then oldSE else delete (e!!0) oldSE
               modifyIORef st (editorSetGraph graph . editorSetSelected (jointSN,jointSE))
           Gtk.widgetQueueDraw canvas
-          updatePropMenu st currentC currentLC propWidgets propBoxes
+          updatePropMenu st currentC currentLC inspWidgets propBoxes
         -- right button click: create nodes and insert edges
         (3, False) -> liftIO $ do
           let g = editorGetGraph es
@@ -220,7 +226,7 @@ startGUI = do
             -- ctrl pressed: middle mouse button emulation
             (True,_) -> return ()
           Gtk.widgetQueueDraw canvas
-          updatePropMenu st currentC currentLC propWidgets propBoxes
+          updatePropMenu st currentC currentLC inspWidgets propBoxes
         _           -> return ()
       return True
 
@@ -287,7 +293,7 @@ startGUI = do
                                                     in pointInsideRectangle pos (x + (w/2), y + (h/2), abs w, abs h)) $ edges graph
                 newEs = editorSetSelected (sNodes, sEdges) $ es
             writeIORef st newEs
-            updatePropMenu st currentC currentLC propWidgets propBoxes
+            updatePropMenu st currentC currentLC inspWidgets propBoxes
           ((n,e), Nothing) -> return ()
           _ -> return ()
       _ -> return ()
@@ -1248,6 +1254,7 @@ indicateProjChanged window False = do
     then set window [#title := T.pack title]
     else return ()
 
+-- write in the liststore that the current graph was modified
 indicateGraphChanged :: Gtk.ListStore -> Gtk.TreeIter -> Bool -> IO ()
 indicateGraphChanged store iter True = do
   gvchanged <- toGValue (1::Int32)
@@ -1257,7 +1264,7 @@ indicateGraphChanged store iter False = do
   gvchanged <- toGValue (0::Int32)
   Gtk.listStoreSetValue store iter 1 gvchanged
 
--- change the flags that inform if the graphs and project were changed and inform the graphs
+-- change the flags that inform if the graphs and project were changed and indicate the changes
 setChangeFlags :: Gtk.Window -> Gtk.ListStore -> IORef Bool -> IORef [Bool] -> IORef Int32 -> Bool -> IO ()
 setChangeFlags window store changedProject changedGraph currentGraph changed = do
   index <- readIORef currentGraph >>= return . fromIntegral
