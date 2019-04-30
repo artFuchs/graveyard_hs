@@ -77,70 +77,30 @@ buildMainWindow = do
 -- creates the inspector for typed graphs
 buildTypeInspector :: IO (Gtk.Box, Gtk.Entry, Gtk.ColorButton, Gtk.ColorButton, [Gtk.RadioButton], [Gtk.RadioButton], (Gtk.Box, Gtk.Frame, Gtk.Frame))
 buildTypeInspector = do
-  mainBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
-                         , #spacing := 8
-                         ]
-
-  -- creates the title label
-  inspectorLabel <- new Gtk.Label [ #label := "Inspector" ]
-  Gtk.boxPackStart mainBox inspectorLabel False False 0
-
-  -- creates a HBox containing a label and a entry for the user change the type name
-  typeBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
-                         , #spacing := 8]
-  Gtk.boxPackStart mainBox typeBox False False 0
-  typeLabel <- new Gtk.Label [ #label := "Type: "]
-  Gtk.boxPackStart typeBox typeLabel False False 0
-  typeEntry <- new Gtk.Entry []
-  Gtk.boxPackStart typeBox typeEntry True True 0
-  Gtk.widgetSetCanFocus typeEntry True
-
-  -- creates a HBox containing a label and ColorButton to the user change the node color
-  colorBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
-                          , #spacing := 8]
-  Gtk.boxPackStart mainBox colorBox False False 0
-  colorLabel <- new Gtk.Label [ #label := "Fill color: "]
-  Gtk.boxPackStart colorBox colorLabel False False 0
-  colorButton <- new Gtk.ColorButton []
-  Gtk.boxPackStart colorBox colorButton False False 0
-
-  -- creates a HBox containing a label and a ColorButton to the user change the line and text color
-  lineColorBox <- new Gtk.Box [ #orientation := Gtk.OrientationHorizontal
-                              , #spacing := 8]
-  Gtk.boxPackStart mainBox lineColorBox False False 0
-  lineColorLabel <- new Gtk.Label [ #label := "Line color: "]
-  Gtk.boxPackStart lineColorBox lineColorLabel False False 0
-  lineColorButton <- new Gtk.ColorButton []
-  Gtk.boxPackStart lineColorBox lineColorButton False False 0
+  builder <- new Gtk.Builder []
+  Gtk.builderAddFromFile builder "./Resources/window.ui"
+  tempWin <- Gtk.builderGetObject builder  "typeInspectorWin" >>= unsafeCastTo Gtk.Window . fromJust
+  mainBox <- Gtk.builderGetObject builder  "typeInspectorBox" >>= unsafeCastTo Gtk.Box . fromJust
+  typeEntry <- Gtk.builderGetObject builder  "typeEntry" >>= unsafeCastTo Gtk.Entry . fromJust
+  colorBox <- Gtk.builderGetObject builder  "colorBox" >>= unsafeCastTo Gtk.Box . fromJust
+  colorButton <- Gtk.builderGetObject builder  "fillColorBtn" >>= unsafeCastTo Gtk.ColorButton . fromJust
+  lineColorButton <- Gtk.builderGetObject builder  "lineColorBtn" >>= unsafeCastTo Gtk.ColorButton . fromJust
 
   -- creates a frame containing a VBox with radio buttons to the user change the node shape
-  frameShape <- new Gtk.Frame [#label := "Node Shape"]
-  Gtk.boxPackStart mainBox frameShape False False 0
-  nodeShapeBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
-                              , #spacing := 8]
-  Gtk.containerAdd frameShape nodeShapeBox
-  radioCircle <- new Gtk.RadioButton [#label := "Circle"]
-  Gtk.boxPackStart nodeShapeBox radioCircle True True 0
-  radioRect <- Gtk.radioButtonNewWithLabelFromWidget (Just radioCircle) "Rect"
-  Gtk.boxPackStart nodeShapeBox radioRect True True 0
-  radioQuad <- Gtk.radioButtonNewWithLabelFromWidget (Just radioCircle) "Quad"
-  Gtk.boxPackStart nodeShapeBox radioQuad True True 0
-  let radioShapes = [radioCircle, radioRect, radioQuad]
+  frameShape <- Gtk.builderGetObject builder  "frameShape" >>= unsafeCastTo Gtk.Frame . fromJust
+  radioCircle <- Gtk.builderGetObject builder  "radioCircle" >>= unsafeCastTo Gtk.RadioButton . fromJust
+  radioRect <- Gtk.builderGetObject builder  "radioRectangle" >>= unsafeCastTo Gtk.RadioButton . fromJust
+  radioSquare <- Gtk.builderGetObject builder  "radioSquare" >>= unsafeCastTo Gtk.RadioButton . fromJust
+  let radioShapes = [radioCircle, radioRect, radioSquare]
 
-
-  -- creates a frame conataining a VBox with radioButtons to the user change the edge shape
-  frameStyle <- new Gtk.Frame [#label := "Edge Style"]
-  Gtk.boxPackStart mainBox frameStyle False False 0
-  edgeStyleBox <- new Gtk.Box [ #orientation := Gtk.OrientationVertical
-                              , #spacing := 8]
-  Gtk.containerAdd frameStyle edgeStyleBox
-  radioNormal <- new Gtk.RadioButton [#label := "Normal"]
-  Gtk.boxPackStart edgeStyleBox radioNormal True True 0
-  radioPointed <- Gtk.radioButtonNewWithLabelFromWidget (Just radioNormal) "Pointed"
-  Gtk.boxPackStart edgeStyleBox radioPointed True True 0
-  radioSlashed <- Gtk.radioButtonNewWithLabelFromWidget (Just radioNormal) "Slashed"
-  Gtk.boxPackStart edgeStyleBox radioSlashed True True 0
+  -- creates a frame containing a VBox with radioButtons to the user change the edge shape
+  frameStyle <- Gtk.builderGetObject builder  "frameStyle" >>= unsafeCastTo Gtk.Frame . fromJust
+  radioNormal <- Gtk.builderGetObject builder  "radioNormal" >>= unsafeCastTo Gtk.RadioButton . fromJust
+  radioPointed <- Gtk.builderGetObject builder  "radioPointed" >>= unsafeCastTo Gtk.RadioButton . fromJust
+  radioSlashed <- Gtk.builderGetObject builder  "radioSlashed" >>= unsafeCastTo Gtk.RadioButton . fromJust
   let radioStyles = [radioNormal, radioPointed, radioSlashed]
+
+  Gtk.containerRemove tempWin mainBox
 
   return (mainBox, typeEntry, colorButton, lineColorButton, radioShapes, radioStyles, (colorBox, frameShape, frameStyle))
 
@@ -243,26 +203,22 @@ buildRuleInspector = do
 -- creates the treePanel
 buildTreePanel = do
   return () :: IO ()
-  mainBox <- new Gtk.Box [#orientation := Gtk.OrientationVertical, #spacing := 0]
-
-  scrolledwin <- new Gtk.ScrolledWindow []
-  Gtk.boxPackStart mainBox scrolledwin True True 0
-  treeview <- new Gtk.TreeView [#headersVisible := True]
-  Gtk.containerAdd scrolledwin treeview
-
+  builder <- new Gtk.Builder []
+  Gtk.builderAddFromFile builder "./Resources/window.ui"
+  tempWin <- Gtk.builderGetObject builder "treeViewWin" >>= unsafeCastTo Gtk.Window . fromJust
+  treeBox <- Gtk.builderGetObject builder "treeBox" >>= unsafeCastTo Gtk.Box . fromJust
+  treeview <- Gtk.builderGetObject builder "treeview" >>= unsafeCastTo Gtk.TreeView . fromJust
+  btnNew <- Gtk.builderGetObject builder "btnNew" >>= unsafeCastTo Gtk.Button . fromJust
+  btnRmv <- Gtk.builderGetObject builder "btnRmv" >>= unsafeCastTo Gtk.Button . fromJust
   col <- new Gtk.TreeViewColumn [#title := "project"]
   Gtk.treeViewAppendColumn treeview col
 
   renderer <- new Gtk.CellRendererText [#editable := True]
   Gtk.cellLayoutPackStart col renderer False
 
-  btnNew <- new Gtk.Button [#label := "New Graph"]
-  Gtk.boxPackStart mainBox btnNew False False 0
+  Gtk.containerRemove tempWin treeBox
+  return (treeBox, treeview, renderer, btnNew, btnRmv)
 
-  btnRmv <- new Gtk.Button [#label := "Remove Graph"]
-  Gtk.boxPackStart mainBox btnRmv False False 0
-
-  return (mainBox, treeview, renderer, btnNew, btnRmv)
 
 
 
